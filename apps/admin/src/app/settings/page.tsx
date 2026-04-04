@@ -3,8 +3,8 @@ import { Sidebar } from '../../components/sidebar'
 export const dynamic = 'force-dynamic'
 
 const PLATFORM_SETTINGS = [
-  { label: 'Commission plateforme', value: '15%', description: 'Pourcentage preleve sur chaque reservation' },
-  { label: 'Commission hote', value: '85%', description: 'Pourcentage reverse au proprietaire de la place' },
+  { label: 'Commission plateforme', value: '20%', description: 'Pourcentage preleve sur chaque reservation' },
+  { label: 'Commission hote', value: '80%', description: 'Pourcentage reverse au proprietaire de la place' },
   { label: 'Devise', value: 'EUR', description: 'Devise principale de la plateforme' },
   { label: 'Pays', value: 'France', description: 'Pays de lancement' },
   { label: 'Villes supportees', value: 'Nice', description: 'Villes actuellement couvertes par le service' },

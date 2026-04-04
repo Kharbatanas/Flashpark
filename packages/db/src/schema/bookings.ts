@@ -1,6 +1,7 @@
 import { pgTable, uuid, timestamp, numeric, text, pgEnum, boolean } from 'drizzle-orm/pg-core'
 import { users } from './users'
 import { spots } from './spots'
+import { vehicles } from './vehicles'
 
 export const bookingStatusEnum = pgEnum('booking_status', [
   'pending',
@@ -25,6 +26,7 @@ export const bookings = pgTable('bookings', {
   platformFee: numeric('platform_fee', { precision: 10, scale: 2 }).notNull(), // 20% take rate
   hostPayout: numeric('host_payout', { precision: 10, scale: 2 }).notNull(), // 80%
   status: bookingStatusEnum('status').notNull().default('pending'),
+  vehicleId: uuid('vehicle_id').references(() => vehicles.id),
   stripePaymentIntentId: text('stripe_payment_intent_id'),
   stripeTransferId: text('stripe_transfer_id'),
   qrCode: text('qr_code'), // for smart gate access

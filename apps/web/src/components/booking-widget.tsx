@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createSupabaseBrowserClient } from '../lib/supabase/client'
 import { api } from '../lib/trpc/client'
@@ -11,12 +11,22 @@ import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 
+interface Vehicle {
+  id: string
+  licensePlate: string
+  brand: string | null
+  model: string | null
+  type: string
+  isDefault: boolean
+}
+
 interface BookingWidgetProps {
   spot: {
     id: string
     title: string
     pricePerHour: string | number
     instantBook: boolean
+    maxVehicleHeight?: string | number | null
   }
 }
 
@@ -42,8 +52,24 @@ export function BookingWidget({ spot }: BookingWidgetProps) {
 
   const [startTime, setStartTime] = useState(formatDateTime(defaultStart))
   const [endTime, setEndTime] = useState(formatDateTime(defaultEnd))
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null)
+  const [showAddVehicle, setShowAddVehicle] = useState(false)
+  const [newPlate, setNewPlate] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const { data: myVehicles, refetch: refetchVehicles } = api.vehicles.list.useQuery(undefined, {
+    enabled: false, // lazy load
+  })
+  const addVehicle = api.vehicles.create.useMutation()
+
+  // Auto-select default vehicle when loaded
+  useEffect(() => {
+    if (myVehicles?.length && !selectedVehicleId) {
+      const def = myVehicles.find((v: Vehicle) => v.isDefault) ?? myVehicles[0]
+      setSelectedVehicleId(def.id)
+    }
+  }, [myVehicles, selectedVehicleId])
 
   const pricePerHour = Number(spot.pricePerHour)
 
@@ -67,6 +93,13 @@ export function BookingWidget({ spot }: BookingWidgetProps) {
       return
     }
 
+    // Load vehicles on first booking attempt — show selector before proceeding
+    if (!myVehicles) {
+      await refetchVehicles()
+      setLoading(false)
+      return // show vehicle selector, user clicks again to confirm
+    }
+
     if (!isValid) {
       setError('Les dates sélectionnées sont invalides.')
       return
@@ -84,6 +117,7 @@ export function BookingWidget({ spot }: BookingWidgetProps) {
         spotId: spot.id,
         startTime: start,
         endTime: end,
+        vehicleId: selectedVehicleId ?? undefined,
       })
 
       // TODO: Enable Stripe payment when keys are configured
@@ -184,6 +218,60 @@ export function BookingWidget({ spot }: BookingWidgetProps) {
               </motion.div>
             )}
           </AnimatePresence>
+
+          {/* Vehicle selector */}
+          {myVehicles && (
+            <div className="mb-4">
+              <Label className="mb-1.5 block text-xs uppercase tracking-wide text-gray-600">
+                Vehicule
+              </Label>
+              <select
+                value={selectedVehicleId ?? ''}
+                onChange={(e) => setSelectedVehicleId(e.target.value || null)}
+                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 focus:border-[#0540FF] focus:outline-none focus:ring-1 focus:ring-[#0540FF]"
+              >
+                <option value="">Aucun vehicule selectionne</option>
+                {myVehicles.map((v: Vehicle) => (
+                  <option key={v.id} value={v.id}>
+                    {v.licensePlate}{v.brand ? ` — ${v.brand}${v.model ? ` ${v.model}` : ''}` : ''}
+                    {v.isDefault ? ' (par defaut)' : ''}
+                  </option>
+                ))}
+              </select>
+              {!showAddVehicle ? (
+                <button
+                  type="button"
+                  onClick={() => setShowAddVehicle(true)}
+                  className="mt-1.5 text-xs text-[#0540FF] hover:underline"
+                >
+                  + Ajouter un vehicule
+                </button>
+              ) : (
+                <div className="mt-2 flex gap-2">
+                  <Input
+                    placeholder="Ex: AB-123-CD"
+                    value={newPlate}
+                    onChange={(e) => setNewPlate(e.target.value.toUpperCase())}
+                    className="flex-1 text-sm"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!newPlate || newPlate.length < 2}
+                    onClick={async () => {
+                      const v = await addVehicle.mutateAsync({ licensePlate: newPlate, isDefault: !myVehicles.length })
+                      setSelectedVehicleId(v.id)
+                      setNewPlate('')
+                      setShowAddVehicle(false)
+                      refetchVehicles()
+                    }}
+                  >
+                    OK
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
 
           <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
             <Button

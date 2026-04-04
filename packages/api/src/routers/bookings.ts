@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { eq, and, or, not, gte, lte } from 'drizzle-orm'
 import { TRPCError } from '@trpc/server'
 import { createTRPCRouter, protectedProcedure, hostProcedure } from '../trpc'
-import { bookings, spots } from '@flashpark/db'
+import { bookings, spots, vehicles } from '@flashpark/db'
 
 export const bookingsRouter = createTRPCRouter({
   // Create a booking (returns clientSecret for Stripe)
@@ -12,10 +12,11 @@ export const bookingsRouter = createTRPCRouter({
         spotId: z.string().uuid(),
         startTime: z.date(),
         endTime: z.date(),
+        vehicleId: z.string().uuid().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { spotId, startTime, endTime } = input
+      const { spotId, startTime, endTime, vehicleId } = input
 
       if (startTime >= endTime) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: "L'heure de début doit être avant l'heure de fin" })
@@ -51,6 +52,14 @@ export const bookingsRouter = createTRPCRouter({
       const platformFee = Math.round(totalPrice * 0.2 * 100) / 100
       const hostPayout = Math.round((totalPrice - platformFee) * 100) / 100
 
+      // Verify vehicle belongs to user if provided
+      if (vehicleId) {
+        const vehicle = await ctx.db.query.vehicles.findFirst({
+          where: and(eq(vehicles.id, vehicleId), eq(vehicles.ownerId, ctx.userId)),
+        })
+        if (!vehicle) throw new TRPCError({ code: 'NOT_FOUND', message: 'Véhicule introuvable' })
+      }
+
       const [booking] = await ctx.db
         .insert(bookings)
         .values({
@@ -58,6 +67,7 @@ export const bookingsRouter = createTRPCRouter({
           spotId,
           startTime,
           endTime,
+          vehicleId: vehicleId ?? null,
           totalPrice: String(totalPrice),
           platformFee: String(platformFee),
           hostPayout: String(hostPayout),

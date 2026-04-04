@@ -1,13 +1,15 @@
 -- =============================================
--- Fix handle_new_user trigger to handle email conflicts
--- (e.g. user signed up with email, then tries Google with same email,
---  or auth account was recreated with new supabase_id)
+-- Fix handle_new_user trigger: explicit schema references
+-- Root cause: INSERT INTO users resolved to auth.users instead of
+-- public.users when the trigger fired from auth context.
 -- =============================================
 
-CREATE OR REPLACE FUNCTION handle_new_user()
-RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER AS $$
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public
+AS $$
 BEGIN
-  INSERT INTO users (supabase_id, email, full_name, avatar_url)
+  INSERT INTO public.users (supabase_id, email, full_name, avatar_url)
   VALUES (
     NEW.id,
     NEW.email,
@@ -16,13 +18,12 @@ BEGIN
   )
   ON CONFLICT (email) DO UPDATE SET
     supabase_id = EXCLUDED.supabase_id,
-    full_name = COALESCE(EXCLUDED.full_name, users.full_name),
-    avatar_url = COALESCE(EXCLUDED.avatar_url, users.avatar_url),
+    full_name = COALESCE(EXCLUDED.full_name, public.users.full_name),
+    avatar_url = COALESCE(EXCLUDED.avatar_url, public.users.avatar_url),
     updated_at = NOW();
   RETURN NEW;
 EXCEPTION
   WHEN unique_violation THEN
-    -- supabase_id already exists with different email — safe to ignore
     RETURN NEW;
 END;
 $$;
