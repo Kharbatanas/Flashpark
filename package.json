@@ -1,0 +1,22 @@
+{
+  "name": "flashpark",
+  "private": true,
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "lint": "turbo lint",
+    "type-check": "turbo type-check",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "db:push": "turbo db:push",
+    "db:studio": "turbo db:studio"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.3",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2"
+  },
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
