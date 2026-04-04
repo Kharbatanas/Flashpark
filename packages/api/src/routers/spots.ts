@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { eq, and, gte, lte, sql } from 'drizzle-orm'
+import { TRPCError } from '@trpc/server'
 import { createTRPCRouter, publicProcedure, protectedProcedure, hostProcedure } from '../trpc'
 import { spots } from '@flashpark/db'
 
@@ -46,7 +47,7 @@ export const spotsRouter = createTRPCRouter({
     const spot = await ctx.db.query.spots.findFirst({
       where: eq(spots.id, input.id),
     })
-    if (!spot) throw new Error('Spot not found')
+    if (!spot) throw new TRPCError({ code: 'NOT_FOUND', message: 'Place introuvable' })
     return spot
   }),
 
@@ -57,7 +58,7 @@ export const spotsRouter = createTRPCRouter({
         title: z.string().min(5).max(100),
         description: z.string().max(1000).optional(),
         address: z.string().min(5),
-        city: z.string().default('Nice'),
+        city: z.string().min(1),
         latitude: z.number().min(-90).max(90),
         longitude: z.number().min(-180).max(180),
         pricePerHour: z.number().positive(),
@@ -104,18 +105,25 @@ export const spotsRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { id, ...updates } = input
+      const { id, pricePerHour, pricePerDay, ...rest } = input
+
+      // Only include fields that were actually provided (not undefined)
+      const setValues: Record<string, unknown> = { updatedAt: new Date() }
+      if (rest.title !== undefined) setValues.title = rest.title
+      if (rest.description !== undefined) setValues.description = rest.description
+      if (rest.status !== undefined) setValues.status = rest.status
+      if (rest.amenities !== undefined) setValues.amenities = rest.amenities
+      if (rest.photos !== undefined) setValues.photos = rest.photos
+      if (pricePerHour !== undefined) setValues.pricePerHour = String(pricePerHour)
+      if (pricePerDay !== undefined) setValues.pricePerDay = String(pricePerDay)
 
       const [updated] = await ctx.db
         .update(spots)
-        .set({
-          ...updates,
-          pricePerHour: updates.pricePerHour ? String(updates.pricePerHour) : undefined,
-          pricePerDay: updates.pricePerDay ? String(updates.pricePerDay) : undefined,
-          updatedAt: new Date(),
-        })
+        .set(setValues)
         .where(and(eq(spots.id, id), eq(spots.hostId, ctx.userId)))
         .returning()
+
+      if (!updated) throw new TRPCError({ code: 'NOT_FOUND', message: 'Place introuvable ou non autorisé' })
 
       return updated
     }),

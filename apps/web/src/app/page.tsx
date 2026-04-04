@@ -12,6 +12,7 @@ import {
   BlurText,
   motion,
 } from '../components/motion'
+import { Navbar } from '../components/navbar'
 
 const CATEGORIES = [
   { icon: '🌤️', label: 'Extérieur', type: 'outdoor' },
@@ -90,6 +91,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-white">
+      <Navbar />
 
       {/* ─── Hero ──────────────────────────────────────────────────────── */}
       <section className="relative -mt-16 flex min-h-screen items-center justify-center overflow-hidden bg-[#1A1A2E]">
@@ -387,7 +389,7 @@ export default function HomePage() {
       </section>
 
       {/* ─── How it works ──────────────────────────────────────────────── */}
-      <section className="py-20">
+      <section id="how" className="py-20">
         <div className="mx-auto max-w-5xl px-6">
           <FadeIn className="mb-14 text-center">
             <p className="text-xs font-bold uppercase tracking-widest text-[#0540FF]">Comment ça marche</p>
@@ -648,10 +650,9 @@ export default function HomePage() {
                 {
                   title: 'Flashpark',
                   links: [
-                    { label: 'À propos', href: '/' },
-                    { label: 'Presse', href: '/' },
-                    { label: 'Carrières', href: '/' },
-                    { label: 'Contact', href: '/' },
+                    { label: 'À propos', href: '/about' },
+                    { label: 'Contact', href: '/contact' },
+                    { label: 'CGU', href: '/terms' },
                   ],
                 },
               ].map(({ title, links }) => (
@@ -674,9 +675,9 @@ export default function HomePage() {
           <div className="mt-10 flex flex-col items-center justify-between gap-4 border-t border-gray-100 pt-8 sm:flex-row">
             <p className="text-xs text-gray-400">© 2026 Flashpark SAS · Nice, France · Tous droits réservés</p>
             <div className="flex gap-6 text-xs text-gray-400">
-              <a href="/" className="hover:text-gray-600 transition-colors">Confidentialité</a>
-              <a href="/" className="hover:text-gray-600 transition-colors">CGU</a>
-              <a href="/" className="hover:text-gray-600 transition-colors">Cookies</a>
+              <Link href="/terms" className="hover:text-gray-600 transition-colors">Confidentialité</Link>
+              <Link href="/terms" className="hover:text-gray-600 transition-colors">CGU</Link>
+              <Link href="/terms" className="hover:text-gray-600 transition-colors">Cookies</Link>
             </div>
           </div>
         </div>

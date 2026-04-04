@@ -7,16 +7,7 @@ export const dynamic = 'force-dynamic'
 async function getStats() {
   const supabase = createSupabaseServerClient()
 
-  const [
-    { count: usersCount },
-    { count: spotsCount },
-    { count: bookingsCount },
-    { count: activeSpotsCount },
-    { data: recentBookings },
-    { data: topSpots },
-    { count: driversCount },
-    { count: hostsCount },
-  ] = await Promise.all([
+  const results = await Promise.all([
     supabase.from('users').select('*', { count: 'exact', head: true }),
     supabase.from('spots').select('*', { count: 'exact', head: true }),
     supabase.from('bookings').select('*', { count: 'exact', head: true }),
@@ -36,6 +27,15 @@ async function getStats() {
     supabase.from('users').select('*', { count: 'exact', head: true }).or('role.eq.host,role.eq.both'),
   ])
 
+  const usersCount = results[0].count
+  const spotsCount = results[1].count
+  const bookingsCount = results[2].count
+  const activeSpotsCount = results[3].count
+  const recentBookings = results[4].data
+  const topSpots = results[5].data
+  const driversCount = results[6].count
+  const hostsCount = results[7].count
+
   // Calculate total revenue
   const { data: allBookings } = await supabase
     .from('bookings')
@@ -51,8 +51,8 @@ async function getStats() {
   }> = []
 
   if (recentBookings && recentBookings.length > 0) {
-    const driverIds = [...new Set(recentBookings.map((b) => b.driver_id).filter(Boolean))]
-    const spotIds = [...new Set(recentBookings.map((b) => b.spot_id).filter(Boolean))]
+    const driverIds = Array.from(new Set(recentBookings.map((b) => b.driver_id).filter(Boolean)))
+    const spotIds = Array.from(new Set(recentBookings.map((b) => b.spot_id).filter(Boolean)))
 
     const [{ data: drivers }, { data: spots }] = driverIds.length > 0 || spotIds.length > 0
       ? await Promise.all([

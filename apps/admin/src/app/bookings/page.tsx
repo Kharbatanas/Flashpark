@@ -46,8 +46,19 @@ export default async function BookingsAdminPage({ searchParams }: { searchParams
   const { data: bookings, count } = await query
   const totalPages = Math.ceil((count ?? 0) / pageSize)
 
+  // Calculate revenue totals
+  const { data: revenueData } = await supabase
+    .from('bookings')
+    .select('total_price, platform_fee, host_payout, status')
+  const validRevenue = (revenueData ?? []).filter(
+    (b) => b.status !== 'cancelled' && b.status !== 'refunded',
+  )
+  const totalVolume = validRevenue.reduce((sum, b) => sum + Number(b.total_price ?? 0), 0)
+  const totalPlatformFee = validRevenue.reduce((sum, b) => sum + Number(b.platform_fee ?? 0), 0)
+  const totalHostPayout = validRevenue.reduce((sum, b) => sum + Number(b.host_payout ?? 0), 0)
+
   // Fetch spot titles for display
-  const spotIds = [...new Set((bookings ?? []).map((b) => b.spot_id).filter(Boolean))]
+  const spotIds = Array.from(new Set((bookings ?? []).map((b) => b.spot_id).filter(Boolean)))
   const spotMap: Record<string, string> = {}
   if (spotIds.length > 0) {
     const { data: spots } = await supabase.from('spots').select('id, title').in('id', spotIds)
@@ -71,6 +82,28 @@ export default async function BookingsAdminPage({ searchParams }: { searchParams
           </div>
         </header>
         <div className="p-8">
+          {/* Revenue summary */}
+          <div className="grid grid-cols-3 gap-5 mb-6">
+            <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+              <p className="text-xs font-medium text-gray-400">Volume Total</p>
+              <p className="mt-1 text-2xl font-extrabold text-[#1A1A2E]">
+                {totalVolume.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} EUR
+              </p>
+            </div>
+            <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+              <p className="text-xs font-medium text-gray-400">Commission Plateforme</p>
+              <p className="mt-1 text-2xl font-extrabold text-[#10B981]">
+                {totalPlatformFee.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} EUR
+              </p>
+            </div>
+            <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+              <p className="text-xs font-medium text-gray-400">Reversements Hotes</p>
+              <p className="mt-1 text-2xl font-extrabold text-gray-600">
+                {totalHostPayout.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} EUR
+              </p>
+            </div>
+          </div>
+
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-gray-500">{count ?? 0} réservation(s)</p>
             <div className="flex flex-wrap gap-2">

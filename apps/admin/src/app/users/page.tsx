@@ -48,7 +48,7 @@ export default async function UsersAdminPage({ searchParams }: { searchParams: {
         <header className="sticky top-0 z-30 flex items-center justify-between border-b border-gray-100 bg-white/80 backdrop-blur-xl px-8 py-4">
           <div>
             <h1 className="text-xl font-bold text-[#1A1A2E]">Utilisateurs</h1>
-            <p className="text-sm text-gray-400">Gestion des comptes utilisateurs</p>
+            <p className="text-sm text-gray-400">Gestion des comptes utilisateurs — {count ?? 0} au total</p>
           </div>
         </header>
         <div className="p-8">
@@ -85,7 +85,14 @@ export default async function UsersAdminPage({ searchParams }: { searchParams: {
               <tbody className="divide-y divide-gray-50">
                 {users?.map((user) => (
                   <tr key={user.id} className="hover:bg-gray-50/50 transition-colors">
-                    <td className="px-5 py-3.5 font-medium text-gray-900">{user.full_name || '—'}</td>
+                    <td className="px-5 py-3.5">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#0540FF]/10 text-xs font-bold text-[#0540FF] shrink-0">
+                          {(user.full_name ?? '?')[0]?.toUpperCase()}
+                        </div>
+                        <span className="font-medium text-gray-900">{user.full_name || '—'}</span>
+                      </div>
+                    </td>
                     <td className="px-5 py-3.5 text-gray-600">{user.email}</td>
                     <td className="px-5 py-3.5">
                       <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${ROLE_STYLE[user.role] ?? 'bg-gray-100 text-gray-500'}`}>

@@ -44,10 +44,11 @@ export async function POST(_request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: 'Réservation déjà annulée' }, { status: 400 })
   }
 
-  await db
+  const [updated] = await db
     .update(bookings)
-    .set({ status: 'cancelled', cancelledAt: new Date(), cancelledBy: dbUser.id })
+    .set({ status: 'cancelled', cancelledAt: new Date(), cancelledBy: dbUser.id, updatedAt: new Date() })
     .where(eq(bookings.id, params.id))
+    .returning()
 
-  return NextResponse.redirect(new URL('/dashboard', _request.url))
+  return NextResponse.json({ success: true, booking: updated })
 }

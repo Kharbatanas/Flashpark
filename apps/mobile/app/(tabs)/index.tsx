@@ -9,6 +9,8 @@ import {
   Image,
   RefreshControl,
   useWindowDimensions,
+  Animated,
+  Platform,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
@@ -29,11 +31,115 @@ interface Spot {
   has_smart_gate: boolean
 }
 
-function getSpotPhoto(spot: Spot, index: number = 0): string | null {
+function getSpotPhoto(spot: Spot, index: number = 0): string {
   if (spot.photos && Array.isArray(spot.photos) && spot.photos.length > 0) {
     return spot.photos[0]
   }
   return PLACEHOLDER_PHOTOS[index % PLACEHOLDER_PHOTOS.length]
+}
+
+function formatPrice(price: string | number): string {
+  return Number(price).toFixed(2).replace('.', ',')
+}
+
+/* ---- Skeleton shimmer placeholder ---- */
+function SkeletonBox({ width, height, borderRadius = 8, style }: {
+  width: number | string
+  height: number
+  borderRadius?: number
+  style?: any
+}) {
+  return (
+    <View
+      style={[
+        {
+          width: width as any,
+          height,
+          borderRadius,
+          backgroundColor: COLORS.gray200,
+        },
+        style,
+      ]}
+    />
+  )
+}
+
+function HomeSkeleton({ screenWidth }: { screenWidth: number }) {
+  const cardW = screenWidth * 0.6
+  return (
+    <ScrollView showsVerticalScrollIndicator={false} style={styles.container}>
+      {/* Header skeleton */}
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <SkeletonBox width={180} height={26} borderRadius={6} />
+          <SkeletonBox width={200} height={14} borderRadius={4} style={{ marginTop: 8 }} />
+        </View>
+        <SkeletonBox width={44} height={44} borderRadius={22} />
+      </View>
+
+      {/* Search bar skeleton */}
+      <View style={{ paddingHorizontal: 20, marginTop: 12 }}>
+        <SkeletonBox width="100%" height={48} borderRadius={14} />
+      </View>
+
+      {/* Nearby section skeleton */}
+      <View style={{ marginTop: 28, paddingHorizontal: 20 }}>
+        <SkeletonBox width={120} height={18} borderRadius={6} />
+        <View style={{ flexDirection: 'row', gap: 12, marginTop: 14 }}>
+          {[0, 1].map((i) => (
+            <View key={i} style={{ width: cardW, borderRadius: 16, overflow: 'hidden' }}>
+              <SkeletonBox width={cardW} height={cardW * 0.55} borderRadius={0} />
+              <View style={{ padding: 12, gap: 8 }}>
+                <SkeletonBox width={cardW * 0.7} height={14} borderRadius={4} />
+                <SkeletonBox width={cardW * 0.4} height={16} borderRadius={4} />
+              </View>
+            </View>
+          ))}
+        </View>
+      </View>
+
+      {/* Popular section skeleton */}
+      <View style={{ marginTop: 28, paddingHorizontal: 20 }}>
+        <SkeletonBox width={150} height={18} borderRadius={6} />
+        {[0, 1, 2].map((i) => (
+          <View key={i} style={{ flexDirection: 'row', marginTop: 12, borderRadius: 16, overflow: 'hidden' }}>
+            <SkeletonBox width={100} height={100} borderRadius={0} />
+            <View style={{ flex: 1, padding: 12, gap: 8 }}>
+              <SkeletonBox width="80%" height={14} borderRadius={4} />
+              <SkeletonBox width="60%" height={12} borderRadius={4} />
+              <SkeletonBox width="40%" height={14} borderRadius={4} />
+            </View>
+          </View>
+        ))}
+      </View>
+      <View style={{ height: 40 }} />
+    </ScrollView>
+  )
+}
+
+/* ---- Spot photo with loading placeholder ---- */
+function SpotImage({ uri, style, resizeMode = 'cover' }: { uri: string; style: any; resizeMode?: string }) {
+  const [loaded, setLoaded] = useState(false)
+  const [error, setError] = useState(false)
+
+  const fallbackUri = PLACEHOLDER_PHOTOS[0]
+
+  return (
+    <View style={style}>
+      {!loaded && (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: COLORS.gray200 }]} />
+      )}
+      <Image
+        source={{ uri: error ? fallbackUri : uri }}
+        style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]}
+        resizeMode={resizeMode as any}
+        onLoad={() => setLoaded(true)}
+        onError={() => {
+          if (!error) setError(true)
+        }}
+      />
+    </View>
+  )
 }
 
 export default function HomeScreen() {
@@ -44,25 +150,34 @@ export default function HomeScreen() {
   const [userName, setUserName] = useState<string | null>(null)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   const fetchUser = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) {
-      const meta = user.user_metadata
-      setUserName(meta?.first_name ?? meta?.full_name?.split(' ')[0] ?? null)
-      setAvatarUrl(meta?.avatar_url ?? null)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const meta = user.user_metadata
+        setUserName(meta?.first_name ?? meta?.full_name?.split(' ')[0] ?? null)
+        setAvatarUrl(meta?.avatar_url ?? null)
+      }
+    } catch {
+      // Silently ignore auth errors
     }
   }, [])
 
   const fetchSpots = useCallback(async () => {
-    const { data } = await supabase
-      .from('spots')
-      .select('id, title, address, city, price_per_hour, type, rating, review_count, photos, has_smart_gate')
-      .eq('status', 'active')
-      .order('review_count', { ascending: false })
-      .limit(20)
+    try {
+      const { data } = await supabase
+        .from('spots')
+        .select('id, title, address, city, price_per_hour, type, rating, review_count, photos, has_smart_gate')
+        .eq('status', 'active')
+        .order('review_count', { ascending: false })
+        .limit(20)
 
-    setSpots(data ?? [])
+      setSpots(data ?? [])
+    } catch {
+      // Silently ignore fetch errors
+    }
   }, [])
 
   const onRefresh = useCallback(async () => {
@@ -72,12 +187,23 @@ export default function HomeScreen() {
   }, [fetchUser, fetchSpots])
 
   useEffect(() => {
-    fetchUser()
-    fetchSpots()
+    async function init() {
+      await Promise.all([fetchUser(), fetchSpots()])
+      setLoading(false)
+    }
+    init()
   }, [fetchUser, fetchSpots])
 
   const nearbySpots = spots.slice(0, 8)
   const popularSpots = spots.slice(0, 10)
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <HomeSkeleton screenWidth={SCREEN_WIDTH} />
+      </SafeAreaView>
+    )
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -100,7 +226,10 @@ export default function HomeScreen() {
             </Text>
             <Text style={styles.subtitle}>Trouvez votre place de parking</Text>
           </View>
-          <TouchableOpacity onPress={() => router.push('/(tabs)/profile')}>
+          <TouchableOpacity
+            onPress={() => router.push('/(tabs)/profile')}
+            activeOpacity={0.7}
+          >
             {avatarUrl ? (
               <Image source={{ uri: avatarUrl }} style={styles.avatar} />
             ) : (
@@ -117,7 +246,7 @@ export default function HomeScreen() {
         <TouchableOpacity
           style={styles.searchBar}
           onPress={() => router.push('/(tabs)/search')}
-          activeOpacity={0.8}
+          activeOpacity={0.7}
         >
           <Search color={COLORS.gray400} size={20} />
           <Text style={styles.searchText}>Rechercher une place...</Text>
@@ -126,57 +255,65 @@ export default function HomeScreen() {
         {/* Nearby Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>À proximité</Text>
+            <Text style={styles.sectionTitle}>A proximite</Text>
             <TouchableOpacity
               style={styles.seeAllBtn}
               onPress={() => router.push('/(tabs)/search')}
+              activeOpacity={0.7}
             >
               <Text style={styles.seeAllText}>Voir tout</Text>
               <ChevronRight color={COLORS.primary} size={16} />
             </TouchableOpacity>
           </View>
 
-          <FlatList
-            data={nearbySpots}
-            keyExtractor={(item) => `nearby-${item.id}`}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.nearbyList}
-            renderItem={({ item, index }) => (
-              <TouchableOpacity
-                style={[styles.nearbyCard, { width: NEARBY_CARD_WIDTH }]}
-                onPress={() => router.push(`/spot/${item.id}`)}
-                activeOpacity={0.8}
-              >
-                <Image
-                  source={{ uri: getSpotPhoto(item, index)! }}
-                  style={[styles.nearbyPhoto, { height: NEARBY_CARD_WIDTH * 0.55 }]}
-                />
-                <View style={styles.nearbyBody}>
-                  <Text style={styles.nearbyTitle} numberOfLines={1}>
-                    {item.title}
-                  </Text>
-                  <View style={styles.nearbyRow}>
-                    <Text style={styles.nearbyPrice}>
-                      {Number(item.price_per_hour).toFixed(2).replace('.', ',')} €
+          {nearbySpots.length === 0 ? (
+            <View style={styles.emptySection}>
+              <MapPin color={COLORS.gray300} size={32} />
+              <Text style={styles.emptySectionText}>Aucune place disponible</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={nearbySpots}
+              keyExtractor={(item) => `nearby-${item.id}`}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.nearbyList}
+              renderItem={({ item, index }) => (
+                <TouchableOpacity
+                  style={[styles.nearbyCard, { width: NEARBY_CARD_WIDTH }]}
+                  onPress={() => router.push(`/spot/${item.id}`)}
+                  activeOpacity={0.7}
+                >
+                  <SpotImage
+                    uri={getSpotPhoto(item, index)}
+                    style={[styles.nearbyPhoto, { height: NEARBY_CARD_WIDTH * 0.55 }]}
+                  />
+                  <View style={styles.nearbyBody}>
+                    <Text style={styles.nearbyTitle} numberOfLines={1}>
+                      {item.title}
                     </Text>
-                    <Text style={styles.nearbyPriceUnit}>/heure</Text>
-                  </View>
-                  {item.rating && (
-                    <View style={styles.ratingRow}>
-                      <Star color={COLORS.warning} fill={COLORS.warning} size={12} />
-                      <Text style={styles.ratingText}>
-                        {Number(item.rating).toFixed(1)}
+                    <View style={styles.nearbyRow}>
+                      <Text style={styles.nearbyPrice}>
+                        {formatPrice(item.price_per_hour)} €
                       </Text>
-                      <Text style={styles.reviewCount}>
-                        ({item.review_count})
-                      </Text>
+                      <Text style={styles.nearbyPriceUnit}>/heure</Text>
                     </View>
-                  )}
-                </View>
-              </TouchableOpacity>
-            )}
-          />
+                    {item.rating && (
+                      <View style={styles.ratingRow}>
+                        <Star color={COLORS.warning} fill={COLORS.warning} size={12} />
+                        <Text style={styles.ratingText}>
+                          {Number(item.rating).toFixed(1)}
+                        </Text>
+                        <Text style={styles.reviewCount}>
+                          ({item.review_count})
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              )}
+            />
+          )}
         </View>
 
         {/* Popular Section */}
@@ -185,51 +322,58 @@ export default function HomeScreen() {
             <Text style={styles.sectionTitle}>Places populaires</Text>
           </View>
 
-          {popularSpots.map((item, index) => (
-            <TouchableOpacity
-              key={`popular-${item.id}`}
-              style={styles.popularCard}
-              onPress={() => router.push(`/spot/${item.id}`)}
-              activeOpacity={0.8}
-            >
-              <Image
-                source={{ uri: getSpotPhoto(item, index)! }}
-                style={styles.popularPhoto}
-              />
-              <View style={styles.popularBody}>
-                <Text style={styles.popularTitle} numberOfLines={1}>
-                  {item.title}
-                </Text>
-                <View style={styles.popularAddressRow}>
-                  <MapPin color={COLORS.gray400} size={12} />
-                  <Text style={styles.popularAddress} numberOfLines={1}>
-                    {item.address}, {item.city}
+          {popularSpots.length === 0 ? (
+            <View style={styles.emptySection}>
+              <Star color={COLORS.gray300} size={32} />
+              <Text style={styles.emptySectionText}>Aucune place populaire</Text>
+            </View>
+          ) : (
+            popularSpots.map((item, index) => (
+              <TouchableOpacity
+                key={`popular-${item.id}`}
+                style={styles.popularCard}
+                onPress={() => router.push(`/spot/${item.id}`)}
+                activeOpacity={0.7}
+              >
+                <SpotImage
+                  uri={getSpotPhoto(item, index)}
+                  style={styles.popularPhoto}
+                />
+                <View style={styles.popularBody}>
+                  <Text style={styles.popularTitle} numberOfLines={1}>
+                    {item.title}
                   </Text>
-                </View>
-                <View style={styles.popularFooter}>
-                  <View style={styles.popularPriceRow}>
-                    <Text style={styles.popularPrice}>
-                      {Number(item.price_per_hour).toFixed(2).replace('.', ',')} €
+                  <View style={styles.popularAddressRow}>
+                    <MapPin color={COLORS.gray400} size={12} />
+                    <Text style={styles.popularAddress} numberOfLines={1}>
+                      {item.address}, {item.city}
                     </Text>
-                    <Text style={styles.popularPriceUnit}>/heure</Text>
                   </View>
-                  <View style={styles.popularMeta}>
-                    <Text style={styles.typeBadge}>
-                      {TYPE_LABELS[item.type] ?? item.type}
-                    </Text>
-                    {item.rating && (
-                      <View style={styles.ratingRow}>
-                        <Star color={COLORS.warning} fill={COLORS.warning} size={11} />
-                        <Text style={styles.ratingText}>
-                          {Number(item.rating).toFixed(1)}
-                        </Text>
-                      </View>
-                    )}
+                  <View style={styles.popularFooter}>
+                    <View style={styles.popularPriceRow}>
+                      <Text style={styles.popularPrice}>
+                        {formatPrice(item.price_per_hour)} €
+                      </Text>
+                      <Text style={styles.popularPriceUnit}>/heure</Text>
+                    </View>
+                    <View style={styles.popularMeta}>
+                      <Text style={styles.typeBadge}>
+                        {TYPE_LABELS[item.type] ?? item.type}
+                      </Text>
+                      {item.rating && (
+                        <View style={styles.ratingRow}>
+                          <Star color={COLORS.warning} fill={COLORS.warning} size={11} />
+                          <Text style={styles.ratingText}>
+                            {Number(item.rating).toFixed(1)}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
                   </View>
                 </View>
-              </View>
-            </TouchableOpacity>
-          ))}
+              </TouchableOpacity>
+            ))
+          )}
         </View>
 
         <View style={{ height: 24 }} />
@@ -298,11 +442,15 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+      },
+      android: { elevation: 3 },
+    }),
     borderWidth: 1,
     borderColor: COLORS.gray100,
   },
@@ -338,6 +486,19 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
   },
 
+  // Empty section
+  emptySection: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 32,
+    gap: 8,
+  },
+  emptySectionText: {
+    fontSize: 14,
+    color: COLORS.gray400,
+    fontWeight: '500',
+  },
+
   // Nearby Cards (horizontal)
   nearbyList: {
     paddingHorizontal: 20,
@@ -347,15 +508,20 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     borderRadius: 16,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.08,
+        shadowRadius: 10,
+      },
+      android: { elevation: 4 },
+    }),
   },
   nearbyPhoto: {
     width: '100%',
-    backgroundColor: COLORS.primaryLight,
+    backgroundColor: COLORS.gray200,
+    overflow: 'hidden',
   },
   nearbyBody: {
     padding: 12,
@@ -406,18 +572,23 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     marginBottom: 12,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 2,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+      },
+      android: { elevation: 3 },
+    }),
     borderWidth: 1,
     borderColor: COLORS.gray100,
   },
   popularPhoto: {
     width: 100,
     height: 100,
-    backgroundColor: COLORS.primaryLight,
+    backgroundColor: COLORS.gray200,
+    overflow: 'hidden',
   },
   popularBody: {
     flex: 1,

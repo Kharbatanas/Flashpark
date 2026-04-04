@@ -9,6 +9,7 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
+  Linking,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
@@ -61,6 +62,23 @@ export default function LoginScreen() {
       } else {
         router.replace('/(tabs)/')
       }
+    }
+  }
+
+  async function handleGoogle() {
+    setLoading(true)
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: 'flashpark://auth/callback',
+        skipBrowserRedirect: true,
+      },
+    })
+    setLoading(false)
+    if (error) {
+      Alert.alert('Erreur', error.message)
+    } else if (data?.url) {
+      Linking.openURL(data.url)
     }
   }
 
@@ -163,13 +181,22 @@ export default function LoginScreen() {
             <View style={styles.dividerLine} />
           </View>
 
+          {/* Google OAuth */}
+          <TouchableOpacity
+            style={styles.googleBtn}
+            onPress={handleGoogle}
+            disabled={loading}
+          >
+            <Text style={styles.googleG}>G</Text>
+            <Text style={styles.googleText}>Continuer avec Google</Text>
+          </TouchableOpacity>
+
           {/* Magic link */}
           <TouchableOpacity
-            style={styles.magicLinkBtn}
             onPress={handleMagicLink}
             disabled={loading}
           >
-            <Text style={styles.magicLinkText}>Continuer avec Magic Link</Text>
+            <Text style={styles.magicLinkText}>Recevoir un lien magique par email</Text>
           </TouchableOpacity>
         </View>
 
@@ -230,14 +257,19 @@ const styles = StyleSheet.create({
   divider: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 4 },
   dividerLine: { flex: 1, height: 1, backgroundColor: COLORS.gray200 },
   dividerText: { fontSize: 13, color: COLORS.gray400 },
-  magicLinkBtn: {
+  googleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
     borderWidth: 1.5,
     borderColor: COLORS.gray200,
     borderRadius: 12,
     paddingVertical: 14,
-    alignItems: 'center',
     backgroundColor: COLORS.white,
   },
-  magicLinkText: { fontSize: 15, fontWeight: '600', color: COLORS.dark },
+  googleG: { fontSize: 18, fontWeight: '700', color: '#4285F4' },
+  googleText: { fontSize: 15, fontWeight: '600', color: COLORS.dark },
+  magicLinkText: { fontSize: 14, fontWeight: '600', color: COLORS.primary, textAlign: 'center', marginTop: 4 },
   terms: { fontSize: 12, color: COLORS.gray400, textAlign: 'center', marginTop: 24, lineHeight: 18 },
 })

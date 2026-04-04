@@ -6,12 +6,12 @@ import {
   FlatList,
   TouchableOpacity,
   StyleSheet,
-  ActivityIndicator,
   Alert,
   Platform,
   Image,
   Share,
   useWindowDimensions,
+  ActivityIndicator,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useLocalSearchParams, router } from 'expo-router'
@@ -67,9 +67,67 @@ interface HostInfo {
   created_at: string
 }
 
+function formatPrice(price: string | number): string {
+  return Number(price).toFixed(2).replace('.', ',')
+}
+
 function roundToNext30(date: Date): Date {
   const ms = 30 * 60 * 1000
   return new Date(Math.ceil(date.getTime() / ms) * ms)
+}
+
+/* ---- Skeleton ---- */
+function SkeletonBox({ width, height, borderRadius = 8, style }: {
+  width: number | string; height: number; borderRadius?: number; style?: any
+}) {
+  return (
+    <View style={[{ width: width as any, height, borderRadius, backgroundColor: COLORS.gray200 }, style]} />
+  )
+}
+
+function DetailSkeleton({ screenWidth }: { screenWidth: number }) {
+  return (
+    <View style={styles.container}>
+      <SkeletonBox width={screenWidth} height={PHOTO_HEIGHT} borderRadius={0} />
+      <View style={{ padding: 20, gap: 14 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+          <SkeletonBox width="40%" height={28} borderRadius={6} />
+          <SkeletonBox width="25%" height={20} borderRadius={6} />
+        </View>
+        <SkeletonBox width="80%" height={22} borderRadius={6} />
+        <SkeletonBox width="60%" height={14} borderRadius={4} />
+        <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+          <SkeletonBox width={80} height={32} borderRadius={20} />
+          <SkeletonBox width={100} height={32} borderRadius={20} />
+        </View>
+        <SkeletonBox width="100%" height={1} borderRadius={0} style={{ marginVertical: 8 }} />
+        <SkeletonBox width="30%" height={16} borderRadius={4} />
+        <SkeletonBox width="100%" height={60} borderRadius={8} />
+      </View>
+    </View>
+  )
+}
+
+/* ---- Image with loading / error handling ---- */
+function CarouselImage({ uri, width }: { uri: string; width: number }) {
+  const [loaded, setLoaded] = useState(false)
+  const [error, setError] = useState(false)
+  const fallbackUri = PLACEHOLDER_PHOTOS[0]
+
+  return (
+    <View style={[styles.carouselImage, { width }]}>
+      {!loaded && (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: COLORS.gray200 }]} />
+      )}
+      <Image
+        source={{ uri: error ? fallbackUri : uri }}
+        style={[StyleSheet.absoluteFill, { width, height: PHOTO_HEIGHT }]}
+        resizeMode="cover"
+        onLoad={() => setLoaded(true)}
+        onError={() => { if (!error) setError(true) }}
+      />
+    </View>
+  )
 }
 
 export default function SpotDetailScreen() {
@@ -100,23 +158,32 @@ export default function SpotDetailScreen() {
 
   async function loadSpot() {
     setLoading(true)
-    const { data } = await supabase
-      .from('spots')
-      .select('*')
-      .eq('id', id)
-      .single()
+    try {
+      const { data } = await supabase
+        .from('spots')
+        .select('*')
+        .eq('id', id)
+        .single()
 
-    if (data) {
-      setSpot(data)
-      // Load host info
-      if (data.host_id) {
-        const { data: hostData } = await supabase
-          .from('users')
-          .select('id, first_name, last_name, avatar_url, created_at')
-          .eq('id', data.host_id)
-          .single()
-        if (hostData) setHost(hostData)
+      if (data) {
+        // Ensure photos and amenities are always arrays
+        setSpot({
+          ...data,
+          photos: Array.isArray(data.photos) ? data.photos : [],
+          amenities: Array.isArray(data.amenities) ? data.amenities : [],
+        })
+        // Load host info
+        if (data.host_id) {
+          const { data: hostData } = await supabase
+            .from('users')
+            .select('id, first_name, last_name, avatar_url, created_at')
+            .eq('id', data.host_id)
+            .single()
+          if (hostData) setHost(hostData)
+        }
       }
+    } catch {
+      // Silently fail
     }
     setLoading(false)
   }
@@ -124,7 +191,7 @@ export default function SpotDetailScreen() {
   async function handleShare() {
     if (!spot) return
     await Share.share({
-      message: `Regarde cette place de parking sur Flashpark : "${spot.title}" a ${spot.address}, ${spot.city} — ${pricePerHour.toFixed(2).replace('.', ',')} €/h`,
+      message: `Regarde cette place de parking sur Flashpark : "${spot.title}" a ${spot.address}, ${spot.city} — ${formatPrice(pricePerHour)} €/h`,
     })
   }
 
@@ -133,7 +200,7 @@ export default function SpotDetailScreen() {
       data: { user },
     } = await supabase.auth.getUser()
     if (!user) {
-      Alert.alert('Connexion requise', 'Connectez-vous pour réserver.', [
+      Alert.alert('Connexion requise', 'Connectez-vous pour reserver.', [
         { text: 'Annuler', style: 'cancel' },
         { text: 'Se connecter', onPress: () => router.push('/(auth)/login') },
       ])
@@ -143,43 +210,48 @@ export default function SpotDetailScreen() {
     if (!spot) return
     setBooking(true)
 
-    const { data: dbUser } = await supabase
-      .from('users')
-      .select('id')
-      .eq('supabase_id', user.id)
-      .single()
+    try {
+      const { data: dbUser } = await supabase
+        .from('users')
+        .select('id')
+        .eq('supabase_id', user.id)
+        .single()
 
-    if (!dbUser) {
+      if (!dbUser) {
+        setBooking(false)
+        Alert.alert('Erreur', 'Profil introuvable. Veuillez vous reconnecter.')
+        return
+      }
+
+      const totalPrice = total
+      const platformFee = fee
+      const hostPayout = subtotal
+
+      const { data: newBooking, error } = await supabase
+        .from('bookings')
+        .insert({
+          driver_id: dbUser.id,
+          spot_id: spot.id,
+          start_time: defaultStart.toISOString(),
+          end_time: defaultEnd.toISOString(),
+          total_price: String(totalPrice),
+          platform_fee: String(platformFee),
+          host_payout: String(hostPayout),
+          status: 'pending',
+        })
+        .select('id')
+        .single()
+
       setBooking(false)
-      Alert.alert('Erreur', 'Profil introuvable. Veuillez vous reconnecter.')
-      return
-    }
 
-    const totalPrice = total
-    const platformFee = fee
-    const hostPayout = subtotal
-
-    const { data: newBooking, error } = await supabase
-      .from('bookings')
-      .insert({
-        driver_id: dbUser.id,
-        spot_id: spot.id,
-        start_time: defaultStart.toISOString(),
-        end_time: defaultEnd.toISOString(),
-        total_price: String(totalPrice),
-        platform_fee: String(platformFee),
-        host_payout: String(hostPayout),
-        status: 'pending',
-      })
-      .select('id')
-      .single()
-
-    setBooking(false)
-
-    if (error) {
-      Alert.alert('Erreur', error.message)
-    } else if (newBooking) {
-      router.push(`/booking/${newBooking.id}`)
+      if (error) {
+        Alert.alert('Erreur', error.message)
+      } else if (newBooking) {
+        router.push(`/booking/${newBooking.id}`)
+      }
+    } catch (err: any) {
+      setBooking(false)
+      Alert.alert('Erreur', err?.message ?? 'Une erreur est survenue')
     }
   }
 
@@ -189,27 +261,32 @@ export default function SpotDetailScreen() {
       const idx = Math.round(x / SCREEN_WIDTH)
       setPhotoIndex(idx)
     },
-    []
+    [SCREEN_WIDTH]
   )
 
   /* ---------- Loading state ---------- */
   if (loading) {
-    return (
-      <View style={styles.loadingWrap}>
-        <ActivityIndicator color={COLORS.primary} size="large" />
-      </View>
-    )
+    return <DetailSkeleton screenWidth={SCREEN_WIDTH} />
   }
 
   /* ---------- Not found ---------- */
   if (!spot) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <TouchableOpacity style={styles.floatingBack} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.floatingBack} onPress={() => router.back()} activeOpacity={0.7}>
           <ArrowLeft color={COLORS.dark} size={22} />
         </TouchableOpacity>
         <View style={styles.empty}>
-          <Text style={styles.emptyText}>Parking introuvable</Text>
+          <MapPin color={COLORS.gray300} size={48} />
+          <Text style={styles.emptyTitle}>Parking introuvable</Text>
+          <Text style={styles.emptySubtitle}>Cette place n'existe plus ou a ete supprimee</Text>
+          <TouchableOpacity
+            style={styles.emptyBtn}
+            onPress={() => router.back()}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.emptyBtnText}>Retour</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     )
@@ -239,11 +316,7 @@ export default function SpotDetailScreen() {
             scrollEventThrottle={16}
             keyExtractor={(_, i) => String(i)}
             renderItem={({ item }) => (
-              <Image
-                source={{ uri: item }}
-                style={[styles.carouselImage, { width: SCREEN_WIDTH }]}
-                resizeMode="cover"
-              />
+              <CarouselImage uri={item} width={SCREEN_WIDTH} />
             )}
           />
 
@@ -262,22 +335,33 @@ export default function SpotDetailScreen() {
             </View>
           )}
 
+          {/* Photo counter */}
+          {photos.length > 1 && (
+            <View style={styles.photoCounter}>
+              <Text style={styles.photoCounterText}>
+                {photoIndex + 1}/{photos.length}
+              </Text>
+            </View>
+          )}
+
           {/* Floating back button */}
           <TouchableOpacity
             style={styles.floatingBack}
             onPress={() => router.back()}
+            activeOpacity={0.7}
           >
             <ArrowLeft color={COLORS.dark} size={22} />
           </TouchableOpacity>
 
           {/* Floating share + favorite */}
           <View style={styles.floatingRight}>
-            <TouchableOpacity style={styles.floatingBtn} onPress={handleShare}>
+            <TouchableOpacity style={styles.floatingBtn} onPress={handleShare} activeOpacity={0.7}>
               <Share2 color={COLORS.dark} size={20} />
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.floatingBtn}
               onPress={() => setLiked(!liked)}
+              activeOpacity={0.7}
             >
               <Heart
                 color={liked ? COLORS.danger : COLORS.dark}
@@ -293,7 +377,7 @@ export default function SpotDetailScreen() {
           {/* Price + Rating */}
           <View style={styles.priceRatingRow}>
             <Text style={styles.heroPrice}>
-              {pricePerHour.toFixed(2).replace('.', ',')} €
+              {formatPrice(pricePerHour)} €
               <Text style={styles.heroPriceUnit}>/h</Text>
             </Text>
             {ratingValue !== null && (
@@ -344,7 +428,7 @@ export default function SpotDetailScreen() {
               <View style={[styles.badge, styles.badgePrimary]}>
                 <Clock color={COLORS.primary} size={12} />
                 <Text style={[styles.badgeText, { color: COLORS.primary }]}>
-                  Réservation instantanée
+                  Reservation instantanee
                 </Text>
               </View>
             )}
@@ -393,7 +477,7 @@ export default function SpotDetailScreen() {
                 <Shield color={COLORS.gray500} size={16} />
                 <Text style={styles.heightText}>
                   Hauteur maximale :{' '}
-                  {Number(spot.max_vehicle_height).toFixed(1)} m
+                  {Number(spot.max_vehicle_height).toFixed(1).replace('.', ',')} m
                 </Text>
               </View>
               <View style={styles.divider} />
@@ -439,7 +523,7 @@ export default function SpotDetailScreen() {
         <View style={styles.footerTop}>
           <View style={styles.footerPriceWrap}>
             <Text style={styles.footerPriceMain}>
-              {pricePerHour.toFixed(2).replace('.', ',')} €
+              {formatPrice(pricePerHour)} €
               <Text style={styles.footerPriceUnit}>/h</Text>
             </Text>
           </View>
@@ -450,6 +534,7 @@ export default function SpotDetailScreen() {
               style={styles.durationBtn}
               onPress={() => setHours(Math.max(1, hours - 1))}
               disabled={hours <= 1}
+              activeOpacity={0.7}
             >
               <Minus
                 color={hours <= 1 ? COLORS.gray300 : COLORS.dark}
@@ -461,6 +546,7 @@ export default function SpotDetailScreen() {
               style={styles.durationBtn}
               onPress={() => setHours(Math.min(24, hours + 1))}
               disabled={hours >= 24}
+              activeOpacity={0.7}
             >
               <Plus
                 color={hours >= 24 ? COLORS.gray300 : COLORS.dark}
@@ -472,10 +558,10 @@ export default function SpotDetailScreen() {
 
         <View style={styles.footerTotalRow}>
           <Text style={styles.footerTotalLabel}>
-            Total ({hours}h dont {fee.toFixed(2).replace('.', ',')} € de frais)
+            Total ({hours}h dont {formatPrice(fee)} € de frais)
           </Text>
           <Text style={styles.footerTotalValue}>
-            {total.toFixed(2).replace('.', ',')} €
+            {formatPrice(total)} €
           </Text>
         </View>
 
@@ -505,12 +591,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
-  loadingWrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.background,
-  },
   scroll: {
     paddingBottom: 200,
   },
@@ -519,10 +599,11 @@ const styles = StyleSheet.create({
   carouselWrap: {
     position: 'relative',
     height: PHOTO_HEIGHT,
-    backgroundColor: COLORS.primaryLight,
+    backgroundColor: COLORS.gray200,
   },
   carouselImage: {
     height: PHOTO_HEIGHT,
+    overflow: 'hidden',
   },
   dotsRow: {
     position: 'absolute',
@@ -543,6 +624,20 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     width: 20,
   },
+  photoCounter: {
+    position: 'absolute',
+    bottom: 16,
+    right: 16,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  photoCounterText: {
+    color: COLORS.white,
+    fontSize: 12,
+    fontWeight: '600',
+  },
 
   /* Floating buttons */
   floatingBack: {
@@ -556,11 +651,15 @@ const styles = StyleSheet.create({
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOpacity: 0.12,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 2 },
+      },
+      android: { elevation: 4 },
+    }),
   },
   floatingRight: {
     position: 'absolute',
@@ -577,11 +676,15 @@ const styles = StyleSheet.create({
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOpacity: 0.12,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 2 },
+      },
+      android: { elevation: 4 },
+    }),
   },
 
   /* Body */
@@ -739,6 +842,15 @@ const styles = StyleSheet.create({
     borderColor: COLORS.gray200,
     borderRadius: 16,
     padding: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.04,
+        shadowRadius: 4,
+      },
+      android: { elevation: 1 },
+    }),
   },
   hostAvatar: {
     width: 48,
@@ -780,11 +892,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 14,
     paddingBottom: Platform.OS === 'ios' ? 34 : 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: -4 },
-    elevation: 8,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOpacity: 0.06,
+        shadowRadius: 12,
+        shadowOffset: { width: 0, height: -4 },
+      },
+      android: { elevation: 8 },
+    }),
   },
   footerTop: {
     flexDirection: 'row',
@@ -869,9 +985,30 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 32,
   },
-  emptyText: {
-    fontSize: 15,
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.dark,
+    marginTop: 8,
+  },
+  emptySubtitle: {
+    fontSize: 14,
     color: COLORS.gray400,
+    textAlign: 'center',
+  },
+  emptyBtn: {
+    marginTop: 12,
+    backgroundColor: COLORS.primary,
+    borderRadius: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+  },
+  emptyBtnText: {
+    color: COLORS.white,
+    fontWeight: '700',
+    fontSize: 14,
   },
 })

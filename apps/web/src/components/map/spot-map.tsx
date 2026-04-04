@@ -1,7 +1,8 @@
 'use client'
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import Map, { Marker, Popup, NavigationControl, type MapRef } from 'react-map-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { PriceMarker } from './price-marker'
@@ -9,7 +10,13 @@ import { motion, AnimatePresence, FadeIn, StaggerContainer, StaggerItem, HoverSc
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN
 
-const NICE_CENTER = { longitude: 7.262, latitude: 43.7102 }
+// Center of France — will auto-detect user location if available
+const FRANCE_CENTER = { longitude: 1.888334, latitude: 46.603354 }
+
+interface MapboxFeature {
+  place_name: string
+  center: [number, number]
+}
 
 interface Spot {
   id: string
@@ -76,21 +83,114 @@ function SpotListFallback({ spots }: { spots: Spot[] }) {
 
 export function SpotMap({ initialSpots }: SpotMapProps) {
   const mapRef = useRef<MapRef>(null)
+  const searchParams = useSearchParams()
   const [spots] = useState<Spot[]>(initialSpots)
   const [selected, setSelected] = useState<Spot | null>(null)
-  const [searchValue, setSearchValue] = useState('')
+  const [searchValue, setSearchValue] = useState(searchParams.get('q') ?? '')
+  const [suggestions, setSuggestions] = useState<MapboxFeature[]>([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [searchLoading, setSearchLoading] = useState(false)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const searchContainerRef = useRef<HTMLDivElement>(null)
   const [viewport, setViewport] = useState({
-    ...NICE_CENTER,
-    zoom: 13,
+    ...FRANCE_CENTER,
+    zoom: 6,
   })
+
+  // Try to auto-detect user location on mount
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const { latitude, longitude } = pos.coords
+          setViewport({ latitude, longitude, zoom: 13 })
+          mapRef.current?.flyTo({ center: [longitude, latitude], zoom: 13, duration: 1500 })
+        },
+        () => { /* user denied — stay on France view */ }
+      )
+    }
+  }, [])
+
+  // If ?q= is present in URL, geocode it on mount
+  useEffect(() => {
+    const q = searchParams.get('q')
+    if (!q?.trim() || !MAPBOX_TOKEN) return
+    fetch(
+      `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${MAPBOX_TOKEN}&country=fr&language=fr&limit=1`
+    )
+      .then((res) => res.json())
+      .then((data) => {
+        const feature = data.features?.[0]
+        if (feature) {
+          const [lng, lat] = feature.center
+          setViewport({ longitude: lng, latitude: lat, zoom: 14 })
+          mapRef.current?.flyTo({ center: [lng, lat], zoom: 14, duration: 1200 })
+        }
+      })
+      .catch(() => { /* silent */ })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Close suggestions on click outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const fetchSuggestions = useCallback(async (query: string) => {
+    if (!query.trim() || query.trim().length < 3 || !MAPBOX_TOKEN) {
+      setSuggestions([])
+      setShowSuggestions(false)
+      return
+    }
+    setSearchLoading(true)
+    try {
+      const res = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${MAPBOX_TOKEN}&country=fr&language=fr&types=address,place,locality,neighborhood&limit=5`
+      )
+      const data = await res.json()
+      const features: MapboxFeature[] = data.features ?? []
+      setSuggestions(features)
+      setShowSuggestions(features.length > 0)
+    } catch {
+      setSuggestions([])
+    } finally {
+      setSearchLoading(false)
+    }
+  }, [])
+
+  function handleSearchInput(value: string) {
+    setSearchValue(value)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => fetchSuggestions(value), 300)
+  }
+
+  function handleSuggestionClick(feature: MapboxFeature) {
+    const [lng, lat] = feature.center
+    setSearchValue(feature.place_name)
+    setSuggestions([])
+    setShowSuggestions(false)
+    setViewport({ longitude: lng, latitude: lat, zoom: 14 })
+    mapRef.current?.flyTo({ center: [lng, lat], zoom: 14, duration: 1200 })
+  }
 
   const handleSearchSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault()
       if (!searchValue.trim()) return
+      // If we have suggestions, select the first one
+      if (suggestions.length > 0) {
+        handleSuggestionClick(suggestions[0])
+        return
+      }
       try {
         const res = await fetch(
-          `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(searchValue)}.json?access_token=${MAPBOX_TOKEN}&limit=1&language=fr`
+          `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(searchValue)}.json?access_token=${MAPBOX_TOKEN}&country=fr&language=fr&limit=1`
         )
         const data = await res.json()
         const feature = data.features?.[0]
@@ -102,8 +202,9 @@ export function SpotMap({ initialSpots }: SpotMapProps) {
       } catch {
         // silent fail
       }
+      setShowSuggestions(false)
     },
-    [searchValue]
+    [searchValue, suggestions]
   )
 
   if (!MAPBOX_TOKEN || MAPBOX_TOKEN.startsWith('pk.eyJ1...')) {
@@ -114,6 +215,7 @@ export function SpotMap({ initialSpots }: SpotMapProps) {
     <div className="relative h-[calc(100vh-4rem)] w-full">
       {/* Search overlay */}
       <motion.div
+        ref={searchContainerRef}
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.2 }}
@@ -127,10 +229,19 @@ export function SpotMap({ initialSpots }: SpotMapProps) {
           <input
             type="text"
             value={searchValue}
-            onChange={(e) => setSearchValue(e.target.value)}
-            placeholder="Rechercher une adresse, un quartier..."
+            onChange={(e) => handleSearchInput(e.target.value)}
+            onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true) }}
+            placeholder="Rechercher une adresse, une ville..."
             className="flex-1 px-4 py-3 text-sm text-gray-700 placeholder-gray-400 focus:outline-none"
           />
+          {searchLoading && (
+            <div className="flex items-center pr-2">
+              <svg className="h-4 w-4 animate-spin text-[#0540FF]" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            </div>
+          )}
           <motion.button
             type="submit"
             whileHover={{ scale: 1.05 }}
@@ -142,6 +253,25 @@ export function SpotMap({ initialSpots }: SpotMapProps) {
             </svg>
           </motion.button>
         </motion.form>
+
+        {/* Autocomplete suggestions */}
+        {showSuggestions && suggestions.length > 0 && (
+          <div className="mt-1 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg">
+            {suggestions.map((feature, i) => (
+              <button
+                key={`${feature.place_name}-${i}`}
+                type="button"
+                onClick={() => handleSuggestionClick(feature)}
+                className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-gray-700 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-b-0"
+              >
+                <svg className="h-4 w-4 flex-shrink-0 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                </svg>
+                <span className="line-clamp-1">{feature.place_name}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </motion.div>
 
       {/* Map */}

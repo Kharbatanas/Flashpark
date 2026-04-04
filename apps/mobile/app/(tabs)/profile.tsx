@@ -7,7 +7,6 @@ import {
   TextInput,
   Alert,
   ScrollView,
-  ActivityIndicator,
   Platform,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -31,8 +30,8 @@ import { COLORS } from '../../lib/constants'
 
 const ROLE_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   driver: { label: 'Conducteur', color: COLORS.primary, bg: COLORS.primaryLight },
-  host: { label: 'Hôte', color: COLORS.success, bg: COLORS.successLight },
-  both: { label: 'Conducteur & Hôte', color: '#7C3AED', bg: '#F5F3FF' },
+  host: { label: 'Hote', color: COLORS.success, bg: COLORS.successLight },
+  both: { label: 'Conducteur & Hote', color: '#7C3AED', bg: '#F5F3FF' },
   admin: { label: 'Administrateur', color: COLORS.gray500, bg: COLORS.gray50 },
 }
 
@@ -59,8 +58,56 @@ const MENU_ITEMS = [
   { icon: Lock, label: 'Mot de passe', key: 'password' },
   { icon: LifeBuoy, label: 'Support / Aide', key: 'support' },
   { icon: FileText, label: "Conditions d'utilisation", key: 'terms' },
-  { icon: Shield, label: 'Politique de confidentialit\u00e9', key: 'privacy' },
+  { icon: Shield, label: 'Politique de confidentialite', key: 'privacy' },
 ]
+
+/* ---- Skeleton ---- */
+function SkeletonBox({ width, height, borderRadius = 8, style }: {
+  width: number | string; height: number; borderRadius?: number; style?: any
+}) {
+  return (
+    <View style={[{ width: width as any, height, borderRadius, backgroundColor: 'rgba(255,255,255,0.2)' }, style]} />
+  )
+}
+
+function ProfileSkeleton() {
+  return (
+    <View style={styles.container}>
+      {/* Header skeleton */}
+      <View style={styles.headerGradient}>
+        <SafeAreaView edges={['top']} style={styles.headerSafe}>
+          <View style={[styles.headerContent, { gap: 12 }]}>
+            <SkeletonBox width={88} height={88} borderRadius={44} />
+            <SkeletonBox width={160} height={22} borderRadius={6} />
+            <SkeletonBox width={200} height={13} borderRadius={4} />
+          </View>
+        </SafeAreaView>
+      </View>
+
+      {/* Stats skeleton */}
+      <View style={[styles.statsRow, { justifyContent: 'center', gap: 20 }]}>
+        {[0, 1, 2].map((i) => (
+          <View key={i} style={styles.statItem}>
+            <View style={{ width: 40, height: 18, borderRadius: 4, backgroundColor: COLORS.gray200 }} />
+            <View style={{ width: 60, height: 11, borderRadius: 3, backgroundColor: COLORS.gray200, marginTop: 4 }} />
+          </View>
+        ))}
+      </View>
+
+      {/* Menu skeleton */}
+      <View style={[styles.menuCard, { gap: 0 }]}>
+        {[0, 1, 2, 3, 4, 5].map((i) => (
+          <View key={i} style={[styles.menuRow, i < 5 && styles.menuRowBorder]}>
+            <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: COLORS.gray100 }} />
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <View style={{ width: '60%', height: 15, borderRadius: 4, backgroundColor: COLORS.gray100 }} />
+            </View>
+          </View>
+        ))}
+      </View>
+    </View>
+  )
+}
 
 export default function ProfileScreen() {
   const [profile, setProfile] = useState<UserProfile | null>(null)
@@ -80,26 +127,30 @@ export default function ProfileScreen() {
 
   const loadProfile = useCallback(async () => {
     setLoading(true)
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) {
-      setLoading(false)
-      return
-    }
-    setAuthed(true)
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) {
+        setLoading(false)
+        return
+      }
+      setAuthed(true)
 
-    const { data } = await supabase
-      .from('users')
-      .select('id, email, full_name, avatar_url, phone_number, role, is_verified, created_at')
-      .eq('supabase_id', user.id)
-      .single()
+      const { data } = await supabase
+        .from('users')
+        .select('id, email, full_name, avatar_url, phone_number, role, is_verified, created_at')
+        .eq('supabase_id', user.id)
+        .single()
 
-    if (data) {
-      setProfile(data)
-      setFullName(data.full_name ?? '')
-      setPhone(data.phone_number ?? '')
-      await loadStats(data.id, data.created_at)
+      if (data) {
+        setProfile(data)
+        setFullName(data.full_name ?? '')
+        setPhone(data.phone_number ?? '')
+        await loadStats(data.id, data.created_at)
+      }
+    } catch {
+      // Silently ignore
     }
     setLoading(false)
   }, [])
@@ -129,7 +180,7 @@ export default function ProfileScreen() {
         memberSince,
       })
     } catch {
-      // Tables may not exist yet — silently ignore
+      // Tables may not exist yet
       const date = new Date(createdAt)
       setStats({
         bookingsCount: 0,
@@ -144,12 +195,17 @@ export default function ProfileScreen() {
 
   async function handleSave() {
     if (!profile) return
+    const trimmedName = fullName.trim()
+    if (!trimmedName) {
+      Alert.alert('Erreur', 'Le nom ne peut pas etre vide.')
+      return
+    }
     setSaving(true)
     const { error } = await supabase
       .from('users')
       .update({
-        full_name: fullName || profile.full_name,
-        phone_number: phone || null,
+        full_name: trimmedName,
+        phone_number: phone.trim() || null,
         updated_at: new Date().toISOString(),
       })
       .eq('id', profile.id)
@@ -159,10 +215,10 @@ export default function ProfileScreen() {
       Alert.alert('Erreur', error.message)
     } else {
       setProfile((prev) =>
-        prev ? { ...prev, full_name: fullName, phone_number: phone || null } : prev
+        prev ? { ...prev, full_name: trimmedName, phone_number: phone.trim() || null } : prev
       )
       setEditOpen(false)
-      Alert.alert('Succ\u00e8s', 'Profil mis \u00e0 jour.')
+      Alert.alert('Succes', 'Profil mis a jour.')
     }
   }
 
@@ -176,15 +232,15 @@ export default function ProfileScreen() {
 
     if (!error) {
       setProfile((prev) => (prev ? { ...prev, role: newRole } : prev))
-      Alert.alert('F\u00e9licitations !', 'Vous \u00eates maintenant h\u00f4te Flashpark.')
+      Alert.alert('Felicitations !', 'Vous etes maintenant hote Flashpark.')
     }
   }
 
   async function handleSignOut() {
-    Alert.alert('D\u00e9connexion', 'Voulez-vous vous d\u00e9connecter ?', [
+    Alert.alert('Deconnexion', 'Voulez-vous vous deconnecter ?', [
       { text: 'Annuler', style: 'cancel' },
       {
-        text: 'D\u00e9connecter',
+        text: 'Deconnecter',
         style: 'destructive',
         onPress: async () => {
           await supabase.auth.signOut()
@@ -197,19 +253,12 @@ export default function ProfileScreen() {
   }
 
   function handleMenuPress(key: string) {
-    // Placeholder — navigate or show alert
-    Alert.alert('Bient\u00f4t disponible', 'Cette fonctionnalit\u00e9 arrive bient\u00f4t.')
+    Alert.alert('Bientot disponible', 'Cette fonctionnalite arrive bientot.')
   }
 
   // --- Loading state ---
   if (loading) {
-    return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.loadingWrap}>
-          <ActivityIndicator color={COLORS.primary} size="large" />
-        </View>
-      </SafeAreaView>
-    )
+    return <ProfileSkeleton />
   }
 
   // --- Guest state ---
@@ -220,13 +269,14 @@ export default function ProfileScreen() {
           <View style={styles.guestAvatarCircle}>
             <User color={COLORS.gray300} size={44} />
           </View>
-          <Text style={styles.guestTitle}>Non connect\u00e9</Text>
+          <Text style={styles.guestTitle}>Non connecte</Text>
           <Text style={styles.guestSub}>
-            Connectez-vous pour acc\u00e9der \u00e0 votre profil
+            Connectez-vous pour acceder a votre profil
           </Text>
           <TouchableOpacity
             style={styles.loginBtn}
             onPress={() => router.push('/(auth)/login')}
+            activeOpacity={0.7}
           >
             <Text style={styles.loginBtnText}>Se connecter</Text>
           </TouchableOpacity>
@@ -283,12 +333,12 @@ export default function ProfileScreen() {
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
               <Text style={styles.statValue}>{stats.bookingsCount}</Text>
-              <Text style={styles.statLabel}>R\u00e9servations</Text>
+              <Text style={styles.statLabel}>Reservations</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
               <Text style={styles.statValue}>{stats.reviewsCount}</Text>
-              <Text style={styles.statLabel}>Avis donn\u00e9s</Text>
+              <Text style={styles.statLabel}>Avis donnes</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
@@ -350,7 +400,7 @@ export default function ProfileScreen() {
                 />
               </View>
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>T\u00e9l\u00e9phone</Text>
+                <Text style={styles.inputLabel}>Telephone</Text>
                 <TextInput
                   style={styles.input}
                   value={phone}
@@ -364,6 +414,7 @@ export default function ProfileScreen() {
                 style={[styles.saveBtn, saving && { opacity: 0.6 }]}
                 onPress={handleSave}
                 disabled={saving}
+                activeOpacity={0.7}
               >
                 <Text style={styles.saveBtnText}>
                   {saving ? 'Enregistrement...' : 'Enregistrer les modifications'}
@@ -382,9 +433,9 @@ export default function ProfileScreen() {
               <View style={styles.hostCtaInner}>
                 <Zap color={COLORS.warning} size={22} />
                 <View style={styles.hostCtaTextWrap}>
-                  <Text style={styles.hostCtaTitle}>Devenir h\u00f4te Flashpark</Text>
+                  <Text style={styles.hostCtaTitle}>Devenir hote Flashpark</Text>
                   <Text style={styles.hostCtaDesc}>
-                    Louez votre place et g\u00e9n\u00e9rez des revenus. Gratuit, sans engagement.
+                    Louez votre place et generez des revenus. Gratuit, sans engagement.
                   </Text>
                 </View>
                 <ChevronRight color={COLORS.gray400} size={20} />
@@ -395,7 +446,7 @@ export default function ProfileScreen() {
         {/* ---- Sign out ---- */}
         <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut} activeOpacity={0.7}>
           <LogOut color={COLORS.danger} size={18} />
-          <Text style={styles.signOutText}>Se d\u00e9connecter</Text>
+          <Text style={styles.signOutText}>Se deconnecter</Text>
         </TouchableOpacity>
 
         <View style={{ height: 40 }} />
@@ -411,11 +462,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 20,
-  },
-  loadingWrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 
   // --- Header gradient ---

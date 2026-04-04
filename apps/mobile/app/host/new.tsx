@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import {
   View,
   Text,
@@ -14,7 +14,9 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
+import * as Location from 'expo-location'
 import { supabase } from '../../lib/supabase'
+import { MAPBOX_TOKEN } from '../../lib/constants'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -54,10 +56,17 @@ const AMENITY_LIST = [
   { key: '24h_access', label: '24h/24' },
 ]
 
+interface MapboxFeature {
+  place_name: string
+  center: [number, number]
+  context?: { id: string; text: string }[]
+  text: string
+}
+
 const INITIAL: FormState = {
   type: null,
   address: '',
-  city: 'Nice',
+  city: '',
   latitude: '',
   longitude: '',
   title: '',
@@ -107,65 +116,163 @@ function Step1({ data, onChange }: { data: FormState; onChange: (type: SpotType)
   )
 }
 
-// ─── Step 2: Location ────────────────────────────────────────────────────────
+// ─── Step 2: Location with Autocomplete ─────────────────────────────────────
 
 function Step2({ data, onChange }: { data: FormState; onChange: (f: Partial<FormState>) => void }) {
+  const [query, setQuery] = useState(data.address)
+  const [suggestions, setSuggestions] = useState<MapboxFeature[]>([])
+  const [loading, setLoading] = useState(false)
+  const [locating, setLocating] = useState(false)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function fetchSuggestions(text: string) {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    if (!text.trim() || text.trim().length < 3 || !MAPBOX_TOKEN) {
+      setSuggestions([])
+      return
+    }
+    debounceRef.current = setTimeout(async () => {
+      setLoading(true)
+      try {
+        const res = await fetch(
+          `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(text)}.json?access_token=${MAPBOX_TOKEN}&country=fr&language=fr&types=address,place&limit=5`
+        )
+        const json = await res.json()
+        setSuggestions(json.features ?? [])
+      } catch {
+        setSuggestions([])
+      } finally {
+        setLoading(false)
+      }
+    }, 300)
+  }
+
+  function extractCity(feature: MapboxFeature): string {
+    if (feature.context) {
+      const place = feature.context.find((c) => c.id.startsWith('place'))
+      if (place) return place.text
+    }
+    return feature.text
+  }
+
+  function handleSelect(feature: MapboxFeature) {
+    const city = extractCity(feature)
+    setQuery(feature.place_name)
+    setSuggestions([])
+    onChange({
+      address: feature.place_name,
+      city,
+      latitude: String(feature.center[1]),
+      longitude: String(feature.center[0]),
+    })
+  }
+
+  async function handleGeolocate() {
+    setLocating(true)
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync()
+      if (status !== 'granted') {
+        Alert.alert('Permission refusee', 'Activez la localisation dans les reglages.')
+        setLocating(false)
+        return
+      }
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
+      const { latitude, longitude } = loc.coords
+
+      // Reverse geocode
+      try {
+        const res = await fetch(
+          `https://api.mapbox.com/geocoding/v5/mapbox.places/${longitude},${latitude}.json?access_token=${MAPBOX_TOKEN}&language=fr&types=address,place&limit=1`
+        )
+        const json = await res.json()
+        const feature: MapboxFeature | undefined = json.features?.[0]
+        if (feature) {
+          handleSelect(feature)
+        } else {
+          onChange({ latitude: String(latitude), longitude: String(longitude) })
+        }
+      } catch {
+        onChange({ latitude: String(latitude), longitude: String(longitude) })
+      }
+    } catch {
+      Alert.alert('Erreur', 'Impossible de recuperer votre position.')
+    } finally {
+      setLocating(false)
+    }
+  }
+
   return (
     <View>
       <Text style={s.stepTitle}>Localisation</Text>
       <Text style={s.stepSub}>Adresse exacte de votre place</Text>
 
       <View style={s.fieldGroup}>
-        <Text style={s.label}>Adresse complète *</Text>
+        <Text style={s.label}>Adresse complete *</Text>
         <TextInput
           style={s.input}
-          value={data.address}
-          onChangeText={(v) => onChange({ address: v })}
-          placeholder="12 rue de la Paix, Nice"
+          value={query}
+          onChangeText={(v) => {
+            setQuery(v)
+            fetchSuggestions(v)
+          }}
+          placeholder="Tapez une adresse en France..."
           placeholderTextColor="#9CA3AF"
         />
+        {loading && (
+          <ActivityIndicator
+            size="small"
+            color="#0540FF"
+            style={{ position: 'absolute', right: 14, top: 38 }}
+          />
+        )}
       </View>
 
+      {/* Suggestions list */}
+      {suggestions.length > 0 && (
+        <View style={s.suggestionsContainer}>
+          {suggestions.map((feature, i) => (
+            <TouchableOpacity
+              key={`${feature.place_name}-${i}`}
+              style={s.suggestionItem}
+              onPress={() => handleSelect(feature)}
+            >
+              <Text style={s.suggestionIcon}>📍</Text>
+              <Text style={s.suggestionText} numberOfLines={2}>{feature.place_name}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      {/* City — auto-filled, editable */}
       <View style={s.fieldGroup}>
         <Text style={s.label}>Ville *</Text>
         <TextInput
-          style={s.input}
+          style={[s.input, { backgroundColor: '#F9FAFB' }]}
           value={data.city}
           onChangeText={(v) => onChange({ city: v })}
-          placeholder="Nice"
+          placeholder="Remplie automatiquement"
           placeholderTextColor="#9CA3AF"
         />
       </View>
 
-      <View style={s.row}>
-        <View style={[s.fieldGroup, { flex: 1, marginRight: 8 }]}>
-          <Text style={s.label}>Latitude *</Text>
-          <TextInput
-            style={s.input}
-            value={data.latitude}
-            onChangeText={(v) => onChange({ latitude: v })}
-            placeholder="43.7102"
-            keyboardType="decimal-pad"
-            placeholderTextColor="#9CA3AF"
-          />
-        </View>
-        <View style={[s.fieldGroup, { flex: 1 }]}>
-          <Text style={s.label}>Longitude *</Text>
-          <TextInput
-            style={s.input}
-            value={data.longitude}
-            onChangeText={(v) => onChange({ longitude: v })}
-            placeholder="7.262"
-            keyboardType="decimal-pad"
-            placeholderTextColor="#9CA3AF"
-          />
-        </View>
-      </View>
+      {/* Geolocate button */}
+      <TouchableOpacity
+        style={s.geolocateBtn}
+        onPress={handleGeolocate}
+        disabled={locating}
+      >
+        {locating ? (
+          <ActivityIndicator size="small" color="#0540FF" />
+        ) : (
+          <Text style={s.geolocateIcon}>📍</Text>
+        )}
+        <Text style={s.geolocateText}>Utiliser ma position</Text>
+      </TouchableOpacity>
 
       {data.latitude && data.longitude && !isNaN(Number(data.latitude)) && (
         <View style={s.successBadge}>
           <Text style={s.successText}>
-            ✓ Position : {Number(data.latitude).toFixed(4)}, {Number(data.longitude).toFixed(4)}
+            Position : {Number(data.latitude).toFixed(4)}, {Number(data.longitude).toFixed(4)}
           </Text>
         </View>
       )}
@@ -505,6 +612,35 @@ const s = StyleSheet.create({
     marginTop: 4,
   },
   successText: { fontSize: 12, color: '#059669', fontWeight: '600' },
+  // Autocomplete suggestions
+  suggestionsContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  suggestionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  suggestionIcon: { fontSize: 14 },
+  suggestionText: { fontSize: 13, color: '#374151', flex: 1 },
+  geolocateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+    paddingVertical: 4,
+  },
+  geolocateIcon: { fontSize: 14 },
+  geolocateText: { fontSize: 14, fontWeight: '600', color: '#0540FF' },
   // Amenities
   amenityGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   amenityChip: {

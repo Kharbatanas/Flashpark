@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { eq, and, or, gte, lte } from 'drizzle-orm'
+import { eq, and, or, not, gte, lte } from 'drizzle-orm'
 import { TRPCError } from '@trpc/server'
 import { createTRPCRouter, protectedProcedure, hostProcedure } from '../trpc'
 import { bookings, spots } from '@flashpark/db'
@@ -18,27 +18,30 @@ export const bookingsRouter = createTRPCRouter({
       const { spotId, startTime, endTime } = input
 
       if (startTime >= endTime) {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Start time must be before end time' })
+        throw new TRPCError({ code: 'BAD_REQUEST', message: "L'heure de début doit être avant l'heure de fin" })
       }
 
       // Check spot exists and is active
       const spot = await ctx.db.query.spots.findFirst({
         where: and(eq(spots.id, spotId), eq(spots.status, 'active')),
       })
-      if (!spot) throw new TRPCError({ code: 'NOT_FOUND', message: 'Spot not available' })
+      if (!spot) throw new TRPCError({ code: 'NOT_FOUND', message: 'Place non disponible' })
 
-      // Check for conflicts
+      // Check for conflicts — exclude cancelled/refunded bookings
       const conflicts = await ctx.db.query.bookings.findFirst({
         where: and(
           eq(bookings.spotId, spotId),
+          not(eq(bookings.status, 'cancelled')),
+          not(eq(bookings.status, 'refunded')),
           or(
             and(gte(bookings.startTime, startTime), lte(bookings.startTime, endTime)),
-            and(gte(bookings.endTime, startTime), lte(bookings.endTime, endTime))
+            and(gte(bookings.endTime, startTime), lte(bookings.endTime, endTime)),
+            and(lte(bookings.startTime, startTime), gte(bookings.endTime, endTime))
           )
         ),
       })
       if (conflicts) {
-        throw new TRPCError({ code: 'CONFLICT', message: 'Spot already booked for this time' })
+        throw new TRPCError({ code: 'CONFLICT', message: 'Ce créneau est déjà réservé' })
       }
 
       // Calculate pricing (20% platform fee)
@@ -80,14 +83,17 @@ export const bookingsRouter = createTRPCRouter({
       const booking = await ctx.db.query.bookings.findFirst({
         where: and(eq(bookings.id, input.id), eq(bookings.driverId, ctx.userId)),
       })
-      if (!booking) throw new TRPCError({ code: 'NOT_FOUND' })
+      if (!booking) throw new TRPCError({ code: 'NOT_FOUND', message: 'Réservation introuvable' })
+      if (booking.status === 'cancelled') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cette réservation est déjà annulée' })
+      }
       if (booking.status === 'active' || booking.status === 'completed') {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cannot cancel an active booking' })
+        throw new TRPCError({ code: 'BAD_REQUEST', message: "Impossible d'annuler une réservation active ou terminée" })
       }
 
       const [updated] = await ctx.db
         .update(bookings)
-        .set({ status: 'cancelled', cancelledAt: new Date(), cancelledBy: ctx.userId })
+        .set({ status: 'cancelled', cancelledAt: new Date(), cancelledBy: ctx.userId, updatedAt: new Date() })
         .where(eq(bookings.id, input.id))
         .returning()
 
@@ -101,16 +107,16 @@ export const bookingsRouter = createTRPCRouter({
       const booking = await ctx.db.query.bookings.findFirst({
         where: eq(bookings.id, input.id),
       })
-      if (!booking) throw new TRPCError({ code: 'NOT_FOUND' })
+      if (!booking) throw new TRPCError({ code: 'NOT_FOUND', message: 'Réservation introuvable' })
 
       // Verify the host owns the spot
       const spot = await ctx.db.query.spots.findFirst({
         where: and(eq(spots.id, booking.spotId), eq(spots.hostId, ctx.userId)),
       })
-      if (!spot) throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your spot' })
+      if (!spot) throw new TRPCError({ code: 'FORBIDDEN', message: "Vous n'êtes pas le propriétaire de cette place" })
 
       if (booking.status !== 'pending') {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Booking is not pending' })
+        throw new TRPCError({ code: 'BAD_REQUEST', message: "Cette réservation n'est pas en attente" })
       }
 
       const [updated] = await ctx.db
@@ -129,16 +135,16 @@ export const bookingsRouter = createTRPCRouter({
       const booking = await ctx.db.query.bookings.findFirst({
         where: eq(bookings.id, input.id),
       })
-      if (!booking) throw new TRPCError({ code: 'NOT_FOUND' })
+      if (!booking) throw new TRPCError({ code: 'NOT_FOUND', message: 'Réservation introuvable' })
 
       // Verify the host owns the spot
       const spot = await ctx.db.query.spots.findFirst({
         where: and(eq(spots.id, booking.spotId), eq(spots.hostId, ctx.userId)),
       })
-      if (!spot) throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your spot' })
+      if (!spot) throw new TRPCError({ code: 'FORBIDDEN', message: "Vous n'êtes pas le propriétaire de cette place" })
 
       if (booking.status !== 'pending') {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Booking is not pending' })
+        throw new TRPCError({ code: 'BAD_REQUEST', message: "Cette réservation n'est pas en attente" })
       }
 
       const [updated] = await ctx.db

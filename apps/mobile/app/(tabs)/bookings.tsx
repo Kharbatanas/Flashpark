@@ -5,21 +5,21 @@ import {
   FlatList,
   TouchableOpacity,
   StyleSheet,
-  ActivityIndicator,
   Image,
+  Platform,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import { Calendar, MapPin, CarFront } from 'lucide-react-native'
 import { supabase } from '../../lib/supabase'
-import { COLORS, STATUS_CONFIG } from '../../lib/constants'
+import { COLORS, STATUS_CONFIG, PLACEHOLDER_PHOTOS } from '../../lib/constants'
 
 type TabKey = 'current' | 'upcoming' | 'past'
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'current', label: 'En cours' },
-  { key: 'upcoming', label: 'À venir' },
-  { key: 'past', label: 'Passées' },
+  { key: 'upcoming', label: 'A venir' },
+  { key: 'past', label: 'Passees' },
 ]
 
 interface Booking {
@@ -47,6 +47,10 @@ function formatDateFR(d: string): string {
   }).format(new Date(d))
 }
 
+function formatPrice(price: string | number): string {
+  return Number(price).toFixed(2).replace('.', ',')
+}
+
 function filterBookings(bookings: Booking[], tab: TabKey): Booking[] {
   switch (tab) {
     case 'current':
@@ -60,6 +64,58 @@ function filterBookings(bookings: Booking[], tab: TabKey): Booking[] {
     default:
       return bookings
   }
+}
+
+/* ---- Skeleton ---- */
+function SkeletonBox({ width, height, borderRadius = 8, style }: {
+  width: number | string; height: number; borderRadius?: number; style?: any
+}) {
+  return (
+    <View style={[{ width: width as any, height, borderRadius, backgroundColor: COLORS.gray200 }, style]} />
+  )
+}
+
+function BookingsSkeleton() {
+  return (
+    <View style={{ padding: 16, gap: 12 }}>
+      {[0, 1, 2, 3].map((i) => (
+        <View key={i} style={{ flexDirection: 'row', borderRadius: 16, overflow: 'hidden', backgroundColor: COLORS.white }}>
+          <SkeletonBox width={100} height={120} borderRadius={0} />
+          <View style={{ flex: 1, padding: 12, gap: 8 }}>
+            <SkeletonBox width="70%" height={15} borderRadius={4} />
+            <SkeletonBox width="50%" height={12} borderRadius={4} />
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+              <SkeletonBox width="40%" height={12} borderRadius={4} />
+              <SkeletonBox width="40%" height={12} borderRadius={4} />
+            </View>
+            <SkeletonBox width="30%" height={16} borderRadius={4} />
+          </View>
+        </View>
+      ))}
+    </View>
+  )
+}
+
+/* ---- Spot image with fallback ---- */
+function SpotPhoto({ uri, style }: { uri: string | null; style: any }) {
+  const [error, setError] = useState(false)
+
+  if (!uri || error) {
+    return (
+      <View style={[style, styles.cardImagePlaceholder]}>
+        <CarFront color={COLORS.gray300} size={24} />
+      </View>
+    )
+  }
+
+  return (
+    <Image
+      source={{ uri }}
+      style={style}
+      resizeMode="cover"
+      onError={() => setError(true)}
+    />
+  )
 }
 
 export default function BookingsScreen() {
@@ -124,6 +180,8 @@ export default function BookingsScreen() {
           setSpotMap(map)
         }
       }
+    } catch {
+      // Silently ignore
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -141,9 +199,16 @@ export default function BookingsScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
-          <Text style={styles.title}>Réservations</Text>
+          <Text style={styles.title}>Reservations</Text>
         </View>
-        <ActivityIndicator color={COLORS.primary} style={{ marginTop: 40 }} />
+        <View style={styles.tabBar}>
+          {TABS.map((tab) => (
+            <View key={tab.key} style={[styles.tab, tab.key === 'current' && styles.tabActive]}>
+              <SkeletonBox width={60} height={13} borderRadius={4} />
+            </View>
+          ))}
+        </View>
+        <BookingsSkeleton />
       </SafeAreaView>
     )
   }
@@ -153,17 +218,20 @@ export default function BookingsScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
-          <Text style={styles.title}>Réservations</Text>
+          <Text style={styles.title}>Reservations</Text>
         </View>
         <View style={styles.empty}>
-          <Calendar color={COLORS.gray300} size={48} />
+          <View style={styles.emptyIconCircle}>
+            <Calendar color={COLORS.gray300} size={36} />
+          </View>
           <Text style={styles.emptyTitle}>Connectez-vous</Text>
           <Text style={styles.emptySubtitle}>
-            Connectez-vous pour voir vos réservations
+            Connectez-vous pour voir vos reservations
           </Text>
           <TouchableOpacity
             style={styles.ctaBtn}
             onPress={() => router.push('/(auth)/login')}
+            activeOpacity={0.7}
           >
             <Text style={styles.ctaBtnText}>Se connecter</Text>
           </TouchableOpacity>
@@ -177,9 +245,9 @@ export default function BookingsScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Réservations</Text>
+        <Text style={styles.title}>Reservations</Text>
         <Text style={styles.subtitle}>
-          {bookings.length} réservation{bookings.length !== 1 ? 's' : ''}
+          {bookings.length} reservation{bookings.length !== 1 ? 's' : ''}
         </Text>
       </View>
 
@@ -213,20 +281,23 @@ export default function BookingsScreen() {
       {/* List */}
       {filtered.length === 0 ? (
         <View style={styles.empty}>
-          <CarFront color={COLORS.gray300} size={48} />
-          <Text style={styles.emptyTitle}>Aucune réservation</Text>
+          <View style={styles.emptyIconCircle}>
+            <CarFront color={COLORS.gray300} size={36} />
+          </View>
+          <Text style={styles.emptyTitle}>Aucune reservation</Text>
           <Text style={styles.emptySubtitle}>
             {activeTab === 'current'
-              ? 'Vous n\'avez pas de réservation en cours'
+              ? 'Vous n\'avez pas de reservation en cours'
               : activeTab === 'upcoming'
-                ? 'Aucune réservation à venir'
-                : 'Aucune réservation passée'}
+                ? 'Aucune reservation a venir'
+                : 'Aucune reservation passee'}
           </Text>
           <TouchableOpacity
             style={styles.ctaBtn}
             onPress={() => router.push('/(tabs)/')}
+            activeOpacity={0.7}
           >
-            <Text style={styles.ctaBtnText}>Explorer la carte</Text>
+            <Text style={styles.ctaBtnText}>Explorer les places</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -236,6 +307,7 @@ export default function BookingsScreen() {
           contentContainerStyle={styles.list}
           onRefresh={() => loadBookings(true)}
           refreshing={refreshing}
+          showsVerticalScrollIndicator={false}
           renderItem={({ item }) => {
             const spot = spotMap[item.spot_id]
             const status = STATUS_CONFIG[item.status] ?? {
@@ -251,13 +323,7 @@ export default function BookingsScreen() {
                 activeOpacity={0.7}
               >
                 {/* Photo */}
-                {spot?.photo ? (
-                  <Image source={{ uri: spot.photo }} style={styles.cardImage} />
-                ) : (
-                  <View style={[styles.cardImage, styles.cardImagePlaceholder]}>
-                    <CarFront color={COLORS.gray300} size={24} />
-                  </View>
-                )}
+                <SpotPhoto uri={spot?.photo ?? null} style={styles.cardImage} />
 
                 {/* Content */}
                 <View style={styles.cardContent}>
@@ -283,14 +349,14 @@ export default function BookingsScreen() {
 
                   <View style={styles.cardDates}>
                     <View style={styles.dateCol}>
-                      <Text style={styles.dateLabel}>Arrivée</Text>
+                      <Text style={styles.dateLabel}>Arrivee</Text>
                       <Text style={styles.dateValue}>
                         {formatDateFR(item.start_time)}
                       </Text>
                     </View>
                     <View style={styles.dateSep} />
                     <View style={styles.dateCol}>
-                      <Text style={styles.dateLabel}>Départ</Text>
+                      <Text style={styles.dateLabel}>Depart</Text>
                       <Text style={styles.dateValue}>
                         {formatDateFR(item.end_time)}
                       </Text>
@@ -298,7 +364,7 @@ export default function BookingsScreen() {
                   </View>
 
                   <Text style={styles.price}>
-                    {Number(item.total_price).toFixed(2).replace('.', ',')} €
+                    {formatPrice(item.total_price)} €
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -316,7 +382,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   header: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 12,
     backgroundColor: COLORS.white,
@@ -337,7 +403,7 @@ const styles = StyleSheet.create({
   // Tab bar
   tabBar: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingVertical: 12,
     gap: 8,
     backgroundColor: COLORS.white,
@@ -400,11 +466,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.gray100,
     overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+      },
+      android: { elevation: 3 },
+    }),
   },
   cardImage: {
     width: 100,
     height: '100%' as any,
     minHeight: 120,
+    backgroundColor: COLORS.gray200,
   },
   cardImagePlaceholder: {
     backgroundColor: COLORS.primaryLight,
@@ -488,11 +564,19 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 32,
   },
+  emptyIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: COLORS.gray100,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
   emptyTitle: {
     fontSize: 18,
     fontWeight: '700',
     color: COLORS.dark,
-    marginTop: 12,
   },
   emptySubtitle: {
     fontSize: 14,

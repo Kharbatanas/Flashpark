@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { SpotMap } from '../../../components/map/spot-map'
 import { serverApi } from '../../../lib/trpc/server'
 
@@ -28,5 +29,13 @@ export default async function MapPage() {
     console.error('Failed to fetch initial spots:', err)
   }
 
-  return <SpotMap initialSpots={initialSpots} />
+  return (
+    <Suspense fallback={
+      <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#0540FF] border-t-transparent" />
+      </div>
+    }>
+      <SpotMap initialSpots={initialSpots} />
+    </Suspense>
+  )
 }

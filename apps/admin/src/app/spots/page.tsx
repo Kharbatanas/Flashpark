@@ -41,7 +41,7 @@ export default async function SpotsAdminPage({ searchParams }: { searchParams: S
 
   let query = supabase
     .from('spots')
-    .select('id, title, address, city, price_per_hour, type, status, rating, review_count, has_smart_gate, created_at', { count: 'exact' })
+    .select('id, title, address, city, price_per_hour, type, status, rating, review_count, has_smart_gate, photos, created_at', { count: 'exact' })
     .order('created_at', { ascending: false })
     .range(from, to)
 
@@ -97,13 +97,28 @@ export default async function SpotsAdminPage({ searchParams }: { searchParams: S
                 {spots?.map((spot) => (
                   <tr key={spot.id} className="hover:bg-gray-50/50 transition-colors">
                     <td className="px-5 py-3.5">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-gray-900 line-clamp-1">{spot.title}</span>
-                        {spot.has_smart_gate && (
-                          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-600">⚡</span>
+                      <div className="flex items-center gap-3">
+                        {Array.isArray(spot.photos) && spot.photos.length > 0 ? (
+                          <img
+                            src={spot.photos[0]}
+                            alt={spot.title}
+                            className="h-10 w-14 rounded-lg object-cover shrink-0 border border-gray-100"
+                          />
+                        ) : (
+                          <div className="flex h-10 w-14 items-center justify-center rounded-lg bg-gray-100 shrink-0 border border-gray-100">
+                            <span className="text-gray-300 text-xs">No img</span>
+                          </div>
                         )}
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-gray-900 line-clamp-1">{spot.title}</span>
+                            {spot.has_smart_gate && (
+                              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-600">⚡</span>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-400 truncate max-w-xs">{spot.address}</p>
+                        </div>
                       </div>
-                      <p className="text-xs text-gray-400 truncate max-w-xs">{spot.address}</p>
                     </td>
                     <td className="px-5 py-3.5 text-gray-600">{spot.city}</td>
                     <td className="px-5 py-3.5 text-gray-600">{TYPE_LABELS[spot.type] ?? spot.type}</td>

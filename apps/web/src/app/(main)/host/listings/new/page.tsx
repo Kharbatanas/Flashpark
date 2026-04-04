@@ -4,6 +4,7 @@ import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { api } from '../../../../../lib/trpc/client'
 import { createSupabaseBrowserClient } from '../../../../../lib/supabase/client'
+import { AddressAutocomplete, type AddressResult } from '../../../../../components/address-autocomplete'
 
 // ───────────────── Types ─────────────────
 type SpotType = 'outdoor' | 'indoor' | 'garage' | 'covered' | 'underground'
@@ -72,17 +73,13 @@ function Step2({
   data: FormData
   onChange: (fields: Partial<FormData>) => void
 }) {
-  const [locating, setLocating] = useState(false)
-
-  function handleGeolocate() {
-    setLocating(true)
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        onChange({ latitude: pos.coords.latitude, longitude: pos.coords.longitude })
-        setLocating(false)
-      },
-      () => setLocating(false)
-    )
+  function handleAddressSelect(result: AddressResult) {
+    onChange({
+      address: result.address,
+      city: result.city,
+      latitude: result.latitude,
+      longitude: result.longitude,
+    })
   }
 
   return (
@@ -92,69 +89,28 @@ function Step2({
       <div className="space-y-4">
         <div>
           <label className="mb-1.5 block text-sm font-medium text-gray-700">Adresse complète *</label>
-          <input
-            type="text"
-            value={data.address}
-            onChange={(e) => onChange({ address: e.target.value })}
-            placeholder="12 rue de la République, Nice"
-            className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-[#0540FF] focus:outline-none focus:ring-1 focus:ring-[#0540FF]"
+          <AddressAutocomplete
+            onSelect={handleAddressSelect}
+            defaultValue={data.address}
           />
         </div>
+
+        {/* City — auto-filled, editable */}
         <div>
           <label className="mb-1.5 block text-sm font-medium text-gray-700">Ville *</label>
           <input
             type="text"
             value={data.city}
             onChange={(e) => onChange({ city: e.target.value })}
-            placeholder="Nice"
-            className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-[#0540FF] focus:outline-none focus:ring-1 focus:ring-[#0540FF]"
+            placeholder="Remplie automatiquement"
+            className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm focus:border-[#0540FF] focus:outline-none focus:ring-1 focus:ring-[#0540FF]"
           />
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-gray-700">Latitude *</label>
-            <input
-              type="number"
-              step="0.000001"
-              value={data.latitude ?? ''}
-              onChange={(e) => onChange({ latitude: parseFloat(e.target.value) || null })}
-              placeholder="43.7102"
-              className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-[#0540FF] focus:outline-none focus:ring-1 focus:ring-[#0540FF]"
-            />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-gray-700">Longitude *</label>
-            <input
-              type="number"
-              step="0.000001"
-              value={data.longitude ?? ''}
-              onChange={(e) => onChange({ longitude: parseFloat(e.target.value) || null })}
-              placeholder="7.262"
-              className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-[#0540FF] focus:outline-none focus:ring-1 focus:ring-[#0540FF]"
-            />
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={handleGeolocate}
-          disabled={locating}
-          className="flex items-center gap-2 text-sm font-medium text-[#0540FF] hover:underline disabled:opacity-60"
-        >
-          {locating ? (
-            <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-          ) : (
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-            </svg>
-          )}
-          Utiliser ma position actuelle
-        </button>
+
+        {/* Lat/Lng — read-only, auto-filled */}
         {data.latitude && data.longitude && (
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-700">
-            ✓ Position enregistrée : {data.latitude.toFixed(5)}, {data.longitude.toFixed(5)}
+            Position enregistree : {data.latitude.toFixed(5)}, {data.longitude.toFixed(5)}
           </div>
         )}
       </div>
@@ -487,7 +443,7 @@ function Step6({ data }: { data: FormData }) {
 const INITIAL_DATA: FormData = {
   type: null,
   address: '',
-  city: 'Nice',
+  city: '',
   latitude: null,
   longitude: null,
   title: '',

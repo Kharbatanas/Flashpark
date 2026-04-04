@@ -61,6 +61,15 @@ export const NICE_REGION = {
   longitudeDelta: 0.04,
 }
 
+export const DEFAULT_REGION = {
+  latitude: 46.603354,
+  longitude: 1.888334,
+  latitudeDelta: 6.0,
+  longitudeDelta: 6.0,
+}
+
+export const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? ''
+
 // Placeholder photos from picsum.photos (free, no API key needed)
 export const PLACEHOLDER_PHOTOS = [
   'https://picsum.photos/seed/park1/400/300',

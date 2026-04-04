@@ -1,60 +1,58 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { View, Text, StyleSheet } from 'react-native'
+import MapView, { Marker, type MapViewProps } from 'react-native-maps'
 import { COLORS } from '../lib/constants'
 
-// Wrap MapView in a try-catch component since it can crash in Expo Go
-// if Google Maps isn't configured on Android
-let MapViewComponent: any = null
-let MarkerComponent: any = null
-
-try {
-  const maps = require('react-native-maps')
-  MapViewComponent = maps.default
-  MarkerComponent = maps.Marker
-} catch {
-  // Maps not available
-}
-
-interface SafeMapProps {
+interface SafeMapProps extends MapViewProps {
   children?: React.ReactNode
-  style?: any
-  initialRegion?: any
-  showsUserLocation?: boolean
-  onPress?: () => void
-  mapRef?: any
+  mapRef?: React.Ref<MapView>
+  fallback?: React.ReactNode
 }
 
-export function SafeMapView({ children, style, ...props }: SafeMapProps) {
+/**
+ * SafeMapView wraps react-native-maps MapView with an error boundary.
+ * In Expo Go SDK 52, react-native-maps works natively — we import it
+ * directly instead of using a try/catch that can't catch build-time errors.
+ *
+ * If the map component throws at runtime, the error boundary catches it
+ * and renders a fallback.
+ */
+export function SafeMapView({ children, mapRef, fallback, style, ...props }: SafeMapProps) {
   const [error, setError] = useState(false)
 
-  if (!MapViewComponent || error) {
+  if (error) {
     return (
-      <View style={[style, styles.fallback]}>
-        <Text style={styles.fallbackIcon}>🗺️</Text>
-        <Text style={styles.fallbackText}>Carte non disponible</Text>
-        <Text style={styles.fallbackSub}>Utilisez la vue liste</Text>
-      </View>
+      fallback ?? (
+        <View style={[style, styles.fallback]}>
+          <Text style={styles.fallbackIcon}>🗺️</Text>
+          <Text style={styles.fallbackText}>Carte non disponible</Text>
+          <Text style={styles.fallbackSub}>Utilisez la vue liste</Text>
+        </View>
+      )
     )
   }
 
   return (
-    <MapViewComponent
+    <MapView
+      ref={mapRef as React.Ref<MapView>}
       style={style}
-      onError={() => setError(true)}
+      onMapReady={() => {}}
       {...props}
     >
       {children}
-    </MapViewComponent>
+    </MapView>
   )
 }
 
-export { MarkerComponent as SafeMarker }
+export { Marker as SafeMarker }
+export { MapView }
 
 const styles = StyleSheet.create({
   fallback: {
     backgroundColor: COLORS.gray100,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 16,
   },
   fallbackIcon: { fontSize: 48, marginBottom: 8 },
   fallbackText: { fontSize: 16, fontWeight: '700', color: COLORS.dark },

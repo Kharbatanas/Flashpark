@@ -5,10 +5,11 @@ import {
   FlatList,
   TouchableOpacity,
   StyleSheet,
-  ActivityIndicator,
   Switch,
   Alert,
   Image,
+  ActivityIndicator,
+  Platform,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
@@ -64,6 +65,51 @@ function formatDateFR(d: string): string {
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(d))
+}
+
+function formatPrice(price: string | number): string {
+  return Number(price).toFixed(2).replace('.', ',')
+}
+
+/* ---- Skeleton ---- */
+function SkeletonBox({ width, height, borderRadius = 8, style }: {
+  width: number | string; height: number; borderRadius?: number; style?: any
+}) {
+  return (
+    <View style={[{ width: width as any, height, borderRadius, backgroundColor: COLORS.gray200 }, style]} />
+  )
+}
+
+function HostSkeleton() {
+  return (
+    <View style={{ paddingBottom: 32 }}>
+      <View style={styles.header}>
+        <SkeletonBox width={200} height={24} borderRadius={6} />
+        <SkeletonBox width={80} height={13} borderRadius={4} style={{ marginTop: 6 }} />
+      </View>
+      <View style={styles.statsGrid}>
+        {[0, 1, 2, 3].map((i) => (
+          <View key={i} style={[styles.statCard, { gap: 8 }]}>
+            <SkeletonBox width={36} height={36} borderRadius={10} />
+            <SkeletonBox width="50%" height={22} borderRadius={4} />
+            <SkeletonBox width="70%" height={12} borderRadius={4} />
+          </View>
+        ))}
+      </View>
+      <View style={{ paddingHorizontal: 16, gap: 10, marginTop: 8 }}>
+        {[0, 1].map((i) => (
+          <View key={i} style={{ flexDirection: 'row', borderRadius: 16, overflow: 'hidden', backgroundColor: COLORS.white }}>
+            <SkeletonBox width={76} height={76} borderRadius={0} />
+            <View style={{ flex: 1, padding: 10, gap: 6 }}>
+              <SkeletonBox width="60%" height={14} borderRadius={4} />
+              <SkeletonBox width="40%" height={11} borderRadius={4} />
+              <SkeletonBox width="30%" height={13} borderRadius={4} />
+            </View>
+          </View>
+        ))}
+      </View>
+    </View>
+  )
 }
 
 export default function HostScreen() {
@@ -156,6 +202,8 @@ export default function HostScreen() {
 
       setHostBookings(bookingsData)
       setStats({ totalEarnings, activeListings, totalBookings, pendingCount })
+    } catch {
+      // Silently ignore
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -195,7 +243,7 @@ export default function HostScreen() {
       .eq('id', bookingId)
 
     if (error) {
-      Alert.alert('Erreur', 'Impossible de confirmer la réservation')
+      Alert.alert('Erreur', 'Impossible de confirmer la reservation')
     } else {
       setHostBookings((prev) =>
         prev.map((b) =>
@@ -212,8 +260,8 @@ export default function HostScreen() {
 
   async function handleReject(bookingId: string) {
     Alert.alert(
-      'Refuser la réservation',
-      'Voulez-vous vraiment refuser cette réservation ?',
+      'Refuser la reservation',
+      'Voulez-vous vraiment refuser cette reservation ?',
       [
         { text: 'Annuler', style: 'cancel' },
         {
@@ -227,7 +275,7 @@ export default function HostScreen() {
               .eq('id', bookingId)
 
             if (error) {
-              Alert.alert('Erreur', 'Impossible de refuser la réservation')
+              Alert.alert('Erreur', 'Impossible de refuser la reservation')
             } else {
               setHostBookings((prev) => prev.filter((b) => b.id !== bookingId))
               setStats((prev) => ({
@@ -246,10 +294,7 @@ export default function HostScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Tableau de bord hote</Text>
-        </View>
-        <ActivityIndicator color={COLORS.primary} style={{ marginTop: 40 }} />
+        <HostSkeleton />
       </SafeAreaView>
     )
   }
@@ -262,7 +307,9 @@ export default function HostScreen() {
           <Text style={styles.title}>Tableau de bord hote</Text>
         </View>
         <View style={styles.empty}>
-          <LayoutDashboard color={COLORS.gray300} size={48} />
+          <View style={styles.emptyIconCircle}>
+            <LayoutDashboard color={COLORS.gray300} size={36} />
+          </View>
           <Text style={styles.emptyTitle}>Devenir hote</Text>
           <Text style={styles.emptySubtitle}>
             Connectez-vous pour proposer votre place de parking et commencer a gagner de l'argent
@@ -270,6 +317,7 @@ export default function HostScreen() {
           <TouchableOpacity
             style={styles.ctaBtn}
             onPress={() => router.push('/(auth)/login')}
+            activeOpacity={0.7}
           >
             <Text style={styles.ctaBtnText}>Se connecter</Text>
           </TouchableOpacity>
@@ -287,7 +335,7 @@ export default function HostScreen() {
   const STAT_CARDS = [
     {
       label: 'Revenus',
-      value: `${stats.totalEarnings.toFixed(0)} \u20AC`,
+      value: `${formatPrice(stats.totalEarnings)} €`,
       color: COLORS.success,
       bg: COLORS.successLight,
       icon: TrendingUp,
@@ -323,6 +371,7 @@ export default function HostScreen() {
         onRefresh={() => loadData(true)}
         refreshing={refreshing}
         contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
         ListHeaderComponent={
           <>
             {/* Header */}
@@ -395,7 +444,7 @@ export default function HostScreen() {
                           {formatDateFR(booking.start_time)} - {formatDateFR(booking.end_time)}
                         </Text>
                         <Text style={styles.bookingCardPrice}>
-                          {Number(booking.total_price).toFixed(2).replace('.', ',')} \u20AC
+                          {formatPrice(booking.total_price)} €
                         </Text>
                       </View>
 
@@ -456,7 +505,7 @@ export default function HostScreen() {
           return (
             <View style={styles.spotCard}>
               {photo ? (
-                <Image source={{ uri: photo }} style={styles.spotPhoto} />
+                <Image source={{ uri: photo }} style={styles.spotPhoto} resizeMode="cover" />
               ) : (
                 <View style={[styles.spotPhoto, styles.spotPhotoPlaceholder]}>
                   <CarFront color={COLORS.gray300} size={20} />
@@ -474,7 +523,7 @@ export default function HostScreen() {
                 </View>
                 <View style={styles.spotFooter}>
                   <Text style={styles.spotPrice}>
-                    {Number(item.price_per_hour).toFixed(2).replace('.', ',')} \u20AC/h
+                    {formatPrice(item.price_per_hour)} €/h
                   </Text>
                   <View style={styles.spotTypeBadge}>
                     <Text style={styles.spotTypeText}>
@@ -499,7 +548,9 @@ export default function HostScreen() {
         }}
         ListEmptyComponent={
           <View style={styles.emptyInline}>
-            <CarFront color={COLORS.gray300} size={36} />
+            <View style={styles.emptyIconCircle}>
+              <CarFront color={COLORS.gray300} size={28} />
+            </View>
             <Text style={styles.emptyInlineTitle}>Aucune annonce</Text>
             <Text style={styles.emptyInlineSubtitle}>
               Ajoutez votre premiere place de parking
@@ -517,7 +568,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   header: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 12,
     backgroundColor: COLORS.white,
@@ -552,6 +603,15 @@ const styles = StyleSheet.create({
     padding: 14,
     borderWidth: 1,
     borderColor: COLORS.gray100,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.04,
+        shadowRadius: 4,
+      },
+      android: { elevation: 1 },
+    }),
   },
   statIconWrap: {
     width: 36,
@@ -576,7 +636,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 10,
   },
@@ -611,6 +671,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.gray100,
     padding: 14,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.04,
+        shadowRadius: 4,
+      },
+      android: { elevation: 1 },
+    }),
   },
   bookingCardTop: {
     flexDirection: 'row',
@@ -715,10 +784,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.gray100,
     overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.04,
+        shadowRadius: 4,
+      },
+      android: { elevation: 1 },
+    }),
   },
   spotPhoto: {
     width: 76,
     height: 76,
+    backgroundColor: COLORS.gray200,
   },
   spotPhotoPlaceholder: {
     backgroundColor: COLORS.primaryLight,
@@ -779,11 +858,19 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 32,
   },
+  emptyIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: COLORS.gray100,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
   emptyTitle: {
     fontSize: 18,
     fontWeight: '700',
     color: COLORS.dark,
-    marginTop: 12,
   },
   emptySubtitle: {
     fontSize: 14,
@@ -802,7 +889,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: COLORS.dark,
-    marginTop: 8,
   },
   emptyInlineSubtitle: {
     fontSize: 13,
