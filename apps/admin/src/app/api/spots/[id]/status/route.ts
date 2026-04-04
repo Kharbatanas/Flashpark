@@ -17,24 +17,46 @@ export async function PATCH(
   const { status } = body as { status?: string }
 
   if (!status || !VALID_STATUSES.includes(status)) {
-    return NextResponse.json({ error: 'Statut invalide' }, { status: 400 })
+    return NextResponse.json({ error: `Statut invalide: ${status}` }, { status: 400 })
   }
 
-  const supabase = createSupabaseServerClient()
+  try {
+    const supabase = createSupabaseServerClient()
 
-  const { data, error } = await supabase
-    .from('spots')
-    .update({ status, updated_at: new Date().toISOString() })
-    .eq('id', params.id)
-    .select('id')
+    // First check the spot exists
+    const { data: spot, error: fetchError } = await supabase
+      .from('spots')
+      .select('id, status')
+      .eq('id', params.id)
+      .single()
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    if (fetchError || !spot) {
+      return NextResponse.json(
+        { error: `Place introuvable: ${fetchError?.message ?? 'ID invalide'}` },
+        { status: 404 }
+      )
+    }
+
+    // Update the status
+    const { error: updateError } = await supabase
+      .from('spots')
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq('id', params.id)
+
+    if (updateError) {
+      console.error('Supabase update error:', updateError)
+      return NextResponse.json(
+        { error: `Erreur de mise à jour: ${updateError.message}` },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({ ok: true, previousStatus: spot.status, newStatus: status })
+  } catch (err) {
+    console.error('API error:', err)
+    return NextResponse.json(
+      { error: `Erreur serveur: ${err instanceof Error ? err.message : 'inconnue'}` },
+      { status: 500 }
+    )
   }
-
-  if (!data || data.length === 0) {
-    return NextResponse.json({ error: 'Place introuvable' }, { status: 404 })
-  }
-
-  return NextResponse.json({ ok: true })
 }

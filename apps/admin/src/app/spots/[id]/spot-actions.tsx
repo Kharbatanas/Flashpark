@@ -57,7 +57,11 @@ export function SpotActions({ spotId, currentStatus }: { spotId: string; current
           {loading ? '...' : opt.label}
         </button>
       ))}
-      {error && <span className="text-xs text-red-500">{error}</span>}
+      {error && (
+        <div className="mt-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-600">
+          {error}
+        </div>
+      )}
     </div>
   )
 }
