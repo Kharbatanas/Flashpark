@@ -26,14 +26,15 @@ export function SpotActions({ spotId, currentStatus }: { spotId: string; current
         body: JSON.stringify({ status: newStatus }),
       })
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        setError(data.error ?? 'Erreur inconnue')
+      const data = await res.json().catch(() => null)
+
+      if (!res.ok || !data?.ok) {
+        setError(data?.error ?? `Erreur ${res.status}: ${res.statusText}`)
       } else {
         router.refresh()
       }
-    } catch {
-      setError('Erreur réseau')
+    } catch (err) {
+      setError(`Erreur réseau: ${err instanceof Error ? err.message : 'inconnue'}`)
     } finally {
       setLoading(false)
     }

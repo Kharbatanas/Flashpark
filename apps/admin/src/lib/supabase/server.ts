@@ -12,6 +12,10 @@ export function createSupabaseServerClient() {
     {
       auth: { persistSession: false, autoRefreshToken: false },
       db: { schema: 'public' },
+      global: {
+        fetch: (url, options = {}) =>
+          fetch(url, { ...options, cache: 'no-store' }),
+      },
     }
   )
 }

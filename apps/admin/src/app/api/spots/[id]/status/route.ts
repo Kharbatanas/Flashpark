@@ -5,8 +5,10 @@ const VALID_STATUSES = ['active', 'inactive', 'pending_review']
 
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  context: { params: { id: string } }
 ) {
+  const { id } = context.params
+
   let body: unknown
   try {
     body = await request.json()
@@ -23,25 +25,13 @@ export async function PATCH(
   try {
     const supabase = createSupabaseServerClient()
 
-    // First check the spot exists
-    const { data: spot, error: fetchError } = await supabase
-      .from('spots')
-      .select('id, status')
-      .eq('id', params.id)
-      .single()
-
-    if (fetchError || !spot) {
-      return NextResponse.json(
-        { error: `Place introuvable: ${fetchError?.message ?? 'ID invalide'}` },
-        { status: 404 }
-      )
-    }
-
-    // Update the status
-    const { error: updateError } = await supabase
+    // Update the status and return the updated row to verify it worked
+    const { data: updated, error: updateError } = await supabase
       .from('spots')
       .update({ status, updated_at: new Date().toISOString() })
-      .eq('id', params.id)
+      .eq('id', id)
+      .select('id, status')
+      .single()
 
     if (updateError) {
       console.error('Supabase update error:', updateError)
@@ -51,7 +41,14 @@ export async function PATCH(
       )
     }
 
-    return NextResponse.json({ ok: true, previousStatus: spot.status, newStatus: status })
+    if (!updated) {
+      return NextResponse.json(
+        { error: 'Place introuvable ou mise à jour impossible' },
+        { status: 404 }
+      )
+    }
+
+    return NextResponse.json({ ok: true, previousStatus: updated.status, newStatus: status })
   } catch (err) {
     console.error('API error:', err)
     return NextResponse.json(
