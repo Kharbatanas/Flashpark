@@ -1,6 +1,7 @@
-import { notFound } from 'next/navigation'
-import { db, bookings, spots } from '@flashpark/db'
+import { notFound, redirect } from 'next/navigation'
+import { db, bookings, spots, users } from '@flashpark/db'
 import { eq } from 'drizzle-orm'
+import { createSupabaseServerClient } from '../../../../lib/supabase/server'
 import { BookingContent } from './booking-content'
 
 export const dynamic = 'force-dynamic'
@@ -26,6 +27,14 @@ function formatTime(d: Date) {
 }
 
 export default async function BookingConfirmationPage({ params }: Props) {
+  const supabase = createSupabaseServerClient()
+  const { data: { user: authUser } } = await supabase.auth.getUser()
+  if (!authUser) redirect('/login')
+
+  const dbUser = await db.query.users.findFirst({
+    where: eq(users.supabaseId, authUser.id),
+  })
+
   const booking = await db.query.bookings.findFirst({
     where: eq(bookings.id, params.id),
   })
@@ -77,6 +86,8 @@ export default async function BookingConfirmationPage({ params }: Props) {
       formattedEndDate={formatDate(endDate)}
       formattedStartTime={formatTime(startDate)}
       formattedEndTime={formatTime(endDate)}
+      qrCode={booking.qrCode}
+      currentUserId={dbUser?.id ?? ''}
     />
   )
 }

@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { ReviewsSection } from '../../../../components/reviews-section'
+import { BookingMessages } from '../../../../components/booking-messages'
 import { PageTransition, FadeIn, StaggerContainer, StaggerItem, motion } from '../../../../components/motion'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -40,6 +41,8 @@ interface BookingContentProps {
   formattedEndDate: string
   formattedStartTime: string
   formattedEndTime: string
+  qrCode?: string | null
+  currentUserId: string
 }
 
 export function BookingContent({
@@ -51,6 +54,8 @@ export function BookingContent({
   formattedEndDate,
   formattedStartTime,
   formattedEndTime,
+  qrCode,
+  currentUserId,
 }: BookingContentProps) {
   const badgeVariant = STATUS_VARIANT[booking.status] ?? 'outline'
 
@@ -164,9 +169,12 @@ export function BookingContent({
                       </svg>
                     </div>
                     <div>
-                      <p className="font-mono text-xs text-gray-500 break-all">{booking.id}</p>
+                      <p className="font-mono text-sm font-semibold text-[#1A1A2E]">
+                        {qrCode ?? booking.id.slice(0, 8).toUpperCase()}
+                      </p>
+                      <p className="font-mono text-[10px] text-gray-400 break-all">{booking.id}</p>
                       {spot.hasSmartGate && (
-                        <p className="mt-1 text-xs text-[#10B981]">✓ Accès Smart Gate activé</p>
+                        <p className="mt-1 text-xs text-[#10B981]">Acces Smart Gate active</p>
                       )}
                     </div>
                   </div>
@@ -174,6 +182,15 @@ export function BookingContent({
               </FadeIn>
             </Card>
           </FadeIn>
+
+          {/* Messages — show for active bookings */}
+          {['pending', 'confirmed', 'active'].includes(booking.status) && (
+            <FadeIn delay={0.85}>
+              <div className="mt-6">
+                <BookingMessages bookingId={booking.id} currentUserId={currentUserId} />
+              </div>
+            </FadeIn>
+          )}
 
           {/* Review prompt for completed bookings */}
           {booking.status === 'completed' && (

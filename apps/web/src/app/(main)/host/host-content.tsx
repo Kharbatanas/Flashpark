@@ -216,10 +216,34 @@ export default function HostContent({ isHost, stats, recentBookings, spotMap }: 
           </StaggerContainer>
 
           {/* Links */}
-          <div className="mb-6">
+          <div className="mb-6 flex flex-wrap gap-x-6 gap-y-2">
             <Button variant="link" asChild className="px-0">
               <Link href="/host/listings">
-                Voir toutes mes annonces
+                Mes annonces
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </Link>
+            </Button>
+            <Button variant="link" asChild className="px-0">
+              <Link href="/host/availability">
+                Disponibilites
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </Link>
+            </Button>
+            <Button variant="link" asChild className="px-0">
+              <Link href="/host/earnings">
+                Revenus
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </Link>
+            </Button>
+            <Button variant="link" asChild className="px-0">
+              <Link href="/host/verification">
+                Verification
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
