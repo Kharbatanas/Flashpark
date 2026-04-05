@@ -259,4 +259,78 @@ export const bookingsRouter = createTRPCRouter({
         reason: conflict ? 'already_booked' : blocked ? 'host_blocked' : null,
       }
     }),
+
+  // Verify a booking by QR code or booking ID (for hosts)
+  verifyCode: publicProcedure
+    .input(z.object({ code: z.string().min(1) }))
+    .query(async ({ ctx, input }) => {
+      const { code } = input
+
+      // Search by qr_code or by booking ID
+      let booking = await ctx.db.query.bookings.findFirst({
+        where: eq(bookings.qrCode, code),
+      })
+
+      if (!booking) {
+        // Try by ID (full or partial)
+        booking = await ctx.db.query.bookings.findFirst({
+          where: eq(bookings.id, code),
+        })
+      }
+
+      if (!booking) {
+        // Try partial match on qr_code (user might enter without prefix)
+        const allBookings = await ctx.db.query.bookings.findMany({
+          where: not(eq(bookings.status, 'cancelled')),
+        })
+        booking = allBookings.find((b) =>
+          b.qrCode?.includes(code) || b.id.startsWith(code.toLowerCase())
+        ) ?? null
+      }
+
+      if (!booking) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Reservation introuvable' })
+      }
+
+      // Get spot title
+      const spot = await ctx.db.query.spots.findFirst({
+        where: eq(spots.id, booking.spotId),
+      })
+
+      const now = new Date()
+      const start = new Date(booking.startTime)
+      const end = new Date(booking.endTime)
+
+      let isValid = false
+      let message = ''
+
+      if (booking.status === 'cancelled' || booking.status === 'refunded') {
+        message = 'Cette reservation a ete annulee'
+      } else if (booking.status === 'completed') {
+        message = 'Cette reservation est terminee'
+      } else if (booking.status === 'pending') {
+        message = 'En attente de confirmation par l\'hote'
+      } else if (now < start) {
+        isValid = true
+        message = `Valide — debut prevu le ${start.toLocaleDateString('fr-FR')} a ${start.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`
+      } else if (now >= start && now <= end) {
+        isValid = true
+        message = 'Reservation active — le conducteur peut acceder a la place'
+      } else {
+        message = 'Le creneau est depasse'
+      }
+
+      return {
+        isValid,
+        message,
+        spotTitle: spot?.title ?? 'Place inconnue',
+        booking: {
+          id: booking.id,
+          status: booking.status,
+          startTime: booking.startTime.toISOString(),
+          endTime: booking.endTime.toISOString(),
+          qrCode: booking.qrCode,
+        },
+      }
+    }),
 })

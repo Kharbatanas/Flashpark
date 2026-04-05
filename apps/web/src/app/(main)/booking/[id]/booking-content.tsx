@@ -166,7 +166,7 @@ export function BookingContent({
                   <div className="flex items-center gap-4 rounded-xl bg-gray-50 p-4">
                     <div className="flex-shrink-0 rounded-lg bg-white p-2">
                       <QRCodeSVG
-                        value={qrCode ?? booking.id}
+                        value={`${typeof window !== 'undefined' ? window.location.origin : ''}/verify?code=${encodeURIComponent(qrCode ?? booking.id)}`}
                         size={80}
                         bgColor="#ffffff"
                         fgColor="#1A1A2E"
