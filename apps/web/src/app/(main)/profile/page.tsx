@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { createSupabaseBrowserClient } from '../../../lib/supabase/client'
 import { api } from '../../../lib/trpc/client'
 import {
@@ -10,14 +11,24 @@ import {
   motion,
   AnimatePresence,
 } from '../../../components/motion'
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
+import {
+  User,
+  Mail,
+  Phone,
+  Lock,
+  CheckCircle2,
+  ShieldCheck,
+  ParkingCircle,
+  ChevronRight,
+  Loader2,
+} from 'lucide-react'
 
+// ── Auth gate ─────────────────────────────────────────────────
 export default function ProfilePage() {
   const router = useRouter()
   const [authChecked, setAuthChecked] = useState(false)
@@ -38,32 +49,38 @@ export default function ProfilePage() {
   if (!authChecked) {
     return (
       <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center">
-        <svg className="h-8 w-8 animate-spin text-[#0540FF]" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-        </svg>
+        <Loader2 className="h-8 w-8 animate-spin text-[#0540FF]" />
       </div>
     )
   }
-
   if (!authed) return null
-
   return <ProfileContent />
 }
 
+// ── Role config ───────────────────────────────────────────────
+const ROLE_BADGE: Record<string, { label: string; className: string }> = {
+  driver: { label: 'Conducteur',        className: 'bg-blue-50 text-blue-700 border-blue-200' },
+  host:   { label: 'Hôte',             className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  both:   { label: 'Conducteur & Hôte', className: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+  admin:  { label: 'Administrateur',    className: 'bg-gray-100 text-gray-700 border-gray-300' },
+}
+
+type Tab = 'info' | 'security'
+
+// ── Profile content ───────────────────────────────────────────
 function ProfileContent() {
   const router = useRouter()
   const { data: user, isLoading, refetch } = api.users.me.useQuery()
   const updateProfile = api.users.updateProfile.useMutation({ onSuccess: () => refetch() })
-  const becomeHost = api.users.becomeHost.useMutation({ onSuccess: () => refetch() })
+  const becomeHost    = api.users.becomeHost.useMutation({ onSuccess: () => refetch() })
 
-  const [editing, setEditing] = useState(false)
-  const [fullName, setFullName] = useState('')
-  const [phone, setPhone] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
+  const [activeTab, setActiveTab] = useState<Tab>('info')
+  const [fullName, setFullName]   = useState('')
+  const [phone, setPhone]         = useState('')
+  const [saving, setSaving]       = useState(false)
   const [hostLoading, setHostLoading] = useState(false)
+  const [error, setError]         = useState<string | null>(null)
+  const [success, setSuccess]     = useState(false)
 
   useEffect(() => {
     if (user) {
@@ -80,7 +97,6 @@ function ProfileContent() {
         fullName: fullName || undefined,
         phoneNumber: phone || undefined,
       })
-      setEditing(false)
       setSuccess(true)
       setTimeout(() => setSuccess(false), 3000)
     } catch (err) {
@@ -104,271 +120,301 @@ function ProfileContent() {
     }
   }
 
-  const ROLE_BADGE_VARIANT = {
-    driver: 'blue',
-    host: 'active',
-    both: 'secondary',
-    admin: 'outline',
-  } as const
-
-  const ROLE_LABEL = {
-    driver: 'Conducteur',
-    host: 'Hôte',
-    both: 'Conducteur & Hôte',
-    admin: 'Administrateur',
-  } as const
-
-  type RoleKey = keyof typeof ROLE_LABEL
-
-  const roleKey = user?.role as RoleKey | undefined
+  const roleKey  = user?.role as keyof typeof ROLE_BADGE | undefined
+  const roleCfg  = roleKey ? ROLE_BADGE[roleKey] : undefined
+  const initials = user?.fullName?.[0]?.toUpperCase() ?? user?.email?.[0]?.toUpperCase() ?? 'U'
+  const isHost   = user?.role === 'host' || user?.role === 'both' || user?.role === 'admin'
+  const joinYear = user?.createdAt ? new Date(user.createdAt).getFullYear() : null
 
   if (isLoading) {
     return (
       <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center">
-        <svg className="h-8 w-8 animate-spin text-[#0540FF]" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-        </svg>
+        <Loader2 className="h-8 w-8 animate-spin text-[#0540FF]" />
       </div>
     )
   }
 
+  const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
+    { key: 'info',     label: 'Informations personnelles', icon: <User className="h-4 w-4" /> },
+    { key: 'security', label: 'Sécurité',                  icon: <Lock className="h-4 w-4" /> },
+  ]
+
   return (
     <PageTransition>
-      <div className="min-h-screen bg-[#F8FAFC] px-4 py-8">
-        <div className="mx-auto max-w-lg">
+      <div className="min-h-screen bg-gray-50">
+        <div className="mx-auto max-w-5xl px-4 py-10">
           <FadeIn>
-            <div className="mb-8">
-              <h1 className="text-2xl font-bold text-[#1A1A2E]">Mon profil</h1>
-              <p className="mt-1 text-sm text-gray-500">Gérez vos informations personnelles</p>
-            </div>
+            <h1 className="mb-8 text-2xl font-bold text-gray-900">Mon compte</h1>
           </FadeIn>
 
-          {/* Avatar + basic info */}
-          <motion.div
-            initial={{ opacity: 0, y: 20, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ duration: 0.5, delay: 0.1, ease: 'easeOut' }}
-            className="mb-6"
-          >
-            <Card className="border-gray-100 shadow-sm">
-              <CardContent className="flex items-center gap-4 p-6">
-                <Avatar className="h-16 w-16">
-                  {user?.avatarUrl ? (
-                    <AvatarImage src={user.avatarUrl} alt="Avatar" />
-                  ) : null}
-                  <AvatarFallback className="bg-[#0540FF]/10 text-xl font-bold text-[#0540FF]">
-                    {user?.fullName?.[0]?.toUpperCase() ?? user?.email?.[0]?.toUpperCase() ?? 'U'}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-[#1A1A2E]">{user?.fullName}</p>
-                  <p className="text-sm text-gray-500">{user?.email}</p>
-                  {roleKey && ROLE_LABEL[roleKey] && (
-                    <Badge
-                      variant={ROLE_BADGE_VARIANT[roleKey] ?? 'outline'}
-                      className="mt-1.5"
-                    >
-                      {ROLE_LABEL[roleKey]}
-                    </Badge>
+          <div className="flex flex-col gap-8 lg:flex-row lg:items-start">
+
+            {/* ── Sidebar ────────────────────────────────────── */}
+            <FadeIn delay={0.05}>
+              <div className="w-full lg:w-64 flex-shrink-0">
+                <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm text-center">
+                  <Avatar className="mx-auto mb-4 h-20 w-20">
+                    {user?.avatarUrl ? (
+                      <AvatarImage src={user.avatarUrl} alt="Avatar" />
+                    ) : null}
+                    <AvatarFallback className="bg-[#EFF6FF] text-2xl font-bold text-[#0540FF]">
+                      {initials}
+                    </AvatarFallback>
+                  </Avatar>
+
+                  <p className="font-semibold text-gray-900">{user?.fullName || '—'}</p>
+                  <p className="mt-0.5 text-xs text-gray-400">{user?.email}</p>
+
+                  {roleCfg && (
+                    <span className={`mt-2 inline-block rounded-full border px-3 py-0.5 text-xs font-semibold ${roleCfg.className}`}>
+                      {roleCfg.label}
+                    </span>
                   )}
+
+                  <Separator className="my-4" />
+
+                  <div className="space-y-2 text-left">
+                    {user?.isVerified && (
+                      <div className="flex items-center gap-2 text-xs text-emerald-700">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        Identité vérifiée
+                      </div>
+                    )}
+                    {user?.phoneNumber && (
+                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <ShieldCheck className="h-3.5 w-3.5 text-gray-400" />
+                        Téléphone renseigné
+                      </div>
+                    )}
+                    {joinYear && (
+                      <p className="text-xs text-gray-400">Membre depuis {joinYear}</p>
+                    )}
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
-          </motion.div>
 
-          {/* Edit form */}
-          <Card className="mb-6 border-gray-100 shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between p-6 pb-0">
-              <CardTitle className="text-base font-semibold text-[#1A1A2E]">
-                Informations personnelles
-              </CardTitle>
-              {!editing && (
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                >
-                  <Button
-                    variant="link"
-                    onClick={() => setEditing(true)}
-                    className="h-auto p-0 text-xs font-medium text-[#0540FF]"
+                {/* Nav links on desktop */}
+                <div className="mt-4 hidden lg:block">
+                  <div className="rounded-xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+                    {tabs.map(({ key, label, icon }) => (
+                      <button
+                        key={key}
+                        onClick={() => setActiveTab(key)}
+                        className={`flex w-full items-center justify-between px-4 py-3 text-sm transition-colors first:rounded-t-xl last:rounded-b-xl ${
+                          activeTab === key
+                            ? 'bg-[#EFF6FF] font-semibold text-[#0540FF]'
+                            : 'text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          {icon}
+                          {label}
+                        </span>
+                        <ChevronRight className="h-3.5 w-3.5 text-gray-400" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </FadeIn>
+
+            {/* ── Right content ──────────────────────────────── */}
+            <div className="flex-1 min-w-0 space-y-5">
+
+              {/* Mobile tab pills */}
+              <div className="flex gap-2 lg:hidden">
+                {tabs.map(({ key, label }) => (
+                  <button
+                    key={key}
+                    onClick={() => setActiveTab(key)}
+                    className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${
+                      activeTab === key
+                        ? 'bg-gray-900 text-white'
+                        : 'border border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                    }`}
                   >
-                    Modifier
-                  </Button>
-                </motion.div>
-              )}
-            </CardHeader>
-            <CardContent className="p-6 pt-4">
+                    {label}
+                  </button>
+                ))}
+              </div>
+
               <AnimatePresence mode="wait">
-                {editing ? (
+
+                {/* ── Tab: Informations personnelles ──────────── */}
+                {activeTab === 'info' && (
                   <motion.div
-                    key="edit"
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.3 }}
+                    key="info"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.25 }}
+                    className="space-y-5"
                   >
-                    <div className="space-y-4">
-                      <div>
-                        <Label className="mb-1.5 text-xs font-medium text-gray-500 uppercase tracking-wide">
-                          Nom complet
-                        </Label>
-                        <Input
-                          type="text"
-                          value={fullName}
-                          onChange={(e) => setFullName(e.target.value)}
-                          className="mt-1.5"
-                        />
-                      </div>
+                    <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+                      <h2 className="mb-5 text-base font-semibold text-gray-900">Informations personnelles</h2>
+                      <div className="space-y-5">
 
-                      <div>
-                        <Label className="mb-1.5 text-xs font-medium text-gray-500 uppercase tracking-wide">
-                          Téléphone
-                        </Label>
-                        <Input
-                          type="tel"
-                          value={phone}
-                          onChange={(e) => setPhone(e.target.value)}
-                          placeholder="+33 6 12 34 56 78"
-                          className="mt-1.5"
-                        />
-                      </div>
+                        <div>
+                          <Label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-gray-400">
+                            <User className="h-3 w-3" /> Nom complet
+                          </Label>
+                          <Input
+                            type="text"
+                            value={fullName}
+                            onChange={(e) => setFullName(e.target.value)}
+                            placeholder="Votre nom complet"
+                            className="rounded-xl"
+                          />
+                        </div>
 
-                      <div>
-                        <Label className="mb-1.5 text-xs font-medium text-gray-500 uppercase tracking-wide">
-                          Email
-                        </Label>
-                        <p className="text-sm text-gray-400">{user?.email}</p>
+                        <div>
+                          <Label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-gray-400">
+                            <Phone className="h-3 w-3" /> Téléphone
+                          </Label>
+                          <Input
+                            type="tel"
+                            value={phone}
+                            onChange={(e) => setPhone(e.target.value)}
+                            placeholder="+33 6 12 34 56 78"
+                            className="rounded-xl"
+                          />
+                        </div>
+
+                        <div>
+                          <Label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-gray-400">
+                            <Mail className="h-3 w-3" /> Email
+                          </Label>
+                          <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5">
+                            <span className="text-sm text-gray-400">{user?.email}</span>
+                            <span className="ml-auto rounded-full bg-gray-200 px-2 py-0.5 text-[10px] font-medium text-gray-500">
+                              Non modifiable
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="pt-1">
+                          <Button
+                            onClick={handleSave}
+                            disabled={saving}
+                            className="rounded-xl bg-[#0540FF] px-6 font-semibold hover:bg-[#0435D2]"
+                          >
+                            {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            Enregistrer les modifications
+                          </Button>
+                        </div>
                       </div>
                     </div>
 
-                    <Separator className="my-5" />
-
-                    <div className="flex gap-3">
+                    {/* Become host CTA */}
+                    {!isHost && (
                       <motion.div
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.3, delay: 0.1 }}
                       >
-                        <Button
-                          onClick={handleSave}
-                          disabled={saving}
-                          loading={saving}
-                          className="rounded-xl text-sm font-semibold"
-                        >
-                          Enregistrer
-                        </Button>
+                        <div className="rounded-2xl border border-[#0540FF]/20 bg-gradient-to-br from-[#EFF6FF] to-white p-6 shadow-sm">
+                          <div className="flex items-start gap-4">
+                            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-[#0540FF]/10">
+                              <ParkingCircle className="h-6 w-6 text-[#0540FF]" strokeWidth={1.5} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-semibold text-gray-900">Devenez hôte Flashpark</h3>
+                              <p className="mt-1 text-sm text-gray-500">
+                                Louez votre place de parking et générez jusqu&apos;à 300 € / mois. Gratuit, sans engagement.
+                              </p>
+                              <Button
+                                onClick={handleBecomeHost}
+                                disabled={hostLoading}
+                                className="mt-4 rounded-xl bg-[#0540FF] px-5 font-semibold hover:bg-[#0435D2]"
+                              >
+                                {hostLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                Devenir hôte
+                                <ChevronRight className="ml-1 h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
                       </motion.div>
-                      <motion.div
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                      >
-                        <Button
-                          variant="outline"
-                          onClick={() => { setEditing(false); setError(null) }}
-                          className="rounded-xl text-sm font-medium"
-                        >
-                          Annuler
-                        </Button>
-                      </motion.div>
-                    </div>
+                    )}
                   </motion.div>
-                ) : (
+                )}
+
+                {/* ── Tab: Sécurité ───────────────────────────── */}
+                {activeTab === 'security' && (
                   <motion.div
-                    key="view"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.3 }}
+                    key="security"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.25 }}
                   >
-                    <div className="space-y-4">
-                      <div>
-                        <Label className="mb-1.5 text-xs font-medium text-gray-500 uppercase tracking-wide">
-                          Nom complet
-                        </Label>
-                        <p className="text-sm text-[#1A1A2E]">{user?.fullName || '—'}</p>
-                      </div>
+                    <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+                      <h2 className="mb-5 text-base font-semibold text-gray-900">Sécurité</h2>
 
-                      <div>
-                        <Label className="mb-1.5 text-xs font-medium text-gray-500 uppercase tracking-wide">
-                          Téléphone
-                        </Label>
-                        <p className="text-sm text-[#1A1A2E]">{user?.phoneNumber || '—'}</p>
-                      </div>
-
-                      <div>
-                        <Label className="mb-1.5 text-xs font-medium text-gray-500 uppercase tracking-wide">
-                          Email
-                        </Label>
-                        <p className="text-sm text-gray-400">{user?.email}</p>
+                      <div className="space-y-5">
+                        <div>
+                          <Label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-gray-400">
+                            <Lock className="h-3 w-3" /> Nouveau mot de passe
+                          </Label>
+                          <Input
+                            type="password"
+                            placeholder="••••••••"
+                            disabled
+                            className="rounded-xl bg-gray-50"
+                          />
+                        </div>
+                        <div>
+                          <Label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-gray-400">
+                            <Lock className="h-3 w-3" /> Confirmer le mot de passe
+                          </Label>
+                          <Input
+                            type="password"
+                            placeholder="••••••••"
+                            disabled
+                            className="rounded-xl bg-gray-50"
+                          />
+                        </div>
+                        <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-sm text-gray-500">
+                          La modification du mot de passe sera disponible prochainement.
+                        </div>
                       </div>
                     </div>
                   </motion.div>
                 )}
+
               </AnimatePresence>
-            </CardContent>
-          </Card>
-
-          {/* Become host */}
-          {user && user.role !== 'host' && user.role !== 'both' && user.role !== 'admin' && (
-            <FadeIn delay={0.2}>
-              <Card className="border-gray-100 shadow-sm">
-                <CardHeader className="p-6 pb-2">
-                  <CardTitle className="text-base font-semibold text-[#1A1A2E]">
-                    Devenir hôte
-                  </CardTitle>
-                  <CardDescription className="text-sm text-gray-500">
-                    Louez votre place de parking et générez des revenus supplémentaires. C&apos;est gratuit, sans engagement.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="p-6 pt-2">
-                  <motion.div
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                  >
-                    <Button
-                      onClick={handleBecomeHost}
-                      disabled={hostLoading}
-                      loading={hostLoading}
-                      variant="secondary"
-                      className="rounded-xl bg-[#1A1A2E] text-sm font-semibold text-white hover:bg-gray-800"
-                    >
-                      Devenir hôte Flashpark
-                    </Button>
-                  </motion.div>
-                </CardContent>
-              </Card>
-            </FadeIn>
-          )}
-
-          {/* Feedback messages */}
-          <AnimatePresence>
-            {success && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 20 }}
-                transition={{ duration: 0.3 }}
-                className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-3 text-sm text-emerald-700 shadow-lg"
-              >
-                Modifications enregistrées
-              </motion.div>
-            )}
-          </AnimatePresence>
-          <AnimatePresence>
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 20 }}
-                transition={{ duration: 0.3 }}
-                className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-xl border border-red-200 bg-red-50 px-5 py-3 text-sm text-red-700 shadow-lg"
-              >
-                {error}
-              </motion.div>
-            )}
-          </AnimatePresence>
+            </div>
+          </div>
         </div>
       </div>
+
+      {/* ── Toast notifications ─────────────────────────────── */}
+      <AnimatePresence>
+        {success && (
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 24 }}
+            transition={{ duration: 0.3 }}
+            className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-3 text-sm font-medium text-emerald-700 shadow-lg"
+          >
+            <CheckCircle2 className="h-4 w-4" />
+            Modifications enregistrées
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 24 }}
+            transition={{ duration: 0.3 }}
+            className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl border border-red-200 bg-red-50 px-5 py-3 text-sm font-medium text-red-700 shadow-lg"
+          >
+            {error}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </PageTransition>
   )
 }

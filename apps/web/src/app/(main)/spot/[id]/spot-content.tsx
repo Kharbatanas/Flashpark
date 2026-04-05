@@ -1,19 +1,29 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { BookingWidget } from '../../../../components/booking-widget'
 import { ReviewsSection } from '../../../../components/reviews-section'
+import { FadeIn, StaggerContainer, StaggerItem, PageTransition, motion, AnimatePresence } from '../../../../components/motion'
 import {
-  FadeIn,
-  StaggerContainer,
-  StaggerItem,
-  PageTransition,
-  motion,
-} from '../../../../components/motion'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Separator } from '@/components/ui/separator'
+  ArrowLeft,
+  Star,
+  Shield,
+  Zap,
+  Camera,
+  Lightbulb,
+  Accessibility,
+  Clock,
+  Car,
+  MapPin,
+  Info,
+  ChevronDown,
+  ChevronUp,
+  Grid2X2,
+  X,
+} from 'lucide-react'
+
+/* ─── constants ──────────────────────────────────────────────── */
 
 const TYPE_LABELS: Record<string, string> = {
   outdoor: 'Extérieur',
@@ -23,14 +33,16 @@ const TYPE_LABELS: Record<string, string> = {
   underground: 'Souterrain',
 }
 
-const AMENITY_ICONS: Record<string, string> = {
-  lighting: '💡',
-  security_camera: '📷',
-  covered: '🏠',
-  ev_charging: '⚡',
-  disabled_access: '♿',
-  '24h_access': '🕐',
+const AMENITY_META: Record<string, { label: string; Icon: React.ElementType }> = {
+  lighting:        { label: 'Éclairage',          Icon: Lightbulb     },
+  security_camera: { label: 'Caméra de sécurité',  Icon: Camera        },
+  covered:         { label: 'Couvert',              Icon: Car           },
+  ev_charging:     { label: 'Recharge électrique',  Icon: Zap           },
+  disabled_access: { label: 'Accès PMR',            Icon: Accessibility },
+  '24h_access':    { label: 'Accès 24h/24',         Icon: Clock         },
 }
+
+/* ─── types ──────────────────────────────────────────────────── */
 
 interface SpotData {
   id: string
@@ -55,195 +67,452 @@ interface SpotData {
   hostId: string
 }
 
+/* ─── helpers ────────────────────────────────────────────────── */
+
+function StarRow({ rating }: { rating: number }) {
+  return (
+    <div className="flex items-center gap-0.5">
+      {[1, 2, 3, 4, 5].map((s) => (
+        <svg
+          key={s}
+          className={`h-4 w-4 fill-current ${rating >= s ? 'text-[#0540FF]' : 'text-gray-200'}`}
+          viewBox="0 0 20 20"
+        >
+          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+        </svg>
+      ))}
+    </div>
+  )
+}
+
+/* ─── fullscreen gallery overlay ────────────────────────────── */
+
+function GalleryOverlay({
+  photos,
+  startIndex,
+  onClose,
+}: {
+  photos: string[]
+  startIndex: number
+  onClose: () => void
+}) {
+  const [current, setCurrent] = useState(startIndex)
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
+      onClick={onClose}
+    >
+      {/* close */}
+      <button
+        onClick={onClose}
+        className="absolute right-5 top-5 rounded-full bg-white/10 p-2 text-white hover:bg-white/20"
+      >
+        <X className="h-5 w-5" />
+      </button>
+
+      {/* counter */}
+      <span className="absolute left-1/2 top-5 -translate-x-1/2 text-sm text-white/70">
+        {current + 1} / {photos.length}
+      </span>
+
+      {/* prev */}
+      {current > 0 && (
+        <button
+          onClick={(e) => { e.stopPropagation(); setCurrent((c) => c - 1) }}
+          className="absolute left-4 rounded-full bg-white/10 p-3 text-white hover:bg-white/20"
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </button>
+      )}
+
+      {/* image */}
+      <motion.img
+        key={current}
+        initial={{ opacity: 0, scale: 0.97 }}
+        animate={{ opacity: 1, scale: 1 }}
+        src={photos[current]}
+        alt={`Photo ${current + 1}`}
+        className="max-h-[85vh] max-w-[90vw] rounded-xl object-contain"
+        onClick={(e) => e.stopPropagation()}
+      />
+
+      {/* next */}
+      {current < photos.length - 1 && (
+        <button
+          onClick={(e) => { e.stopPropagation(); setCurrent((c) => c + 1) }}
+          className="absolute right-4 rounded-full bg-white/10 p-3 text-white hover:bg-white/20"
+        >
+          <ArrowLeft className="h-5 w-5 rotate-180" />
+        </button>
+      )}
+
+      {/* thumbnails strip */}
+      <div className="absolute bottom-5 left-1/2 flex -translate-x-1/2 gap-2">
+        {photos.map((url, i) => (
+          <button
+            key={i}
+            onClick={(e) => { e.stopPropagation(); setCurrent(i) }}
+            className={`h-14 w-14 overflow-hidden rounded-lg border-2 transition-all ${
+              i === current ? 'border-white' : 'border-transparent opacity-50'
+            }`}
+          >
+            <img src={url} alt="" className="h-full w-full object-cover" />
+          </button>
+        ))}
+      </div>
+    </motion.div>
+  )
+}
+
+/* ─── photo gallery ──────────────────────────────────────────── */
+
+function PhotoGallery({ photos, title }: { photos: string[]; title: string }) {
+  const [overlayOpen, setOverlayOpen] = useState(false)
+  const [overlayStart, setOverlayStart] = useState(0)
+
+  function openAt(i: number) {
+    if (photos.length === 0) return
+    setOverlayStart(i)
+    setOverlayOpen(true)
+  }
+
+  return (
+    <>
+      <div className="relative mb-8 overflow-hidden rounded-2xl" style={{ height: 420 }}>
+        <div className="grid h-full grid-cols-4 grid-rows-2 gap-1.5">
+          {/* main large photo */}
+          <div
+            className="col-span-2 row-span-2 cursor-pointer overflow-hidden bg-gray-100"
+            onClick={() => openAt(0)}
+          >
+            {photos[0] ? (
+              <motion.img
+                whileHover={{ scale: 1.03 }}
+                transition={{ duration: 0.4 }}
+                src={photos[0]}
+                alt={title}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <PlaceholderPhoto />
+            )}
+          </div>
+
+          {/* 4 small photos */}
+          {[1, 2, 3, 4].map((i) => (
+            <div
+              key={i}
+              className="cursor-pointer overflow-hidden bg-gray-100"
+              onClick={() => openAt(i)}
+            >
+              {photos[i] ? (
+                <motion.img
+                  whileHover={{ scale: 1.05 }}
+                  transition={{ duration: 0.3 }}
+                  src={photos[i]}
+                  alt={`${title} — photo ${i + 1}`}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <PlaceholderPhoto />
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* "show all" button */}
+        {photos.length > 0 && (
+          <button
+            onClick={() => openAt(0)}
+            className="absolute bottom-4 right-4 flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-800 shadow hover:bg-gray-50"
+          >
+            <Grid2X2 className="h-3.5 w-3.5" />
+            Voir les {photos.length} photos
+          </button>
+        )}
+      </div>
+
+      <AnimatePresence>
+        {overlayOpen && (
+          <GalleryOverlay
+            photos={photos}
+            startIndex={overlayStart}
+            onClose={() => setOverlayOpen(false)}
+          />
+        )}
+      </AnimatePresence>
+    </>
+  )
+}
+
+function PlaceholderPhoto() {
+  return (
+    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
+      <Car className="h-10 w-10 text-gray-300" />
+    </div>
+  )
+}
+
+/* ─── expandable description ─────────────────────────────────── */
+
+function ExpandableDescription({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false)
+  const isLong = text.split('\n').length > 3 || text.length > 240
+
+  return (
+    <div>
+      <p
+        className={`whitespace-pre-line text-[15px] leading-relaxed text-gray-700 ${
+          !expanded && isLong ? 'line-clamp-3' : ''
+        }`}
+      >
+        {text}
+      </p>
+      {isLong && (
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-2 flex items-center gap-1 text-sm font-semibold text-gray-900 underline underline-offset-2 hover:text-[#0540FF]"
+        >
+          {expanded ? (
+            <>Réduire <ChevronUp className="h-4 w-4" /></>
+          ) : (
+            <>Lire la suite <ChevronDown className="h-4 w-4" /></>
+          )}
+        </button>
+      )}
+    </div>
+  )
+}
+
+/* ─── divider ─────────────────────────────────────────────────── */
+function Divider() {
+  return <div className="my-8 border-b border-gray-100" />
+}
+
+/* ─── main component ─────────────────────────────────────────── */
+
 export function SpotContent({ spot }: { spot: SpotData }) {
   const photos = spot.photos ?? []
+  const rating = spot.rating ? Number(spot.rating) : null
 
   return (
     <PageTransition>
-      <div className="min-h-screen bg-[#F8FAFC]">
-        <div className="mx-auto max-w-6xl px-4 py-8">
+      <div className="min-h-screen bg-white">
+        <div className="mx-auto max-w-6xl px-4 pb-16 pt-6">
+
           {/* Back link */}
-          <motion.div whileHover={{ y: -2 }} className="inline-block">
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/map" className="mb-6 inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-[#0540FF]">
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-                Retour à la carte
-              </Link>
-            </Button>
-          </motion.div>
+          <Link
+            href="/map"
+            className="mb-6 inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Retour à la carte
+          </Link>
 
           {/* Photo gallery */}
           <FadeIn>
-            <div className="mb-8 grid grid-cols-4 grid-rows-2 gap-2 overflow-hidden rounded-2xl" style={{ height: 360 }}>
-              {photos.length > 0 ? (
-                photos.slice(0, 5).map((url, i) => (
-                  <FadeIn key={i} delay={i * 0.1}>
-                    <div
-                      className={`overflow-hidden bg-gray-100 h-full ${i === 0 ? 'col-span-2 row-span-2' : ''}`}
-                    >
-                      <img src={url} alt={`Photo ${i + 1}`} className="h-full w-full object-cover" />
-                    </div>
-                  </FadeIn>
-                ))
-              ) : (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <FadeIn key={i} delay={i * 0.1}>
-                    <div
-                      className={`flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100 h-full ${i === 0 ? 'col-span-2 row-span-2' : ''}`}
-                    >
-                      <svg className="h-10 w-10 text-[#0540FF]/20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                    </div>
-                  </FadeIn>
-                ))
-              )}
-            </div>
+            <PhotoGallery photos={photos} title={spot.title} />
           </FadeIn>
 
-          <div className="flex flex-col gap-8 lg:flex-row">
-            {/* Main content */}
-            <div className="flex-1 min-w-0">
-              {/* Title + badges */}
+          {/* Two-column layout */}
+          <div className="flex flex-col gap-12 lg:flex-row">
+
+            {/* ── Left column (60%) ── */}
+            <div className="min-w-0 flex-1">
+
+              {/* Title + location */}
               <FadeIn direction="up">
-                <div className="mb-4 flex flex-wrap items-start gap-2">
-                  <div className="flex-1">
-                    <h1 className="text-2xl font-bold text-[#1A1A2E]">{spot.title}</h1>
-                    <p className="mt-1 text-sm text-gray-500">{spot.address}, {spot.city}</p>
+                <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h1 className="text-2xl font-bold text-gray-900">{spot.title}</h1>
+                    <p className="mt-1 flex items-center gap-1 text-sm text-gray-500">
+                      <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
+                      {spot.address}, {spot.city}
+                    </p>
                   </div>
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    <Badge variant="blue">
-                      {TYPE_LABELS[spot.type] ?? spot.type}
-                    </Badge>
-                    {spot.hasSmartGate && (
-                      <Badge variant="success">
-                        ⚡ Smart Gate
-                      </Badge>
-                    )}
+                  {/* type badge */}
+                  <span className="mt-1 inline-block rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-[#0540FF]">
+                    {TYPE_LABELS[spot.type] ?? spot.type}
+                  </span>
+                </div>
+              </FadeIn>
+
+              {/* Rating row */}
+              {rating !== null && (
+                <FadeIn direction="up">
+                  <div className="flex items-center gap-2">
+                    <StarRow rating={rating} />
+                    <span className="text-sm font-semibold text-gray-900">{rating.toFixed(1)}</span>
+                    <span className="text-sm text-gray-400">
+                      ({spot.reviewCount} {spot.reviewCount === 1 ? 'avis' : 'avis'})
+                    </span>
                     {spot.instantBook && (
-                      <Badge variant="blue">
-                        Réservation instantanée
-                      </Badge>
+                      <>
+                        <span className="text-gray-300">·</span>
+                        <span className="flex items-center gap-1 text-sm text-gray-500">
+                          <Zap className="h-3.5 w-3.5 text-[#0540FF]" />
+                          Réservation instantanée
+                        </span>
+                      </>
                     )}
+                    {spot.hasSmartGate && (
+                      <>
+                        <span className="text-gray-300">·</span>
+                        <span className="flex items-center gap-1 text-sm text-gray-500">
+                          <Shield className="h-3.5 w-3.5 text-[#0540FF]" />
+                          Smart Gate
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </FadeIn>
+              )}
+
+              <Divider />
+
+              {/* Host card */}
+              <FadeIn direction="up">
+                <div className="flex items-center gap-4">
+                  <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-[#0540FF]/10">
+                    <svg className="h-6 w-6 text-[#0540FF]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-900">Hôte Flashpark</p>
+                    <p className="flex items-center gap-1 text-sm text-gray-500">
+                      <Shield className="h-3.5 w-3.5 text-emerald-500" />
+                      Membre vérifié
+                    </p>
                   </div>
                 </div>
               </FadeIn>
 
-              {/* Rating */}
-              {spot.rating && (
-                <div className="mb-6 flex items-center gap-2">
-                  <div className="flex items-center gap-0.5">
-                    {[1, 2, 3, 4, 5].map((s) => (
-                      <svg
-                        key={s}
-                        className={`h-4 w-4 ${Number(spot.rating) >= s ? 'text-[#F5A623] fill-current' : 'text-gray-200 fill-current'}`}
-                        viewBox="0 0 20 20"
-                      >
-                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                      </svg>
-                    ))}
-                  </div>
-                  <span className="text-sm font-medium text-[#1A1A2E]">{Number(spot.rating).toFixed(1)}</span>
-                  <span className="text-sm text-gray-400">({spot.reviewCount} avis)</span>
-                </div>
-              )}
-
-              <Separator className="my-6" />
+              <Divider />
 
               {/* Description */}
               {spot.description && (
-                <div className="mb-6">
-                  <h2 className="mb-3 text-lg font-semibold text-[#1A1A2E]">Description</h2>
-                  <p className="whitespace-pre-line text-sm leading-relaxed text-gray-600">{spot.description}</p>
-                </div>
+                <FadeIn direction="up">
+                  <div>
+                    <h2 className="mb-3 text-lg font-semibold text-gray-900">À propos de ce parking</h2>
+                    <ExpandableDescription text={spot.description} />
+                  </div>
+                </FadeIn>
               )}
+
+              {spot.description && <Divider />}
 
               {/* Amenities */}
               {spot.amenities.length > 0 && (
-                <div className="mb-6">
-                  <h2 className="mb-3 text-lg font-semibold text-[#1A1A2E]">Équipements</h2>
-                  <StaggerContainer className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    {spot.amenities.map((amenity) => (
-                      <StaggerItem key={amenity}>
-                        <div className="flex items-center gap-2 rounded-xl border border-gray-100 bg-white px-3 py-2.5 text-sm text-gray-700">
-                          <span>{AMENITY_ICONS[amenity] ?? '✓'}</span>
-                          <span className="capitalize">{amenity.replace(/_/g, ' ')}</span>
-                        </div>
-                      </StaggerItem>
-                    ))}
-                  </StaggerContainer>
-                </div>
+                <FadeIn direction="up">
+                  <div>
+                    <h2 className="mb-4 text-lg font-semibold text-gray-900">Équipements</h2>
+                    <StaggerContainer className="grid grid-cols-2 gap-3">
+                      {spot.amenities.map((amenity) => {
+                        const meta = AMENITY_META[amenity]
+                        const Icon = meta?.Icon ?? Car
+                        return (
+                          <StaggerItem key={amenity}>
+                            <div className="flex items-center gap-3 rounded-xl border border-gray-100 bg-white px-4 py-3 text-sm text-gray-700">
+                              <Icon className="h-5 w-5 flex-shrink-0 text-[#0540FF]" />
+                              <span>{meta?.label ?? amenity.replace(/_/g, ' ')}</span>
+                            </div>
+                          </StaggerItem>
+                        )
+                      })}
+                    </StaggerContainer>
+
+                    {spot.maxVehicleHeight && (
+                      <div className="mt-3 flex items-center gap-3 rounded-xl border border-gray-100 bg-white px-4 py-3 text-sm text-gray-700">
+                        <Car className="h-5 w-5 flex-shrink-0 text-[#0540FF]" />
+                        <span>Hauteur maximale : <strong>{Number(spot.maxVehicleHeight).toFixed(1)} m</strong></span>
+                      </div>
+                    )}
+                  </div>
+                </FadeIn>
               )}
 
-              {/* Max vehicle height */}
-              {spot.maxVehicleHeight && (
-                <div className="mb-4 rounded-xl border border-gray-100 bg-white p-4">
-                  <p className="text-sm text-gray-600">
-                    <span className="font-medium text-[#1A1A2E]">Hauteur maximale :</span>{' '}
-                    {Number(spot.maxVehicleHeight).toFixed(1)} m
-                  </p>
-                </div>
-              )}
+              {spot.amenities.length > 0 && <Divider />}
 
               {/* Parking instructions */}
               {spot.parkingInstructions && (
-                <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50/50 p-4">
-                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-blue-600">Instructions d&apos;acces</p>
-                  <p className="text-sm text-gray-700 whitespace-pre-line">{spot.parkingInstructions}</p>
-                </div>
+                <FadeIn direction="up">
+                  <div>
+                    <h2 className="mb-3 text-lg font-semibold text-gray-900">Instructions d&apos;accès</h2>
+                    <div className="flex gap-3 rounded-xl border border-blue-100 bg-blue-50 p-4">
+                      <Info className="mt-0.5 h-5 w-5 flex-shrink-0 text-[#0540FF]" />
+                      <p className="text-[15px] leading-relaxed text-gray-700 whitespace-pre-line">
+                        {spot.parkingInstructions}
+                      </p>
+                    </div>
+                  </div>
+                  <Divider />
+                </FadeIn>
               )}
 
-              {/* Cancellation policy */}
-              <div className="mb-6 rounded-xl border border-gray-100 bg-white p-4">
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Politique d&apos;annulation</p>
-                <p className="text-sm text-gray-600">
-                  Annulation gratuite jusqu&apos;a 24h avant le debut de la reservation.
-                  Au-dela, le montant total est du.
-                </p>
-              </div>
+              {/* Location */}
+              <FadeIn direction="up">
+                <div>
+                  <h2 className="mb-3 text-lg font-semibold text-gray-900">Localisation</h2>
+                  <p className="mb-3 text-[15px] text-gray-600">
+                    {spot.address}, {spot.city}
+                  </p>
+                  {/* static map placeholder — exact address shown after booking */}
+                  <div className="flex h-40 items-center justify-center rounded-xl border border-gray-100 bg-gray-50">
+                    <div className="text-center">
+                      <MapPin className="mx-auto mb-2 h-6 w-6 text-gray-300" />
+                      <p className="text-xs text-gray-400">Adresse exacte communiquée après réservation</p>
+                    </div>
+                  </div>
+                </div>
+              </FadeIn>
 
-              <Separator className="my-6" />
+              <Divider />
 
               {/* Reviews */}
               <FadeIn>
-                <div className="mb-6">
-                  <ReviewsSection spotId={spot.id} />
-                </div>
+                <ReviewsSection spotId={spot.id} />
               </FadeIn>
 
-              <Separator className="my-6" />
-
-              {/* Host info */}
-              <FadeIn>
-                <Card className="mb-6">
-                  <CardHeader>
-                    <CardTitle className="text-lg">Votre hôte</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#0540FF]/10">
-                        <svg className="h-6 w-6 text-[#0540FF]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                        </svg>
-                      </div>
-                      <div>
-                        <p className="font-medium text-[#1A1A2E]">Hôte Flashpark</p>
-                        <p className="text-xs text-gray-500">Membre vérifié</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </FadeIn>
             </div>
 
-            {/* Booking sidebar */}
-            <div className="w-full lg:w-96 lg:flex-shrink-0">
+            {/* ── Right column (40%) — sticky booking widget ── */}
+            <div className="w-full lg:w-[380px] lg:flex-shrink-0">
               <div className="sticky top-24">
+
+                {/* price header outside the card so it floats above */}
+                <div className="mb-4">
+                  <span className="text-2xl font-bold text-gray-900">
+                    {Number(spot.pricePerHour).toFixed(2).replace('.', ',')} €
+                  </span>
+                  <span className="text-gray-500"> / heure</span>
+                  {rating !== null && (
+                    <div className="mt-1 flex items-center gap-1.5 text-sm text-gray-500">
+                      <Star className="h-3.5 w-3.5 fill-current text-[#0540FF]" />
+                      <span className="font-semibold text-gray-900">{rating.toFixed(1)}</span>
+                      <span>· {spot.reviewCount} avis</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* booking card */}
                 <BookingWidget spot={spot} />
+
+                {/* cancellation note */}
+                <p className="mt-3 text-center text-xs text-gray-400">
+                  Annulation gratuite jusqu&apos;à 24 h avant l&apos;arrivée.
+                  {!spot.instantBook && (
+                    <> L&apos;hôte devra approuver votre demande.</>
+                  )}
+                </p>
+
               </div>
             </div>
+
           </div>
         </div>
       </div>

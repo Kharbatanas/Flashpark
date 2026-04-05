@@ -1,6 +1,15 @@
 'use client'
 
-import { motion, useInView, useMotionValue, useSpring, type Variants } from 'framer-motion'
+import {
+  motion,
+  useInView,
+  useMotionValue,
+  useMotionValueEvent,
+  useScroll,
+  useSpring,
+  useTransform,
+  type Variants,
+} from 'framer-motion'
 import { useEffect, useRef, type ReactNode } from 'react'
 
 // ─── Fade In on scroll ────────────────────────────────────────────────
@@ -104,7 +113,8 @@ export function AnimatedCounter({
 
   useEffect(() => {
     const unsub = spring.on('change', (latest) => {
-      if (ref.current) ref.current.textContent = `${prefix}${Math.round(latest).toLocaleString('fr-FR')}${suffix}`
+      if (ref.current)
+        ref.current.textContent = `${prefix}${Math.round(latest).toLocaleString('fr-FR')}${suffix}`
     })
     return unsub
   }, [spring, prefix, suffix])
@@ -130,7 +140,13 @@ export function HoverScale({
 }
 
 // ─── Page wrapper with fade transition ────────────────────────────────
-export function PageTransition({ children, className }: { children: ReactNode; className?: string }) {
+export function PageTransition({
+  children,
+  className,
+}: {
+  children: ReactNode
+  className?: string
+}) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
@@ -196,5 +212,116 @@ export function BlurText({
   )
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// SCROLL-DRIVEN ANIMATION SYSTEM
+// ═══════════════════════════════════════════════════════════════════════
+
+// ─── ScrollScene: sticky section with scroll-progress-driven children ──
+export function ScrollScene({
+  children,
+  className,
+  height = '200vh',
+}: {
+  children: (progress: ReturnType<typeof useTransform<number, number>>) => ReactNode
+  className?: string
+  height?: string
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const { scrollYProgress } = useScroll({
+    target: ref,
+    offset: ['start start', 'end end'],
+  })
+
+  return (
+    <div ref={ref} style={{ height }} className="relative">
+      <div className={`sticky top-0 h-screen overflow-hidden ${className ?? ''}`}>
+        {children(scrollYProgress)}
+      </div>
+    </div>
+  )
+}
+
+// ─── ScrollFade: opacity tied to scroll range ─────────────────────────
+export function ScrollFade({
+  children,
+  className,
+  scrollProgress,
+  fadeIn = [0, 0.3],
+  fadeOut = [0.7, 1],
+}: {
+  children: ReactNode
+  className?: string
+  scrollProgress: ReturnType<typeof useTransform<number, number>>
+  fadeIn?: [number, number]
+  fadeOut?: [number, number]
+}) {
+  const opacity = useTransform(scrollProgress, [fadeIn[0], fadeIn[1], fadeOut[0], fadeOut[1]], [0, 1, 1, 0])
+
+  return (
+    <motion.div style={{ opacity }} className={className}>
+      {children}
+    </motion.div>
+  )
+}
+
+// ─── ScrollTransform: generic scroll-linked transform ─────────────────
+export function ScrollTransform({
+  children,
+  className,
+  scrollProgress,
+  inputRange,
+  outputRange,
+  property = 'y',
+}: {
+  children: ReactNode
+  className?: string
+  scrollProgress: ReturnType<typeof useTransform<number, number>>
+  inputRange: number[]
+  outputRange: (string | number)[]
+  property?: 'y' | 'x' | 'scale' | 'rotate' | 'opacity'
+}) {
+  const value = useTransform(scrollProgress, inputRange, outputRange)
+
+  return (
+    <motion.div style={{ [property]: value }} className={className}>
+      {children}
+    </motion.div>
+  )
+}
+
+// ─── ParallaxLayer: element with configurable scroll speed ────────────
+export function ParallaxLayer({
+  children,
+  className,
+  speed = 0.5,
+}: {
+  children: ReactNode
+  className?: string
+  speed?: number
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const { scrollYProgress } = useScroll({
+    target: ref,
+    offset: ['start end', 'end start'],
+  })
+  const y = useTransform(scrollYProgress, [0, 1], [`${speed * -100}px`, `${speed * 100}px`])
+
+  return (
+    <motion.div ref={ref} style={{ y }} className={className}>
+      {children}
+    </motion.div>
+  )
+}
+
+// ─── useScrollProgress: hook for custom scroll-driven logic ───────────
+export function useScrollProgress(offset?: [string, string]) {
+  const ref = useRef<HTMLDivElement>(null)
+  const { scrollYProgress } = useScroll({
+    target: ref,
+    offset: (offset ?? ['start end', 'end start']) as unknown as Parameters<typeof useScroll>[0]['offset'],
+  })
+  return { ref, scrollYProgress }
+}
+
 // Re-export motion for direct usage in pages
-export { motion, AnimatePresence } from 'framer-motion'
+export { motion, AnimatePresence, useScroll, useTransform, useSpring, useInView } from 'framer-motion'

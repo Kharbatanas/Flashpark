@@ -5,18 +5,26 @@ import { QRCodeSVG } from 'qrcode.react'
 import { ReviewsSection } from '../../../../components/reviews-section'
 import { BookingMessages } from '../../../../components/booking-messages'
 import { PageTransition, FadeIn, StaggerContainer, StaggerItem, motion } from '../../../../components/motion'
-import { Card, CardContent, CardHeader } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
+import {
+  MapPin,
+  Calendar,
+  Clock,
+  MessageCircle,
+  ListChecks,
+  Map,
+  CheckCircle2,
+  Zap,
+} from 'lucide-react'
 
-const STATUS_VARIANT: Record<string, 'pending' | 'active' | 'success' | 'secondary' | 'cancelled' | 'outline' | 'blue'> = {
-  pending: 'pending',
-  confirmed: 'blue',
-  active: 'active',
-  completed: 'secondary',
-  cancelled: 'cancelled',
-  refunded: 'outline',
+const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
+  pending:   { label: 'En attente',  className: 'bg-amber-50 text-amber-700 border-amber-200' },
+  confirmed: { label: 'Confirmée',   className: 'bg-blue-50 text-blue-700 border-blue-200' },
+  active:    { label: 'Active',      className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  completed: { label: 'Terminée',    className: 'bg-gray-100 text-gray-600 border-gray-200' },
+  cancelled: { label: 'Annulée',     className: 'bg-red-50 text-red-600 border-red-200' },
+  refunded:  { label: 'Remboursée',  className: 'bg-gray-100 text-gray-600 border-gray-200' },
 }
 
 interface BookingContentProps {
@@ -50,7 +58,6 @@ export function BookingContent({
   booking,
   spot,
   hours,
-  statusInfo,
   formattedStartDate,
   formattedEndDate,
   formattedStartTime,
@@ -58,87 +65,88 @@ export function BookingContent({
   qrCode,
   currentUserId,
 }: BookingContentProps) {
-  const badgeVariant = STATUS_VARIANT[booking.status] ?? 'outline'
+  const statusCfg = STATUS_CONFIG[booking.status] ?? { label: booking.status, className: 'bg-gray-100 text-gray-600 border-gray-200' }
+  const hostBase = Number(booking.totalPrice) - Number(booking.platformFee)
 
   return (
     <PageTransition>
-      <div className="min-h-screen bg-[#F8FAFC] px-4 py-12">
-        <div className="mx-auto max-w-lg">
-          {/* Success header */}
-          <div className="mb-8 text-center">
+      <div className="min-h-screen bg-gray-50 px-4 py-12">
+        <div className="mx-auto max-w-lg space-y-4">
+
+          {/* ── Success header ─────────────────────────────── */}
+          <div className="mb-6 text-center">
             <motion.div
               initial={{ scale: 0, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: 'spring', stiffness: 200, damping: 15, delay: 0.2 }}
-              className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-50"
+              transition={{ type: 'spring', stiffness: 220, damping: 14, delay: 0.15 }}
+              className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100"
             >
-              <motion.svg
-                initial={{ pathLength: 0 }}
-                animate={{ pathLength: 1 }}
-                transition={{ duration: 0.5, delay: 0.5 }}
-                className="h-10 w-10 text-[#10B981]" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: 'spring', stiffness: 260, damping: 16, delay: 0.35 }}
               >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </motion.svg>
+                <CheckCircle2 className="h-10 w-10 text-emerald-500" strokeWidth={1.75} />
+              </motion.div>
             </motion.div>
             <FadeIn delay={0.4}>
-              <h1 className="text-2xl font-bold text-[#1A1A2E]">Réservation créée !</h1>
-              <p className="mt-1 text-sm text-gray-500">
-                Votre place de parking est réservée.
-              </p>
+              <h1 className="text-2xl font-bold tracking-tight text-gray-900">Réservation confirmée !</h1>
+              <p className="mt-1 text-sm text-gray-500">Votre place de parking est réservée.</p>
             </FadeIn>
           </div>
 
-          {/* Booking card */}
-          <FadeIn delay={0.5} direction="up">
-            <Card className="overflow-hidden">
-              {/* Spot name */}
-              <CardHeader className="pb-0">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Parking</p>
-                    <h2 className="mt-1 text-lg font-semibold text-[#1A1A2E]">{spot.title}</h2>
-                    <p className="mt-0.5 text-sm text-gray-500">{spot.address}</p>
-                  </div>
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ type: 'spring', delay: 0.7 }}
-                  >
-                    <Badge variant={badgeVariant}>{statusInfo.label}</Badge>
-                  </motion.div>
+          {/* ── Spot details card ───────────────────────────── */}
+          <FadeIn delay={0.45} direction="up">
+            <div className="rounded-xl border border-gray-100 bg-white shadow-sm">
+              <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-4">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Parking</p>
+                  <h2 className="mt-1 text-lg font-semibold leading-snug text-gray-900">{spot.title}</h2>
+                  <p className="mt-0.5 flex items-center gap-1 text-sm text-gray-500">
+                    <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
+                    {spot.address}
+                  </p>
                 </div>
-              </CardHeader>
-
-              <div className="px-6 py-4">
-                <Separator />
+                <span className={`mt-0.5 flex-shrink-0 rounded-full border px-3 py-1 text-xs font-semibold ${statusCfg.className}`}>
+                  {statusCfg.label}
+                </span>
               </div>
 
-              {/* Dates */}
-              <div className="grid grid-cols-2 gap-px bg-gray-100">
-                <div className="bg-white px-6 py-4">
-                  <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Arrivée</p>
-                  <p className="mt-1 text-sm font-semibold text-[#1A1A2E]">{formattedStartDate}</p>
-                  <p className="text-sm text-[#0540FF]">{formattedStartTime}</p>
+              <Separator />
+
+              {/* Dates grid */}
+              <div className="grid grid-cols-2 divide-x divide-gray-100">
+                <div className="px-6 py-4">
+                  <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-gray-400">
+                    <Calendar className="h-3 w-3" /> Arrivée
+                  </p>
+                  <p className="text-sm font-semibold text-gray-900">{formattedStartDate}</p>
+                  <p className="flex items-center gap-1 text-sm text-[#0540FF]">
+                    <Clock className="h-3 w-3" />{formattedStartTime}
+                  </p>
                 </div>
-                <div className="bg-white px-6 py-4">
-                  <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Départ</p>
-                  <p className="mt-1 text-sm font-semibold text-[#1A1A2E]">{formattedEndDate}</p>
-                  <p className="text-sm text-[#0540FF]">{formattedEndTime}</p>
+                <div className="px-6 py-4">
+                  <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-gray-400">
+                    <Calendar className="h-3 w-3" /> Départ
+                  </p>
+                  <p className="text-sm font-semibold text-gray-900">{formattedEndDate}</p>
+                  <p className="flex items-center gap-1 text-sm text-[#0540FF]">
+                    <Clock className="h-3 w-3" />{formattedEndTime}
+                  </p>
                 </div>
               </div>
+
+              <Separator />
 
               {/* Price breakdown */}
-              <StaggerContainer delay={0.6} className="px-6 py-5 space-y-2">
-                <h3 className="mb-3 text-sm font-semibold text-[#1A1A2E]">Détail du prix</h3>
+              <StaggerContainer delay={0.55} className="px-6 py-5 space-y-2.5">
+                <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-gray-400">Détail du prix</p>
                 <StaggerItem>
                   <div className="flex justify-between text-sm text-gray-600">
                     <span>
                       {Number(spot.pricePerHour).toFixed(2).replace('.', ',')} € × {hours % 1 === 0 ? hours : hours.toFixed(1)} h
                     </span>
-                    <span>
-                      {(Number(booking.totalPrice) - Number(booking.platformFee)).toFixed(2).replace('.', ',')} €
-                    </span>
+                    <span>{hostBase.toFixed(2).replace('.', ',')} €</span>
                   </div>
                 </StaggerItem>
                 <StaggerItem>
@@ -148,80 +156,94 @@ export function BookingContent({
                   </div>
                 </StaggerItem>
                 <StaggerItem>
-                  <Separator className="my-2" />
-                  <div className="flex justify-between pt-2 font-bold text-[#1A1A2E]">
+                  <Separator className="my-1" />
+                  <div className="flex justify-between pt-1 text-sm font-bold text-gray-900">
                     <span>Total payé</span>
                     <span>{Number(booking.totalPrice).toFixed(2).replace('.', ',')} €</span>
                   </div>
                 </StaggerItem>
               </StaggerContainer>
-
-              {/* Booking reference / QR placeholder */}
-              <FadeIn delay={0.8}>
-                <div className="px-6 pb-6">
-                  <Separator className="mb-5" />
-                  <p className="mb-3 text-xs font-medium uppercase tracking-wide text-gray-400">
-                    Référence de réservation
-                  </p>
-                  <div className="flex items-center gap-4 rounded-xl bg-gray-50 p-4">
-                    <div className="flex-shrink-0 rounded-lg bg-white p-2">
-                      <QRCodeSVG
-                        value={`${typeof window !== 'undefined' ? window.location.origin : ''}/verify?code=${encodeURIComponent(qrCode ?? booking.id)}`}
-                        size={80}
-                        bgColor="#ffffff"
-                        fgColor="#1A1A2E"
-                        level="M"
-                      />
-                    </div>
-                    <div>
-                      <p className="font-mono text-lg font-bold text-[#1A1A2E]">
-                        {qrCode ?? booking.id.slice(0, 8).toUpperCase()}
-                      </p>
-                      <p className="font-mono text-[10px] text-gray-400 break-all">{booking.id}</p>
-                      {spot.hasSmartGate && (
-                        <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-[#10B981]">
-                          <span className="flex h-2 w-2 rounded-full bg-emerald-400" />
-                          Acces Smart Gate active
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </FadeIn>
-            </Card>
+            </div>
           </FadeIn>
 
-          {/* Messages — show for active bookings */}
+          {/* ── QR Code card ────────────────────────────────── */}
+          <FadeIn delay={0.65} direction="up">
+            <div className="rounded-xl border border-gray-100 bg-white shadow-sm px-6 py-6 text-center">
+              <p className="mb-4 text-[11px] font-semibold uppercase tracking-widest text-gray-400">
+                Code d&apos;accès
+              </p>
+              <div className="mx-auto mb-4 inline-flex items-center justify-center rounded-xl border border-gray-100 bg-gray-50 p-4">
+                <QRCodeSVG
+                  value={`${typeof window !== 'undefined' ? window.location.origin : ''}/verify?code=${encodeURIComponent(qrCode ?? booking.id)}`}
+                  size={120}
+                  bgColor="#f9fafb"
+                  fgColor="#111827"
+                  level="M"
+                />
+              </div>
+              <p className="font-mono text-xl font-bold tracking-widest text-gray-900">
+                {qrCode ?? booking.id.slice(0, 8).toUpperCase()}
+              </p>
+              <p className="mt-1 font-mono text-[10px] text-gray-400 break-all">{booking.id}</p>
+              {spot.hasSmartGate && (
+                <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                  <Zap className="h-3 w-3" />
+                  Accès Smart Gate activé
+                </div>
+              )}
+            </div>
+          </FadeIn>
+
+          {/* ── Messages (active bookings) ───────────────────── */}
           {['pending', 'confirmed', 'active'].includes(booking.status) && (
-            <FadeIn delay={0.85}>
-              <div className="mt-6">
-                <BookingMessages bookingId={booking.id} currentUserId={currentUserId} />
-              </div>
+            <FadeIn delay={0.75}>
+              <BookingMessages bookingId={booking.id} currentUserId={currentUserId} />
             </FadeIn>
           )}
 
-          {/* Review prompt for completed bookings */}
+          {/* ── Review (completed) ───────────────────────────── */}
           {booking.status === 'completed' && (
-            <FadeIn delay={0.9}>
-              <div className="mt-6">
-                <ReviewsSection spotId={spot.id} bookingId={booking.id} />
-              </div>
+            <FadeIn delay={0.75}>
+              <ReviewsSection spotId={spot.id} bookingId={booking.id} />
             </FadeIn>
           )}
 
-          {/* Actions */}
-          <FadeIn delay={1.0}>
-            <div className="mt-6 flex flex-col gap-3">
+          {/* ── Action buttons ───────────────────────────────── */}
+          <FadeIn delay={0.8}>
+            <div className="flex flex-col gap-3 pt-2">
+              {['pending', 'confirmed', 'active'].includes(booking.status) && (
+                <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                  <Button
+                    variant="outline"
+                    asChild
+                    className="w-full rounded-full border-gray-300 font-semibold text-gray-700 hover:border-gray-900 hover:text-gray-900"
+                  >
+                    <Link href={`/booking/${booking.id}#messages`}>
+                      <MessageCircle className="mr-2 h-4 w-4" />
+                      Contacter l&apos;hôte
+                    </Link>
+                  </Button>
+                </motion.div>
+              )}
               <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                <Button asChild className="w-full">
+                <Button
+                  asChild
+                  className="w-full rounded-full bg-[#0540FF] font-semibold hover:bg-[#0435D2]"
+                >
                   <Link href="/dashboard">
-                    Voir mes réservations
+                    <ListChecks className="mr-2 h-4 w-4" />
+                    Mes réservations
                   </Link>
                 </Button>
               </motion.div>
               <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                <Button variant="outline" asChild className="w-full">
+                <Button
+                  variant="ghost"
+                  asChild
+                  className="w-full rounded-full font-semibold text-gray-500 hover:text-gray-900"
+                >
                   <Link href="/map">
+                    <Map className="mr-2 h-4 w-4" />
                     Retour à la carte
                   </Link>
                 </Button>

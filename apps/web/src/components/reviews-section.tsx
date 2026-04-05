@@ -32,7 +32,7 @@ function StarPicker({ value, onChange }: { value: number; onChange: (v: number) 
           aria-label={`${s} étoile${s > 1 ? 's' : ''}`}
         >
           <svg
-            className={`h-7 w-7 transition-colors ${active >= s ? 'text-[#F5A623] fill-current' : 'text-gray-200 fill-current'}`}
+            className={`h-7 w-7 transition-colors ${active >= s ? 'text-[#06B6D4] fill-current' : 'text-gray-200 fill-current'}`}
             viewBox="0 0 20 20"
           >
             <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
@@ -85,8 +85,8 @@ function ReviewForm({ bookingId, spotId, onDone }: { bookingId: string; spotId: 
       animate={{ opacity: 1 }}
       transition={{ duration: 0.3 }}
     >
-      <form onSubmit={handleSubmit} className="rounded-2xl border border-[#0540FF]/20 bg-blue-50/50 p-5">
-        <h3 className="mb-4 font-semibold text-[#1A1A2E]">Laissez un avis</h3>
+      <form onSubmit={handleSubmit} className="rounded-2xl border border-[#E0F2FE] bg-[#F0F9FF] p-5">
+        <h3 className="mb-4 font-semibold tracking-tight text-[#0A0A0A]">Laissez un avis</h3>
         <div className="mb-4">
           <Label className="mb-2 block text-sm text-gray-600">Votre note</Label>
           <StarPicker value={rating} onChange={setRating} />
@@ -107,7 +107,7 @@ function ReviewForm({ bookingId, spotId, onDone }: { bookingId: string; spotId: 
         {error && (
           <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-600">{error}</p>
         )}
-        <Button type="submit" loading={createReview.isPending}>
+        <Button type="submit" loading={createReview.isPending} className="bg-[#06B6D4] text-white hover:bg-[#0891B2]">
           Publier l&apos;avis
         </Button>
       </form>
@@ -128,7 +128,7 @@ export function ReviewsSection({ spotId, bookingId }: ReviewsSectionProps) {
 
   return (
     <div>
-      <h2 className="mb-4 text-lg font-semibold text-[#1A1A2E]">
+      <h2 className="mb-4 text-lg font-semibold tracking-tight text-[#0A0A0A]">
         Avis{reviewsList?.length ? ` (${reviewsList.length})` : ''}
       </h2>
 
@@ -145,22 +145,22 @@ export function ReviewsSection({ spotId, bookingId }: ReviewsSectionProps) {
               whileHover={{ y: -2 }}
               transition={{ duration: 0.2 }}
             >
-              <Card className="p-5">
+              <Card className="border-[#E0F2FE] p-5">
                 <CardContent className="p-0">
                   <div className="mb-2 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
                       <Avatar className="h-8 w-8">
-                        <AvatarFallback className="bg-[#0540FF]/10 text-xs font-bold text-[#0540FF]">
+                        <AvatarFallback className="bg-[#06B6D4]/10 text-xs font-bold text-[#06B6D4]">
                           {review.reviewerName[0]?.toUpperCase() ?? 'U'}
                         </AvatarFallback>
                       </Avatar>
-                      <p className="text-sm font-medium text-[#1A1A2E]">{review.reviewerName}</p>
+                      <p className="text-sm font-medium text-[#0A0A0A]">{review.reviewerName}</p>
                     </div>
                     <div className="flex items-center gap-0.5">
                       {[1, 2, 3, 4, 5].map((s) => (
                         <svg
                           key={s}
-                          className={`h-3.5 w-3.5 fill-current ${review.rating >= s ? 'text-[#F5A623]' : 'text-gray-200'}`}
+                          className={`h-3.5 w-3.5 fill-current ${review.rating >= s ? 'text-[#06B6D4]' : 'text-gray-200'}`}
                           viewBox="0 0 20 20"
                         >
                           <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />

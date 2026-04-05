@@ -31,8 +31,11 @@ export default async function MapPage() {
 
   return (
     <Suspense fallback={
-      <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#0540FF] border-t-transparent" />
+      <div className="flex h-[calc(100vh-72px)] items-center justify-center bg-white">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-200 border-t-[#0540FF]" />
+          <p className="text-sm text-gray-400">Chargement de la carte...</p>
+        </div>
       </div>
     }>
       <SpotMap initialSpots={initialSpots} />

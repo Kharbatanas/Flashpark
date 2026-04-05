@@ -161,10 +161,10 @@ export function BookingWidget({ spot }: BookingWidgetProps) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
     >
-      <Card className="p-6">
+      <Card className="p-6 border-gray-200 shadow-lg rounded-2xl">
         <CardContent className="p-0">
           <div className="mb-5">
-            <span className="text-2xl font-bold text-[#1A1A2E]">
+            <span className="text-2xl font-bold text-gray-900">
               {pricePerHour.toFixed(2).replace('.', ',')} €
             </span>
             <span className="text-gray-500"> / heure</span>
@@ -234,7 +234,7 @@ export function BookingWidget({ spot }: BookingWidgetProps) {
                   <span>{platformFee.toFixed(2).replace('.', ',')} €</span>
                 </div>
                 <Separator className="my-2" />
-                <div className="flex justify-between pt-1 font-bold text-[#1A1A2E]">
+                <div className="flex justify-between pt-1 font-bold text-[#0A0A0A]">
                   <span>Total</span>
                   <span>{total.toFixed(2).replace('.', ',')} €</span>
                 </div>
@@ -301,7 +301,7 @@ export function BookingWidget({ spot }: BookingWidgetProps) {
               onClick={handleReserve}
               loading={loading}
               disabled={!isValid}
-              className="w-full py-3.5"
+              className="w-full h-12 rounded-xl bg-[#0540FF] hover:bg-[#0435D2] text-white border-none font-semibold"
               size="lg"
             >
               {loading ? 'Traitement...' : spot.instantBook ? 'Réserver instantanément' : 'Demander à réserver'}
