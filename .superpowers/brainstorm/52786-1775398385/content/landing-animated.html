@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flashpark — Landing Preview</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { font-family: 'Inter', -apple-system, sans-serif; background: #1A1A1A; overflow-x: hidden; }
+
+  /* ===== NAVBAR ===== */
+  .nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 16px 40px;
+    background: transparent;
+    transition: background 0.4s ease, backdrop-filter 0.4s ease, box-shadow 0.4s ease;
+    animation: navSlideDown 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    opacity: 0;
+  }
+  .nav.scrolled {
+    background: rgba(250,250,248,0.85);
+    backdrop-filter: blur(20px);
+    box-shadow: 0 1px 0 rgba(0,0,0,0.05);
+  }
+  .nav.scrolled .nav-logo { color: #1A1A1A; }
+  .nav.scrolled .nav-link { color: #666; }
+  .nav.scrolled .nav-btn-outline { border-color: #E5E5E5; color: #1A1A1A; }
+  @keyframes navSlideDown {
+    from { transform: translateY(-30px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  .nav-logo { font-weight: 900; font-size: 20px; color: #FAFAF8; letter-spacing: -0.5px; transition: color 0.4s; }
+  .nav-logo span { color: #D4A574; }
+  .nav-right { display: flex; gap: 16px; align-items: center; }
+  .nav-link { font-size: 13px; color: rgba(255,255,255,0.5); font-weight: 500; text-decoration: none; transition: color 0.3s; }
+  .nav-link:hover { color: #D4A574; }
+  .nav-btn-outline { border: 1px solid rgba(255,255,255,0.15); color: #FAFAF8; padding: 8px 18px; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; background: none; transition: all 0.3s; }
+  .nav-btn-outline:hover { border-color: #D4A574; color: #D4A574; }
+  .nav-btn-sand { background: #D4A574; color: #fff; padding: 8px 18px; border-radius: 10px; font-size: 13px; font-weight: 700; cursor: pointer; border: none; transition: all 0.3s; }
+  .nav-btn-sand:hover { background: #C4955A; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(212,165,116,0.3); }
+
+  /* ===== HERO ===== */
+  .hero {
+    min-height: 100vh; display: flex; flex-direction: column;
+    justify-content: center; align-items: center; text-align: center;
+    padding: 120px 20px 60px;
+    background: radial-gradient(ellipse at 50% 70%, rgba(212,165,116,0.06) 0%, transparent 50%), #1A1A1A;
+    position: relative;
+  }
+  .hero-label {
+    font-size: 12px; color: #D4A574; font-weight: 700; letter-spacing: 4px;
+    opacity: 0; animation: fadeUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards;
+  }
+  .hero-title {
+    font-size: clamp(40px, 8vw, 80px); font-weight: 900; color: #FAFAF8;
+    letter-spacing: -3px; line-height: 1.0; margin: 20px 0;
+  }
+  .hero-title .word {
+    display: inline-block; opacity: 0;
+    animation: wordReveal 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+  .hero-title .word:nth-child(1) { animation-delay: 0.5s; }
+  .hero-title .word:nth-child(2) { animation-delay: 0.6s; }
+  .hero-title .word:nth-child(3) { animation-delay: 0.7s; }
+  .hero-title .line2 .word:nth-child(1) { animation-delay: 0.85s; }
+  @keyframes wordReveal {
+    from { opacity: 0; transform: translateY(30px); filter: blur(8px); }
+    to { opacity: 1; transform: translateY(0); filter: blur(0); }
+  }
+  .hero-sub {
+    font-size: 16px; color: #777; max-width: 400px; line-height: 1.6;
+    opacity: 0; animation: fadeUp 0.7s ease 1.0s forwards;
+  }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Glassmorphism Search */
+  .search-bar {
+    margin: 36px auto 24px; max-width: 480px; width: 100%;
+    background: rgba(255,255,255,0.04);
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px; padding: 8px;
+    opacity: 0; animation: scaleIn 0.6s cubic-bezier(0.22, 1, 0.36, 1) 1.2s forwards;
+    transition: border-color 0.3s, box-shadow 0.3s;
+  }
+  .search-bar:hover {
+    border-color: rgba(212,165,116,0.3);
+    box-shadow: 0 0 30px rgba(212,165,116,0.08);
+  }
+  @keyframes scaleIn {
+    from { opacity: 0; transform: scale(0.95) translateY(10px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+  .search-inner { display: flex; gap: 8px; align-items: center; }
+  .search-input {
+    flex: 1; display: flex; align-items: center; gap: 10px;
+    padding: 12px 16px; background: rgba(255,255,255,0.04); border-radius: 12px;
+    color: #666; font-size: 14px;
+  }
+  .search-btn {
+    background: #D4A574; color: #fff; padding: 12px 28px; border-radius: 12px;
+    font-size: 14px; font-weight: 700; border: none; cursor: pointer;
+    transition: all 0.3s; letter-spacing: 0.3px;
+  }
+  .search-btn:hover { background: #C4955A; transform: translateY(-1px); box-shadow: 0 6px 20px rgba(212,165,116,0.35); }
+
+  /* City Pills */
+  .pills {
+    display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;
+    opacity: 0; animation: fadeUp 0.5s ease 1.5s forwards;
+  }
+  .pill {
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+    color: #888; padding: 6px 16px; border-radius: 99px; font-size: 12px;
+    font-weight: 500; cursor: pointer; transition: all 0.3s;
+  }
+  .pill:hover { border-color: #D4A574; color: #D4A574; background: rgba(212,165,116,0.08); }
+
+  /* Scroll indicator */
+  .scroll-hint {
+    position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+    opacity: 0; animation: fadeUp 0.5s ease 1.8s forwards;
+  }
+  .scroll-arrow {
+    width: 24px; height: 24px; border-right: 2px solid rgba(255,255,255,0.2);
+    border-bottom: 2px solid rgba(255,255,255,0.2);
+    transform: rotate(45deg);
+    animation: scrollBounce 2s ease-in-out infinite;
+  }
+  @keyframes scrollBounce { 0%,100% { transform: rotate(45deg) translate(0,0); opacity: 0.3; } 50% { transform: rotate(45deg) translate(6px,6px); opacity: 1; } }
+
+  /* ===== STATS ===== */
+  .stats-section {
+    background: linear-gradient(180deg, #1A1A1A 0%, #FAFAF8 100%);
+    padding: 60px 40px;
+  }
+  .stats-card {
+    background: #FFFFFF; border-radius: 20px; padding: 32px 40px;
+    display: flex; justify-content: space-around; align-items: center;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.08); border: 1px solid #F0EBE3;
+    max-width: 700px; margin: 0 auto;
+    opacity: 0; transform: translateY(40px);
+    transition: all 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .stats-card.visible { opacity: 1; transform: translateY(0); }
+  .stat { text-align: center; }
+  .stat-num { font-size: 36px; font-weight: 900; letter-spacing: -2px; color: #1A1A1A; }
+  .stat-num.sand { color: #D4A574; }
+  .stat-label { font-size: 12px; color: #999; margin-top: 4px; font-weight: 500; }
+  .stat-divider { width: 1px; height: 50px; background: #F0EBE3; }
+
+  /* ===== HOW IT WORKS ===== */
+  .how-section { background: #FAFAF8; padding: 80px 40px; text-align: center; }
+  .section-label { font-size: 12px; color: #D4A574; font-weight: 700; letter-spacing: 4px; margin-bottom: 8px; }
+  .section-title { font-size: 32px; font-weight: 900; color: #1A1A1A; letter-spacing: -1.5px; margin-bottom: 40px; }
+  .steps { display: flex; gap: 20px; max-width: 700px; margin: 0 auto; }
+  .step {
+    flex: 1; background: #fff; border-radius: 16px; padding: 28px 20px;
+    border: 1px solid #F0EBE3; text-align: center;
+    opacity: 0; transform: translateY(30px);
+    transition: all 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .step.visible { opacity: 1; transform: translateY(0); }
+  .step:hover { transform: translateY(-6px); box-shadow: 0 12px 32px rgba(0,0,0,0.06); border-color: #D4A574; }
+  .step-icon {
+    width: 48px; height: 48px; border-radius: 14px; margin: 0 auto 14px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; font-weight: 900; color: #FAFAF8;
+    background: #1A1A1A; transition: all 0.3s;
+  }
+  .step:nth-child(3) .step-icon { background: #D4A574; }
+  .step:hover .step-icon { transform: scale(1.1) rotate(-3deg); }
+  .step-title { font-size: 15px; font-weight: 800; color: #1A1A1A; letter-spacing: -0.3px; }
+  .step-desc { font-size: 12px; color: #999; margin-top: 6px; line-height: 1.5; }
+
+  /* ===== WHY SECTION ===== */
+  .why-section { background: #fff; padding: 80px 40px; text-align: center; border-top: 1px solid #F0EBE3; }
+  .features { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; max-width: 600px; margin: 0 auto; }
+  .feature {
+    background: #FAFAF8; border-radius: 16px; padding: 24px; border: 1px solid #F0EBE3;
+    text-align: left; opacity: 0; transform: translateY(20px);
+    transition: all 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+    cursor: default;
+  }
+  .feature.visible { opacity: 1; transform: translateY(0); }
+  .feature:hover { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.04); border-color: #D4A574; }
+  .feature-emoji { font-size: 28px; margin-bottom: 10px; transition: transform 0.3s; }
+  .feature:hover .feature-emoji { transform: scale(1.2); }
+  .feature-title { font-size: 14px; font-weight: 800; color: #1A1A1A; letter-spacing: -0.3px; }
+  .feature-desc { font-size: 11px; color: #999; margin-top: 4px; }
+
+  /* ===== HOST CTA ===== */
+  .host-section {
+    background: #1A1A1A; padding: 80px 40px; text-align: center;
+    position: relative; overflow: hidden;
+  }
+  .host-section::before {
+    content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+    background: radial-gradient(ellipse at 50% 50%, rgba(212,165,116,0.05) 0%, transparent 50%);
+    animation: glowPulse 6s ease-in-out infinite;
+  }
+  @keyframes glowPulse { 0%,100% { opacity: 0.5; transform: scale(1); } 50% { opacity: 1; transform: scale(1.1); } }
+  .host-content { position: relative; z-index: 1; }
+  .revenue-card {
+    max-width: 380px; margin: 24px auto;
+    background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px; padding: 24px; text-align: left;
+  }
+  .revenue-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; }
+  .revenue-label { font-size: 13px; color: #666; }
+  .revenue-val { font-size: 18px; font-weight: 800; color: #FAFAF8; }
+  .revenue-val.big { font-size: 32px; color: #D4A574; letter-spacing: -1px; }
+  .revenue-divider { height: 1px; background: rgba(255,255,255,0.06); margin: 8px 0; }
+  .cta-btn {
+    display: inline-block; background: #D4A574; color: #fff;
+    padding: 14px 36px; border-radius: 12px; font-size: 15px; font-weight: 700;
+    border: none; cursor: pointer; transition: all 0.3s;
+    margin-top: 8px;
+  }
+  .cta-btn:hover { background: #C4955A; transform: translateY(-2px); box-shadow: 0 8px 30px rgba(212,165,116,0.3); }
+
+  /* ===== FOOTER ===== */
+  .footer { background: #FAFAF8; padding: 40px 40px 20px; border-top: 1px solid #F0EBE3; }
+  .footer-top { display: flex; justify-content: space-between; margin-bottom: 24px; }
+  .footer-brand { font-weight: 900; font-size: 18px; color: #1A1A1A; letter-spacing: -0.5px; }
+  .footer-brand span { color: #D4A574; }
+  .footer-tagline { font-size: 12px; color: #999; margin-top: 6px; line-height: 1.6; }
+  .footer-links { display: flex; gap: 48px; }
+  .footer-col-title { font-size: 12px; font-weight: 700; color: #1A1A1A; margin-bottom: 10px; }
+  .footer-col a { display: block; font-size: 12px; color: #999; text-decoration: none; line-height: 2; transition: color 0.2s; }
+  .footer-col a:hover { color: #D4A574; }
+  .footer-bottom { border-top: 1px solid #F0EBE3; padding-top: 16px; display: flex; justify-content: space-between; align-items: center; }
+  .footer-copy { font-size: 11px; color: #bbb; }
+
+  /* ===== SCROLL REVEAL UTILITY ===== */
+  .reveal { opacity: 0; transform: translateY(20px); transition: all 0.7s cubic-bezier(0.22, 1, 0.36, 1); }
+  .reveal.visible { opacity: 1; transform: translateY(0); }
+</style>
+</head>
+<body>
+
+  <!-- NAVBAR -->
+  <nav class="nav" id="navbar">
+    <div class="nav-logo">⚡ flash<span>park</span></div>
+    <div class="nav-right">
+      <a href="#" class="nav-link">Louer ma place</a>
+      <button class="nav-btn-outline">Connexion</button>
+      <button class="nav-btn-sand">Inscription</button>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-label">PARKING RÉINVENTÉ</div>
+    <h1 class="hero-title">
+      <div><span class="word">Your</span> <span class="word">spot</span> <span class="word">is</span></div>
+      <div class="line2"><span class="word">waiting.</span></div>
+    </h1>
+    <p class="hero-sub">Réservez des places de parking privées auprès de particuliers. Moins cher, plus simple, plus proche.</p>
+
+    <div class="search-bar">
+      <div class="search-inner">
+        <div class="search-input">
+          <span>📍</span> Où voulez-vous vous garer ?
+        </div>
+        <button class="search-btn">Rechercher</button>
+      </div>
+    </div>
+
+    <div class="pills">
+      <span class="pill">Nice</span>
+      <span class="pill">Monaco</span>
+      <span class="pill">Cannes</span>
+      <span class="pill">Antibes</span>
+      <span class="pill">Saint-Tropez</span>
+    </div>
+
+    <div class="scroll-hint"><div class="scroll-arrow"></div></div>
+  </section>
+
+  <!-- STATS -->
+  <section class="stats-section">
+    <div class="stats-card" data-reveal>
+      <div class="stat">
+        <div class="stat-num" data-count="500">0</div>
+        <div class="stat-label">Places list��es</div>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat">
+        <div class="stat-num sand" data-count="40" data-prefix="-" data-suffix="%">0</div>
+        <div class="stat-label">vs parking public</div>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat">
+        <div class="stat-num" data-count="4.8" data-suffix="★" data-decimal="true">0</div>
+        <div class="stat-label">Note moyenne</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section class="how-section">
+    <div class="section-label reveal" data-reveal>COMMENT ��A MARCHE</div>
+    <div class="section-title reveal" data-reveal>Trois étapes, c'est tout.</div>
+    <div class="steps">
+      <div class="step" data-reveal data-delay="0">
+        <div class="step-icon">1</div>
+        <div class="step-title">Cherchez</div>
+        <div class="step-desc">Trouvez une place à proximité sur la carte interactive</div>
+      </div>
+      <div class="step" data-reveal data-delay="150">
+        <div class="step-icon">2</div>
+        <div class="step-title">Réservez</div>
+        <div class="step-desc">Paiement sécurisé, confirmation instantanée</div>
+      </div>
+      <div class="step" data-reveal data-delay="300">
+        <div class="step-icon">3</div>
+        <div class="step-title">Garez-vous</div>
+        <div class="step-desc">Scannez le QR code et accédez à votre place</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- WHY FLASHPARK -->
+  <section class="why-section">
+    <div class="section-label reveal" data-reveal>POURQUOI FLASHPARK</div>
+    <div class="section-title reveal" data-reveal>Le parking, autrement.</div>
+    <div class="features">
+      <div class="feature" data-reveal data-delay="0">
+        <div class="feature-emoji">💰</div>
+        <div class="feature-title">Jusqu'à -40%</div>
+        <div class="feature-desc">Moins cher que les parkings traditionnels</div>
+      </div>
+      <div class="feature" data-reveal data-delay="100">
+        <div class="feature-emoji">📱</div>
+        <div class="feature-title">Accès QR Code</div>
+        <div class="feature-desc">Entrez instantanément, sans clé ni badge</div>
+      </div>
+      <div class="feature" data-reveal data-delay="200">
+        <div class="feature-emoji">🛡️</div>
+        <div class="feature-title">100% Sécurisé</div>
+        <div class="feature-desc">Paiement Stripe, hôtes vérifiés</div>
+      </div>
+      <div class="feature" data-reveal data-delay="300">
+        <div class="feature-emoji">⚡</div>
+        <div class="feature-title">Réservation Instant</div>
+        <div class="feature-desc">Confirmez en un seul clic</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOST CTA -->
+  <section class="host-section">
+    <div class="host-content">
+      <div class="section-label reveal" data-reveal>DEVENEZ HÔTE</div>
+      <div class="section-title reveal" data-reveal style="color:#FAFAF8;">Rentabilisez votre place.</div>
+      <p class="reveal" data-reveal style="font-size:14px;color:#777;max-width:380px;margin:0 auto 8px;line-height:1.6;">
+        Gagnez jusqu'à 300€/mois en louant votre place de parking inutilisée.
+      </p>
+      <div class="revenue-card reveal" data-reveal>
+        <div class="revenue-row">
+          <span class="revenue-label">Prix / heure</span>
+          <span class="revenue-val">€3.50</span>
+        </div>
+        <div class="revenue-row">
+          <span class="revenue-label">Heures / jour</span>
+          <span class="revenue-val">6h</span>
+        </div>
+        <div class="revenue-divider"></div>
+        <div class="revenue-row">
+          <span class="revenue-label">Revenu estimé / mois</span>
+          <span class="revenue-val big" data-count="504" data-prefix="€">0</span>
+        </div>
+      </div>
+      <button class="cta-btn">Commencer à louer →</button>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="footer-top">
+      <div>
+        <div class="footer-brand">⚡ flash<span>park</span></div>
+        <div class="footer-tagline">Le parking entre particuliers.<br>Nice, Côte d'Azur.</div>
+      </div>
+      <div class="footer-links">
+        <div class="footer-col">
+          <div class="footer-col-title">Produit</div>
+          <a href="#">Rechercher</a>
+          <a href="#">Devenir hôte</a>
+          <a href="#">Tarifs</a>
+        </div>
+        <div class="footer-col">
+          <div class="footer-col-title">Légal</div>
+          <a href="#">CGU</a>
+          <a href="#">Confidentialité</a>
+          <a href="#">Contact</a>
+        </div>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span class="footer-copy">© 2026 Flashpark. Tous droits réservés.</span>
+    </div>
+  </footer>
+
+<script>
+  // ===== NAVBAR SCROLL =====
+  const nav = document.getElementById('navbar');
+  window.addEventListener('scroll', () => {
+    nav.classList.toggle('scrolled', window.scrollY > 80);
+  }, { passive: true });
+
+  // ===== SCROLL REVEAL + STAGGER =====
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const delay = entry.target.dataset.delay || 0;
+        setTimeout(() => {
+          entry.target.classList.add('visible');
+        }, parseInt(delay));
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.15, rootMargin: '0px 0px -50px 0px' });
+
+  document.querySelectorAll('[data-reveal]').forEach(el => observer.observe(el));
+
+  // ===== ANIMATED COUNTERS =====
+  const counterObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const el = entry.target;
+        const target = parseFloat(el.dataset.count);
+        const prefix = el.dataset.prefix || '';
+        const suffix = el.dataset.suffix || '';
+        const isDecimal = el.dataset.decimal === 'true';
+        const duration = 2000;
+        const start = performance.now();
+
+        function easeOut(t) { return 1 - Math.pow(1 - t, 3); }
+
+        function tick(now) {
+          const elapsed = now - start;
+          const progress = Math.min(elapsed / duration, 1);
+          const eased = easeOut(progress);
+          const current = isDecimal
+            ? (target * eased).toFixed(1)
+            : Math.floor(target * eased);
+
+          if (target >= 100) {
+            el.textContent = prefix + Number(current).toLocaleString() + '+';
+          } else {
+            el.textContent = prefix + current + suffix;
+          }
+
+          if (progress < 1) requestAnimationFrame(tick);
+        }
+
+        requestAnimationFrame(tick);
+        counterObserver.unobserve(el);
+      }
+    });
+  }, { threshold: 0.5 });
+
+  document.querySelectorAll('[data-count]').forEach(el => counterObserver.observe(el));
+</script>
+
+</body>
+</html>

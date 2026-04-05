@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flashpark — The Drive</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: auto; }
+  body { font-family: 'Inter', -apple-system, sans-serif; background: #0A0A0A; color: #fff; overflow-x: hidden; }
+
+  /* ===== NAVBAR (appears after flash) ===== */
+  .nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 16px 40px;
+    opacity: 0; transform: translateY(-20px);
+    transition: all 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+    pointer-events: none;
+  }
+  .nav.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+  .nav.light { background: rgba(250,250,248,0.9); backdrop-filter: blur(20px); }
+  .nav.light .nav-logo { color: #1A1A1A; }
+  .nav.light .nav-link { color: #666; }
+  .nav-logo { font-weight: 900; font-size: 20px; color: #FAFAF8; letter-spacing: -0.5px; transition: color 0.4s; }
+  .nav-logo em { font-style: normal; color: #D4A574; }
+  .nav-right { display: flex; gap: 14px; align-items: center; }
+  .nav-link { font-size: 13px; color: rgba(255,255,255,0.5); font-weight: 500; text-decoration: none; transition: color 0.3s; }
+  .nav-btn { background: #D4A574; color: #fff; padding: 8px 20px; border-radius: 10px; font-size: 13px; font-weight: 700; border: none; cursor: pointer; transition: all 0.3s; }
+  .nav-btn:hover { background: #C4955A; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(212,165,116,0.3); }
+
+  /* ===== SCROLL SCENES ===== */
+  .scene {
+    min-height: 100vh; display: flex; flex-direction: column;
+    justify-content: center; align-items: center; text-align: center;
+    position: relative; padding: 40px;
+  }
+
+  /* --- SCENE 1: THE FRUSTRATION --- */
+  .scene-1 {
+    background: #0A0A0A;
+    overflow: hidden;
+  }
+  .scene-1::before {
+    content: ''; position: absolute; inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 40px,
+      rgba(255,255,255,0.015) 40px,
+      rgba(255,255,255,0.015) 41px
+    );
+    animation: roadScroll 2s linear infinite;
+  }
+  @keyframes roadScroll { to { transform: translateY(41px); } }
+
+  .frustration-text {
+    font-size: clamp(20px, 4vw, 36px); font-weight: 300; color: #444;
+    line-height: 1.8; max-width: 600px;
+    opacity: 0; transform: translateY(30px);
+    transition: all 1s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .frustration-text.visible { opacity: 1; transform: translateY(0); }
+  .frustration-text strong { color: #888; font-weight: 700; }
+  .frustration-text .red { color: #E54D4D; font-weight: 700; }
+
+  .time-counter {
+    margin-top: 40px; font-size: 64px; font-weight: 900;
+    color: #E54D4D; letter-spacing: -3px;
+    font-variant-numeric: tabular-nums;
+    opacity: 0; transition: opacity 0.5s;
+  }
+  .time-counter.visible { opacity: 1; }
+  .time-label { font-size: 13px; color: #555; margin-top: 8px; letter-spacing: 3px; font-weight: 600; }
+
+  /* Stress indicators */
+  .stress-bar {
+    position: absolute; bottom: 0; left: 0; right: 0; height: 3px;
+    background: linear-gradient(90deg, #E54D4D, #FF6B6B, #E54D4D);
+    background-size: 200% 100%;
+    animation: stressPulse 1.5s ease-in-out infinite;
+    opacity: 0; transition: opacity 0.5s;
+  }
+  .stress-bar.visible { opacity: 1; }
+  @keyframes stressPulse { 0%,100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+
+  /* --- SCENE 2: THE COST --- */
+  .scene-2 { background: #0D0A08; }
+  .price-ticker {
+    font-size: clamp(60px, 12vw, 120px); font-weight: 900;
+    letter-spacing: -4px; color: #E54D4D;
+    text-shadow: 0 0 60px rgba(229,77,77,0.3);
+    opacity: 0; transform: scale(0.9);
+    transition: all 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .price-ticker.visible { opacity: 1; transform: scale(1); }
+  .price-sub {
+    font-size: 16px; color: #555; margin-top: 12px; font-weight: 500;
+    opacity: 0; transition: opacity 0.6s 0.3s;
+  }
+  .price-sub.visible { opacity: 1; }
+  .price-items {
+    display: flex; gap: 32px; margin-top: 40px;
+    opacity: 0; transform: translateY(20px);
+    transition: all 0.6s 0.5s;
+  }
+  .price-items.visible { opacity: 1; transform: translateY(0); }
+  .price-item { text-align: center; }
+  .price-item-val { font-size: 28px; font-weight: 800; color: #666; letter-spacing: -1px; }
+  .price-item-label { font-size: 11px; color: #444; margin-top: 4px; }
+
+  /* --- SCENE 3: THE FLASH (the moment) --- */
+  .scene-3 {
+    background: #0A0A0A; position: relative; overflow: hidden;
+    min-height: 100vh;
+  }
+  .flash-overlay {
+    position: absolute; inset: 0; background: #D4A574;
+    opacity: 0; transition: opacity 0.1s;
+    z-index: 2;
+  }
+  .flash-overlay.bang { animation: flashBang 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+  @keyframes flashBang {
+    0% { opacity: 0; }
+    8% { opacity: 1; }
+    20% { opacity: 0.8; }
+    40% { opacity: 0; }
+    100% { opacity: 0; }
+  }
+
+  .flash-logo {
+    font-size: clamp(48px, 10vw, 96px); font-weight: 900; letter-spacing: -3px;
+    position: relative; z-index: 3;
+    opacity: 0; transform: scale(0.5);
+    transition: all 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .flash-logo.visible { opacity: 1; transform: scale(1); }
+  .flash-logo em { font-style: normal; color: #D4A574; }
+
+  .flash-tagline {
+    font-size: 18px; color: #666; margin-top: 16px; font-weight: 500;
+    position: relative; z-index: 3;
+    opacity: 0; transition: opacity 0.6s 0.6s;
+  }
+  .flash-tagline.visible { opacity: 1; }
+
+  /* Radial glow behind logo */
+  .flash-glow {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 400px; height: 400px;
+    background: radial-gradient(circle, rgba(212,165,116,0.15) 0%, transparent 60%);
+    opacity: 0; transition: opacity 1s;
+    z-index: 1;
+  }
+  .flash-glow.visible { opacity: 1; animation: glowBreath 3s ease-in-out infinite; }
+  @keyframes glowBreath { 0%,100% { transform: translate(-50%,-50%) scale(1); } 50% { transform: translate(-50%,-50%) scale(1.2); } }
+
+  /* --- SCENE 4: THE MAP (spots appear) --- */
+  .scene-4 {
+    background: #111; position: relative; overflow: hidden;
+  }
+  .map-bg {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(circle at 30% 40%, rgba(212,165,116,0.08) 0%, transparent 30%),
+      radial-gradient(circle at 70% 60%, rgba(212,165,116,0.05) 0%, transparent 25%),
+      radial-gradient(circle at 50% 80%, rgba(212,165,116,0.04) 0%, transparent 20%);
+  }
+  /* Fake map grid */
+  .map-grid {
+    position: absolute; inset: 0;
+    background:
+      linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+    background-size: 60px 60px;
+  }
+
+  .map-text {
+    position: relative; z-index: 2;
+    font-size: 14px; color: #D4A574; font-weight: 700; letter-spacing: 4px;
+    margin-bottom: 16px;
+    opacity: 0; transition: all 0.6s;
+  }
+  .map-text.visible { opacity: 1; }
+  .map-title {
+    position: relative; z-index: 2;
+    font-size: clamp(28px, 5vw, 48px); font-weight: 900; letter-spacing: -2px;
+    margin-bottom: 40px;
+    opacity: 0; transform: translateY(20px); transition: all 0.6s 0.2s;
+  }
+  .map-title.visible { opacity: 1; transform: translateY(0); }
+
+  /* Animated spot pins */
+  .spots-container { position: relative; width: 500px; height: 300px; z-index: 2; }
+  .spot-pin {
+    position: absolute; background: #D4A574; color: #fff;
+    padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: 800;
+    box-shadow: 0 4px 16px rgba(212,165,116,0.3);
+    opacity: 0; transform: scale(0) translateY(10px);
+    transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+    cursor: pointer;
+  }
+  .spot-pin.visible { opacity: 1; transform: scale(1) translateY(0); }
+  .spot-pin:hover { transform: scale(1.15) translateY(-4px); box-shadow: 0 8px 24px rgba(212,165,116,0.4); }
+  .spot-pin::after {
+    content: ''; position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%);
+    width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent;
+    border-top: 6px solid #D4A574;
+  }
+  .spot-pin .pulse {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    width: 40px; height: 40px; border-radius: 50%;
+    border: 2px solid rgba(212,165,116,0.3);
+    animation: pingPulse 2s ease-out infinite;
+    z-index: -1;
+  }
+  @keyframes pingPulse { 0% { transform: translate(-50%,-50%) scale(0.5); opacity: 1; } 100% { transform: translate(-50%,-50%) scale(2); opacity: 0; } }
+
+  /* --- SCENE 5: THE QR MOMENT --- */
+  .scene-5 {
+    background: linear-gradient(180deg, #111 0%, #1A1A1A 50%, #FAFAF8 100%);
+  }
+  .qr-box {
+    width: 160px; height: 160px; background: #fff; border-radius: 20px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    opacity: 0; transform: scale(0.5) rotate(-10deg);
+    transition: all 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+    margin-bottom: 24px;
+  }
+  .qr-box.visible { opacity: 1; transform: scale(1) rotate(0deg); }
+  .qr-inner {
+    width: 120px; height: 120px;
+    background:
+      linear-gradient(90deg, #1A1A1A 25%, transparent 25%) 0 0,
+      linear-gradient(90deg, transparent 75%, #1A1A1A 75%) 0 0,
+      linear-gradient(0deg, #1A1A1A 25%, transparent 25%) 0 0,
+      linear-gradient(0deg, transparent 75%, #1A1A1A 75%) 0 0;
+    background-size: 8px 8px;
+    background-repeat: repeat;
+    border-radius: 8px;
+    opacity: 0.15;
+  }
+  .scan-line {
+    position: absolute; width: 140px; height: 2px;
+    background: linear-gradient(90deg, transparent, #D4A574, transparent);
+    animation: scanMove 2s ease-in-out infinite;
+    opacity: 0; transition: opacity 0.5s 0.5s;
+  }
+  .scan-line.visible { opacity: 1; }
+  @keyframes scanMove { 0%,100% { transform: translateY(-60px); } 50% { transform: translateY(60px); } }
+
+  .access-text {
+    font-size: 20px; font-weight: 800; letter-spacing: -0.5px;
+    opacity: 0; transform: translateY(20px);
+    transition: all 0.6s 0.4s;
+  }
+  .access-text.visible { opacity: 1; transform: translateY(0); color: #1A1A1A; }
+  .access-check {
+    display: inline-block; width: 32px; height: 32px; border-radius: 50%;
+    background: #22C55E; color: #fff; font-size: 16px; font-weight: 900;
+    line-height: 32px; text-align: center; margin-right: 10px;
+    opacity: 0; transform: scale(0);
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) 0.8s;
+  }
+  .access-check.visible { opacity: 1; transform: scale(1); }
+
+  /* --- SCENE 6: THE FREEDOM (light, warm) --- */
+  .scene-6 { background: #FAFAF8; min-height: 100vh; }
+  .freedom-label {
+    font-size: 12px; color: #D4A574; font-weight: 700; letter-spacing: 4px;
+    opacity: 0; transition: all 0.6s;
+  }
+  .freedom-label.visible { opacity: 1; }
+  .freedom-title {
+    font-size: clamp(36px, 7vw, 72px); font-weight: 900; color: #1A1A1A;
+    letter-spacing: -3px; margin: 16px 0 12px; line-height: 1.05;
+    opacity: 0; transform: translateY(30px);
+    transition: all 0.8s cubic-bezier(0.22, 1, 0.36, 1) 0.2s;
+  }
+  .freedom-title.visible { opacity: 1; transform: translateY(0); }
+  .freedom-sub {
+    font-size: 16px; color: #999; max-width: 420px; line-height: 1.6;
+    opacity: 0; transition: all 0.6s 0.4s;
+  }
+  .freedom-sub.visible { opacity: 1; }
+
+  /* Final search bar */
+  .final-search {
+    margin-top: 36px; width: 100%; max-width: 480px;
+    background: #fff; border: 2px solid #F0EBE3; border-radius: 16px;
+    padding: 8px; opacity: 0; transform: translateY(20px);
+    transition: all 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.6s;
+  }
+  .final-search.visible { opacity: 1; transform: translateY(0); }
+  .final-search:hover { border-color: #D4A574; box-shadow: 0 8px 32px rgba(212,165,116,0.12); }
+  .final-search-inner { display: flex; gap: 8px; align-items: center; }
+  .final-search-input { flex: 1; padding: 14px 18px; font-size: 15px; color: #aaa; background: #FAFAF8; border-radius: 12px; border: none; }
+  .final-search-btn {
+    background: #D4A574; color: #fff; padding: 14px 32px; border-radius: 12px;
+    font-size: 15px; font-weight: 700; border: none; cursor: pointer; transition: all 0.3s; white-space: nowrap;
+  }
+  .final-search-btn:hover { background: #C4955A; transform: translateY(-1px); box-shadow: 0 6px 24px rgba(212,165,116,0.35); }
+
+  /* Trust badges */
+  .trust {
+    display: flex; gap: 32px; margin-top: 32px;
+    opacity: 0; transition: all 0.6s 0.8s;
+  }
+  .trust.visible { opacity: 1; }
+  .trust-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #999; font-weight: 500; }
+  .trust-icon { font-size: 18px; }
+
+  /* ===== SCROLL PROGRESS BAR ===== */
+  .progress {
+    position: fixed; top: 0; left: 0; height: 2px; z-index: 9999;
+    background: linear-gradient(90deg, #E54D4D, #D4A574, #22C55E);
+    width: 0%; transition: width 0.1s;
+  }
+
+  /* ===== SCENE INDICATOR ===== */
+  .scene-dots {
+    position: fixed; right: 24px; top: 50%; transform: translateY(-50%);
+    z-index: 999; display: flex; flex-direction: column; gap: 12px;
+  }
+  .scene-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: rgba(255,255,255,0.15); transition: all 0.3s;
+    cursor: pointer;
+  }
+  .scene-dot.active { background: #D4A574; transform: scale(1.4); box-shadow: 0 0 12px rgba(212,165,116,0.5); }
+  .scene-dot.light { background: rgba(0,0,0,0.1); }
+  .scene-dot.light.active { background: #D4A574; }
+</style>
+</head>
+<body>
+
+  <!-- Progress Bar -->
+  <div class="progress" id="progress"></div>
+
+  <!-- Scene Dots -->
+  <div class="scene-dots" id="dots">
+    <div class="scene-dot" data-scene="0"></div>
+    <div class="scene-dot" data-scene="1"></div>
+    <div class="scene-dot" data-scene="2"></div>
+    <div class="scene-dot" data-scene="3"></div>
+    <div class="scene-dot" data-scene="4"></div>
+    <div class="scene-dot" data-scene="5"></div>
+  </div>
+
+  <!-- Navbar -->
+  <nav class="nav" id="navbar">
+    <div class="nav-logo">⚡ flash<em>park</em></div>
+    <div class="nav-right">
+      <a href="#" class="nav-link">Louer ma place</a>
+      <button class="nav-btn">Commencer</button>
+    </div>
+  </nav>
+
+  <!-- SCENE 1: THE FRUSTRATION -->
+  <section class="scene scene-1" data-scene="0">
+    <div class="frustration-text" data-reveal>
+      Vous tournez depuis <strong>20 minutes</strong>.<br>
+      Toutes les places sont <span class="red">prises</span>.<br>
+      Le parking souterrain ? <span class="red">€4.50/h</span>.
+    </div>
+    <div class="time-counter" data-reveal data-delay="600" id="timeCounter">00:00</div>
+    <div class="time-label" data-reveal data-delay="800">TEMPS PERDU À CHERCHER</div>
+    <div class="stress-bar" data-reveal data-delay="400"></div>
+  </section>
+
+  <!-- SCENE 2: THE COST -->
+  <section class="scene scene-2" data-scene="1">
+    <div class="price-ticker" data-reveal>€4.50<span style="font-size:0.4em;color:#666">/h</span></div>
+    <div class="price-sub" data-reveal>C'est ce que vous payez. Chaque heure. En centre-ville.</div>
+    <div class="price-items" data-reveal>
+      <div class="price-item">
+        <div class="price-item-val">€36</div>
+        <div class="price-item-label">Une journée</div>
+      </div>
+      <div class="price-item">
+        <div class="price-item-val">€180</div>
+        <div class="price-item-label">Une semaine</div>
+      </div>
+      <div class="price-item">
+        <div class="price-item-val">€720</div>
+        <div class="price-item-label">Un mois</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCENE 3: THE FLASH -->
+  <section class="scene scene-3" data-scene="2">
+    <div class="flash-overlay" id="flashOverlay"></div>
+    <div class="flash-glow" data-reveal></div>
+    <div class="flash-logo" data-reveal>⚡ flash<em>park</em></div>
+    <div class="flash-tagline" data-reveal>Et si c'était plus simple ?</div>
+  </section>
+
+  <!-- SCENE 4: THE MAP -->
+  <section class="scene scene-4" data-scene="3">
+    <div class="map-bg"></div>
+    <div class="map-grid"></div>
+    <div class="map-text" data-reveal>NICE, CÔTE D'AZUR</div>
+    <div class="map-title" data-reveal>Des places partout<br>autour de vous.</div>
+    <div class="spots-container">
+      <div class="spot-pin" data-reveal data-delay="200" style="top:20%;left:15%;">€2.50/h<div class="pulse"></div></div>
+      <div class="spot-pin" data-reveal data-delay="400" style="top:10%;left:55%;">€3.00/h<div class="pulse"></div></div>
+      <div class="spot-pin" data-reveal data-delay="600" style="top:50%;left:35%;">€1.80/h<div class="pulse"></div></div>
+      <div class="spot-pin" data-reveal data-delay="800" style="top:40%;left:70%;">€2.20/h<div class="pulse"></div></div>
+      <div class="spot-pin" data-reveal data-delay="1000" style="top:70%;left:50%;">€3.50/h<div class="pulse"></div></div>
+      <div class="spot-pin" data-reveal data-delay="1200" style="top:65%;left:20%;">€2.00/h<div class="pulse"></div></div>
+      <div class="spot-pin" data-reveal data-delay="1400" style="top:30%;left:85%;">€2.80/h<div class="pulse"></div></div>
+    </div>
+  </section>
+
+  <!-- SCENE 5: THE QR -->
+  <section class="scene scene-5" data-scene="4">
+    <div class="qr-box" data-reveal style="position:relative;">
+      <div class="qr-inner"></div>
+      <div class="scan-line" data-reveal></div>
+    </div>
+    <div class="access-text" data-reveal>
+      <span class="access-check" data-reveal>✓</span>
+      Accès accordé
+    </div>
+  </section>
+
+  <!-- SCENE 6: THE FREEDOM -->
+  <section class="scene scene-6" data-scene="5">
+    <div class="freedom-label" data-reveal>PARKING RÉINVENTÉ</div>
+    <div class="freedom-title" data-reveal>Your spot<br>is waiting.</div>
+    <div class="freedom-sub" data-reveal>Places privées chez des particuliers. Moins cher. Plus proche. Plus simple.</div>
+    <div class="final-search" data-reveal>
+      <div class="final-search-inner">
+        <div class="final-search-input">📍  Où voulez-vous vous garer ?</div>
+        <button class="final-search-btn">Rechercher</button>
+      </div>
+    </div>
+    <div class="trust" data-reveal>
+      <div class="trust-item"><span class="trust-icon">🛡️</span> Paiement sécurisé</div>
+      <div class="trust-item"><span class="trust-icon">⚡</span> Réservation instantanée</div>
+      <div class="trust-item"><span class="trust-icon">📱</span> Accès QR Code</div>
+    </div>
+  </section>
+
+<script>
+  // ===== SCROLL REVEAL =====
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const delay = entry.target.dataset.delay || 0;
+        setTimeout(() => entry.target.classList.add('visible'), parseInt(delay));
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.2, rootMargin: '0px 0px -60px 0px' });
+
+  document.querySelectorAll('[data-reveal]').forEach(el => observer.observe(el));
+
+  // ===== FLASH BANG on Scene 3 =====
+  const flashObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        document.getElementById('flashOverlay').classList.add('bang');
+        flashObserver.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.5 });
+  flashObserver.observe(document.querySelector('.scene-3'));
+
+  // ===== TIME COUNTER (Scene 1) =====
+  let timeStarted = false;
+  const timeObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting && !timeStarted) {
+        timeStarted = true;
+        const el = document.getElementById('timeCounter');
+        let seconds = 0;
+        const tick = setInterval(() => {
+          seconds++;
+          const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+          const s = (seconds % 60).toString().padStart(2, '0');
+          el.textContent = m + ':' + s;
+          if (seconds >= 23 * 60 + 47) clearInterval(tick); // stop at 23:47
+        }, 40); // fast tick for dramatic effect
+      }
+    });
+  }, { threshold: 0.5 });
+  timeObserver.observe(document.querySelector('.scene-1'));
+
+  // ===== NAVBAR =====
+  const navbar = document.getElementById('navbar');
+  const scene3 = document.querySelector('.scene-3');
+  const scene6 = document.querySelector('.scene-6');
+
+  const navObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.target === scene3 && entry.isIntersecting) {
+        navbar.classList.add('show');
+      }
+    });
+  }, { threshold: 0.5 });
+  navObserver.observe(scene3);
+
+  const lightObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      navbar.classList.toggle('light', entry.isIntersecting);
+    });
+  }, { threshold: 0.3 });
+  lightObserver.observe(scene6);
+
+  // ===== PROGRESS BAR =====
+  const progressBar = document.getElementById('progress');
+  window.addEventListener('scroll', () => {
+    const scrollH = document.documentElement.scrollHeight - window.innerHeight;
+    const pct = (window.scrollY / scrollH) * 100;
+    progressBar.style.width = pct + '%';
+  }, { passive: true });
+
+  // ===== SCENE DOTS =====
+  const scenes = document.querySelectorAll('.scene');
+  const dots = document.querySelectorAll('.scene-dot');
+
+  const dotObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const idx = entry.target.dataset.scene;
+        dots.forEach((d, i) => {
+          d.classList.toggle('active', i === parseInt(idx));
+          d.classList.toggle('light', parseInt(idx) >= 5);
+        });
+      }
+    });
+  }, { threshold: 0.5 });
+
+  scenes.forEach(s => dotObserver.observe(s));
+
+  dots.forEach(dot => {
+    dot.addEventListener('click', () => {
+      scenes[dot.dataset.scene].scrollIntoView({ behavior: 'smooth' });
+    });
+  });
+</script>
+
+</body>
+</html>

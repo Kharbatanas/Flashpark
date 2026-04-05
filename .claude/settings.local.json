@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)",
+      "Bash(git push:*)",
+      "Bash(grep -E \"\\\\.\\(tsx|ts\\)$\")",
+      "Bash(npx tsx:*)",
+      "Bash(APIFY_TOKEN=$APIFY_TOKEN npx tsx scripts/scrape-competitors.ts)",
+      "Bash(node -e \"const fs=require\\('fs'\\); const c=fs.readFileSync\\('.env','utf-8'\\); console.log\\('Lines:', c.split\\('\\\\n'\\).length\\); c.split\\('\\\\n'\\).forEach\\(l => { const t=l.trim\\(\\); if\\(!t||t.startsWith\\('#'\\)\\)return; const eq=t.indexOf\\('='\\); if\\(eq<0\\)return; console.log\\(t.slice\\(0,eq\\).trim\\(\\)+': OK'\\); }\\)\")",
+      "Bash(ls \"c:/Users/Anas/Documents/AirPark/supabase/migrations/007\"*)",
+      "Bash(openssl rand:*)"
+    ]
+  }
+}
