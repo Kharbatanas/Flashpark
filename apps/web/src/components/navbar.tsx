@@ -117,7 +117,7 @@ export function Navbar() {
               >
                 <span className="text-sm font-medium text-gray-700">Où se garer ?</span>
                 <span className="h-4 w-px bg-gray-200" />
-                <span className="text-sm text-gray-400">Nice · Maintenant</span>
+                <span className="text-sm text-gray-400">France · Maintenant</span>
                 <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#0540FF]">
                   <svg className="h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />

@@ -11,7 +11,7 @@ export const spotsRouter = createTRPCRouter({
       z.object({
         lat: z.number(),
         lng: z.number(),
-        radiusKm: z.number().min(0.1).max(50).default(5),
+        radiusKm: z.number().min(0.1).max(1000).default(500),
         startTime: z.date().optional(),
         endTime: z.date().optional(),
       })

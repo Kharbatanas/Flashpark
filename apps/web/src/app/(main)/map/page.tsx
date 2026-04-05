@@ -21,9 +21,9 @@ export default async function MapPage() {
   try {
     const caller = await serverApi
     initialSpots = await caller.spots.nearby({
-      lat: 43.7102,
-      lng: 7.262,
-      radiusKm: 20,
+      lat: 46.603354,
+      lng: 1.888334,
+      radiusKm: 500,
     })
   } catch (err) {
     console.error('Failed to fetch initial spots:', err)
