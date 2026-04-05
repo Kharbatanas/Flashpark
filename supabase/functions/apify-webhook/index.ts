@@ -35,6 +35,7 @@ Deno.serve(async (req: Request) => {
     if (type === "competitor_data" && Array.isArray(data)) {
       const rows = data.map((item: any) => ({
         source: source || item.source || "unknown",
+        country: item.country || "France",
         city: item.city || "unknown",
         spot_name: item.spot_name || item.name || null,
         spot_type: item.spot_type || item.type || null,
@@ -54,40 +55,42 @@ Deno.serve(async (req: Request) => {
       const { error } = await supabase.from("competitor_data").insert(rows);
       if (error) throw error;
 
-      // Update market summary
-      const cities = [...new Set(rows.map((r: any) => r.city))];
-      for (const city of cities) {
-        const cityRows = rows.filter((r: any) => r.city === city);
-        const prices = cityRows.map((r: any) => r.price_hour).filter(Boolean);
-        const ratings = cityRows.map((r: any) => r.rating).filter(Boolean);
+      // Update market summary per country+city
+      const keys = [...new Set(rows.map((r: any) => `${r.country}|||${r.city}`))];
+      for (const key of keys) {
+        const [country, city] = key.split("|||");
+        const cityRows = rows.filter((r: any) => r.country === country && r.city === city);
+        const prices = cityRows.map((r: any) => Number(r.price_hour)).filter((p: number) => p > 0);
+        const dayPrices = cityRows.map((r: any) => Number(r.price_day)).filter((p: number) => p > 0);
+        const monthPrices = cityRows.map((r: any) => Number(r.price_month)).filter((p: number) => p > 0);
+        const ratings = cityRows.map((r: any) => Number(r.rating)).filter((p: number) => p > 0);
 
         const sourceBreakdown: Record<string, number> = {};
         cityRows.forEach((r: any) => {
           sourceBreakdown[r.source] = (sourceBreakdown[r.source] || 0) + 1;
         });
 
-        if (prices.length > 0) {
-          const avg = prices.reduce((a: number, b: number) => a + b, 0) / prices.length;
-          const avgRating = ratings.length > 0
-            ? ratings.reduce((a: number, b: number) => a + b, 0) / ratings.length
-            : null;
+        const avg = (arr: number[]) => arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
 
-          await supabase.from("market_summary").upsert({
-            city,
-            date: new Date().toISOString().split("T")[0],
-            avg_price_hour: Math.round(avg * 100) / 100,
-            min_price_hour: Math.min(...prices),
-            max_price_hour: Math.max(...prices),
-            total_listings: cityRows.length,
-            avg_rating: avgRating ? Math.round(avgRating * 100) / 100 : null,
-            source_breakdown: sourceBreakdown,
-          }, { onConflict: "city,date" });
-        }
+        await supabase.from("market_summary").upsert({
+          country,
+          city,
+          date: new Date().toISOString().split("T")[0],
+          avg_price_hour: avg(prices) ? Math.round(avg(prices)! * 100) / 100 : null,
+          min_price_hour: prices.length > 0 ? Math.min(...prices) : null,
+          max_price_hour: prices.length > 0 ? Math.max(...prices) : null,
+          avg_price_day: avg(dayPrices) ? Math.round(avg(dayPrices)! * 100) / 100 : null,
+          avg_price_month: avg(monthPrices) ? Math.round(avg(monthPrices)! * 100) / 100 : null,
+          total_listings: cityRows.length,
+          avg_rating: avg(ratings) ? Math.round(avg(ratings)! * 100) / 100 : null,
+          source_breakdown: sourceBreakdown,
+        }, { onConflict: "country,city,date" });
       }
 
       return new Response(JSON.stringify({
         success: true,
         inserted: rows.length,
+        countries: [...new Set(rows.map((r: any) => r.country))],
         cities: [...new Set(rows.map((r: any) => r.city))],
       }), {
         headers: { "Content-Type": "application/json" },
@@ -112,7 +115,7 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    return new Response(JSON.stringify({ error: "Unknown type. Use 'competitor_data' or 'seo_data'" }), {
+    return new Response(JSON.stringify({ error: "Unknown type" }), {
       status: 400,
       headers: { "Content-Type": "application/json" },
     });
