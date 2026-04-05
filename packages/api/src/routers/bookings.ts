@@ -137,8 +137,16 @@ export const bookingsRouter = createTRPCRouter({
       const [updated] = await ctx.db
         .update(bookings)
         .set({ status: 'cancelled', cancelledAt: new Date(), cancelledBy: ctx.userId, updatedAt: new Date() })
-        .where(eq(bookings.id, input.id))
+        .where(and(
+          eq(bookings.id, input.id),
+          eq(bookings.driverId, ctx.userId),
+          or(eq(bookings.status, 'pending'), eq(bookings.status, 'confirmed'))
+        ))
         .returning()
+
+      if (!updated) {
+        throw new TRPCError({ code: 'CONFLICT', message: 'Le statut de la réservation a changé entre-temps' })
+      }
 
       return updated
     }),
@@ -165,8 +173,15 @@ export const bookingsRouter = createTRPCRouter({
       const [updated] = await ctx.db
         .update(bookings)
         .set({ status: 'confirmed', updatedAt: new Date() })
-        .where(eq(bookings.id, input.id))
+        .where(and(
+          eq(bookings.id, input.id),
+          eq(bookings.status, 'pending')
+        ))
         .returning()
+
+      if (!updated) {
+        throw new TRPCError({ code: 'CONFLICT', message: 'Le statut de la réservation a changé entre-temps' })
+      }
 
       return updated
     }),
@@ -193,8 +208,15 @@ export const bookingsRouter = createTRPCRouter({
       const [updated] = await ctx.db
         .update(bookings)
         .set({ status: 'cancelled', cancelledAt: new Date(), cancelledBy: ctx.userId, updatedAt: new Date() })
-        .where(eq(bookings.id, input.id))
+        .where(and(
+          eq(bookings.id, input.id),
+          eq(bookings.status, 'pending')
+        ))
         .returning()
+
+      if (!updated) {
+        throw new TRPCError({ code: 'CONFLICT', message: 'Le statut de la réservation a changé entre-temps' })
+      }
 
       return updated
     }),
@@ -268,34 +290,17 @@ export const bookingsRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const { code } = input
 
-      // Search by qr_code or by booking ID
-      let booking = await ctx.db.query.bookings.findFirst({
-        where: eq(bookings.qrCode, code),
+      // Exact match on qr_code or booking ID only (no partial matching)
+      const booking = await ctx.db.query.bookings.findFirst({
+        where: or(eq(bookings.qrCode, code), eq(bookings.id, code)),
+        with: { spot: true },
       })
-
-      if (!booking) {
-        // Try by ID (full or partial)
-        booking = await ctx.db.query.bookings.findFirst({
-          where: eq(bookings.id, code),
-        })
-      }
-
-      if (!booking) {
-        // Try partial match on qr_code (user might enter without prefix)
-        const allBookings = await ctx.db.query.bookings.findMany({
-          where: not(eq(bookings.status, 'cancelled')),
-        })
-        booking = allBookings.find((b) =>
-          b.qrCode?.includes(code) || b.id.startsWith(code.toLowerCase())
-        ) ?? null
-      }
 
       if (!booking) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Reservation introuvable' })
       }
 
-      // Get spot title
-      const spot = await ctx.db.query.spots.findFirst({
+      const spot = booking.spot ?? await ctx.db.query.spots.findFirst({
         where: eq(spots.id, booking.spotId),
       })
 

@@ -1,13 +1,96 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const WEBHOOK_SECRET = Deno.env.get("APIFY_WEBHOOK_SECRET") || "flashpark-apify-2026";
+const MAX_PAYLOAD_BYTES = 5 * 1024 * 1024; // 5MB
+
+const WEBHOOK_SECRET = Deno.env.get("APIFY_WEBHOOK_SECRET");
+if (!WEBHOOK_SECRET) {
+  console.error("APIFY_WEBHOOK_SECRET not configured");
+}
+
+// --- Validation helpers ---
+
+/** Remove control characters and trim whitespace from a string. */
+function sanitizeString(value: unknown): string {
+  if (typeof value !== "string") return "";
+  // Remove ASCII control characters (0x00-0x1F except \t \n \r) and DEL (0x7F)
+  return value.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "").trim();
+}
+
+function isPositiveNumberOrNull(value: unknown): boolean {
+  if (value === null || value === undefined) return true;
+  const n = Number(value);
+  return !isNaN(n) && n >= 0;
+}
+
+function isValidRating(value: unknown): boolean {
+  if (value === null || value === undefined) return true;
+  const n = Number(value);
+  return !isNaN(n) && n >= 0 && n <= 5;
+}
+
+interface ValidationResult {
+  valid: boolean;
+  error?: string;
+}
+
+function validatePayload(body: any): ValidationResult {
+  const { source, data, type } = body;
+
+  if (typeof source !== "string" || source.trim().length === 0 || source.length > 100) {
+    return { valid: false, error: "source must be a non-empty string (max 100 chars)" };
+  }
+
+  if (!Array.isArray(data)) {
+    return { valid: false, error: "data must be an array" };
+  }
+
+  if (data.length > 500) {
+    return { valid: false, error: "data array exceeds maximum of 500 items" };
+  }
+
+  if (type === "competitor_data") {
+    for (let i = 0; i < data.length; i++) {
+      const item = data[i];
+      if (typeof item !== "object" || item === null) {
+        return { valid: false, error: `data[${i}] must be an object` };
+      }
+
+      const city = item.city;
+      if (typeof city !== "string" || city.trim().length === 0 || city.length > 100) {
+        return { valid: false, error: `data[${i}].city must be a non-empty string (max 100 chars)` };
+      }
+
+      const spotName = item.spot_name || item.name;
+      if (typeof spotName !== "string" || spotName.trim().length === 0 || spotName.length > 200) {
+        return { valid: false, error: `data[${i}].spot_name must be a non-empty string (max 200 chars)` };
+      }
+
+      if (!isPositiveNumberOrNull(item.price_hour ?? item.priceHour ?? null)) {
+        return { valid: false, error: `data[${i}].price_hour must be a positive number if present` };
+      }
+      if (!isPositiveNumberOrNull(item.price_day ?? item.priceDay ?? null)) {
+        return { valid: false, error: `data[${i}].price_day must be a positive number if present` };
+      }
+      if (!isPositiveNumberOrNull(item.price_month ?? item.priceMonth ?? null)) {
+        return { valid: false, error: `data[${i}].price_month must be a positive number if present` };
+      }
+      if (!isValidRating(item.rating ?? null)) {
+        return { valid: false, error: `data[${i}].rating must be between 0 and 5 if present` };
+      }
+    }
+  }
+
+  return { valid: true };
+}
+
+// --- Handler ---
 
 Deno.serve(async (req: Request) => {
+  // CORS preflight — restricted to server-to-server; no browser origin needed
   if (req.method === "OPTIONS") {
     return new Response(null, {
       headers: {
-        "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "POST, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Webhook-Secret",
       },
@@ -18,14 +101,48 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405 });
   }
 
+  // 1. Ensure webhook secret is configured
+  if (!WEBHOOK_SECRET) {
+    console.error("[SECURITY] APIFY_WEBHOOK_SECRET env var is missing — rejecting all requests");
+    return new Response(JSON.stringify({ error: "Server misconfiguration" }), { status: 500 });
+  }
+
+  // 2. Authenticate
   const secret = req.headers.get("x-webhook-secret");
   if (secret !== WEBHOOK_SECRET) {
+    console.error("[SECURITY] Invalid webhook secret provided", {
+      providedLength: secret?.length ?? 0,
+      remoteAddr: req.headers.get("x-forwarded-for") || "unknown",
+    });
     return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+  }
+
+  // 3. Reject oversized payloads
+  const contentLength = parseInt(req.headers.get("content-length") || "0");
+  if (contentLength > MAX_PAYLOAD_BYTES) {
+    console.error("[SECURITY] Payload too large", { contentLength });
+    return new Response("Payload too large", { status: 413 });
   }
 
   try {
     const body = await req.json();
     const { source, data, type } = body;
+
+    // 4. Input validation
+    const validation = validatePayload(body);
+    if (!validation.valid) {
+      console.error("[VALIDATION] Payload rejected", {
+        error: validation.error,
+        type,
+        source: typeof source === "string" ? source.slice(0, 50) : typeof source,
+        dataType: typeof data,
+        dataLength: Array.isArray(data) ? data.length : "N/A",
+      });
+      return new Response(JSON.stringify({ error: validation.error }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -34,11 +151,11 @@ Deno.serve(async (req: Request) => {
 
     if (type === "competitor_data" && Array.isArray(data)) {
       const rows = data.map((item: any) => ({
-        source: source || item.source || "unknown",
-        country: item.country || "France",
-        city: item.city || "unknown",
-        spot_name: item.spot_name || item.name || null,
-        spot_type: item.spot_type || item.type || null,
+        source: sanitizeString(source || item.source || "unknown"),
+        country: sanitizeString(item.country || "France"),
+        city: sanitizeString(item.city || "unknown"),
+        spot_name: sanitizeString(item.spot_name || item.name || "") || null,
+        spot_type: sanitizeString(item.spot_type || item.type || "") || null,
         price_hour: item.price_hour ?? item.priceHour ?? null,
         price_day: item.price_day ?? item.priceDay ?? null,
         price_month: item.price_month ?? item.priceMonth ?? null,
@@ -46,7 +163,7 @@ Deno.serve(async (req: Request) => {
         review_count: item.review_count ?? item.reviewCount ?? 0,
         latitude: item.latitude ?? item.lat ?? null,
         longitude: item.longitude ?? item.lng ?? null,
-        address: item.address ?? null,
+        address: sanitizeString(item.address ?? "") || null,
         features: item.features ?? [],
         raw_data: item,
         scraped_at: new Date().toISOString(),
@@ -99,11 +216,11 @@ Deno.serve(async (req: Request) => {
 
     if (type === "seo_data" && Array.isArray(data)) {
       const rows = data.map((item: any) => ({
-        keyword: item.keyword,
+        keyword: sanitizeString(item.keyword),
         position: item.position ?? null,
-        competitor: item.competitor ?? null,
-        url: item.url ?? null,
-        city: item.city ?? null,
+        competitor: sanitizeString(item.competitor ?? "") || null,
+        url: sanitizeString(item.url ?? "") || null,
+        city: sanitizeString(item.city ?? "") || null,
         scraped_at: new Date().toISOString(),
       }));
 
@@ -115,11 +232,13 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    console.error("[VALIDATION] Unknown type received", { type: String(type).slice(0, 50) });
     return new Response(JSON.stringify({ error: "Unknown type" }), {
       status: 400,
       headers: { "Content-Type": "application/json" },
     });
   } catch (err) {
+    console.error("[ERROR] Webhook processing failed", { error: String(err) });
     return new Response(JSON.stringify({ error: String(err) }), {
       status: 500,
       headers: { "Content-Type": "application/json" },

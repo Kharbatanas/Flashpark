@@ -45,7 +45,8 @@ export async function POST(request: Request) {
       eq(bookings.spotId, spotId),
       or(
         and(gte(bookings.startTime, start), lte(bookings.startTime, end)),
-        and(gte(bookings.endTime, start), lte(bookings.endTime, end))
+        and(gte(bookings.endTime, start), lte(bookings.endTime, end)),
+        and(lte(bookings.startTime, start), gte(bookings.endTime, end))
       )
     ),
   })

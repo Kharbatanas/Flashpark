@@ -36,6 +36,13 @@ export const usersRouter = createTRPCRouter({
     })
     if (!user) throw new TRPCError({ code: 'NOT_FOUND', message: 'Utilisateur introuvable — vérifiez que votre compte est bien créé' })
 
+    if (!user?.isVerified) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: 'Vous devez compléter la vérification d\'identité pour devenir hôte',
+      })
+    }
+
     const newRole = user.role === 'driver' ? 'both' : user.role
     const [updated] = await ctx.db
       .update(users)

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { createSupabaseServerClient } from '../../../../lib/supabase/server'
-import { db, bookings } from '@flashpark/db'
+import { db, bookings, users } from '@flashpark/db'
 import { eq } from 'drizzle-orm'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? 'sk_test_placeholder', {
@@ -16,6 +16,14 @@ export async function POST(request: Request) {
 
   if (!user) {
     return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+  }
+
+  const dbUser = await db.query.users.findFirst({
+    where: eq(users.supabaseId, user.id),
+  })
+
+  if (!dbUser) {
+    return NextResponse.json({ error: 'Utilisateur introuvable' }, { status: 404 })
   }
 
   let bookingId: string
@@ -34,6 +42,10 @@ export async function POST(request: Request) {
 
   if (!booking) {
     return NextResponse.json({ error: 'Réservation introuvable' }, { status: 404 })
+  }
+
+  if (booking.driverId !== dbUser.id) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const totalCents = Math.round(Number(booking.totalPrice) * 100)

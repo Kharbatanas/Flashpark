@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createSupabaseServerClient } from '../../../../../lib/supabase/server'
 import { db, bookings, users } from '@flashpark/db'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, or } from 'drizzle-orm'
 
 interface RouteParams {
   params: { id: string }
@@ -47,7 +47,11 @@ export async function POST(_request: Request, { params }: RouteParams) {
   const [updated] = await db
     .update(bookings)
     .set({ status: 'cancelled', cancelledAt: new Date(), cancelledBy: dbUser.id, updatedAt: new Date() })
-    .where(eq(bookings.id, params.id))
+    .where(and(
+      eq(bookings.id, params.id),
+      eq(bookings.driverId, dbUser.id),
+      or(eq(bookings.status, 'pending'), eq(bookings.status, 'confirmed'))
+    ))
     .returning()
 
   return NextResponse.json({ success: true, booking: updated })

@@ -172,9 +172,9 @@ export default async function AdminDashboard() {
               Exporter
             </button>
             <Link
-              href={process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000'}
+              href={process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3002'}
               target="_blank"
-              className="flex items-center gap-2 rounded-lg bg-[#0540FF] px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition"
+              className="flex items-center gap-2 rounded-lg bg-[#06B6D4] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0891B2] transition"
             >
               ← Voir Website
             </Link>
