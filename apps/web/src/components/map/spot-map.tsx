@@ -84,7 +84,7 @@ function SpotListFallback({ spots }: { spots: Spot[] }) {
 export function SpotMap({ initialSpots }: SpotMapProps) {
   const mapRef = useRef<MapRef>(null)
   const searchParams = useSearchParams()
-  const [spots] = useState<Spot[]>(initialSpots)
+  const [spots, setSpots] = useState<Spot[]>(initialSpots)
   const [selected, setSelected] = useState<Spot | null>(null)
   const [searchValue, setSearchValue] = useState(searchParams.get('q') ?? '')
   const [suggestions, setSuggestions] = useState<MapboxFeature[]>([])
@@ -105,7 +105,28 @@ export function SpotMap({ initialSpots }: SpotMapProps) {
     zoom: 6,
   })
 
-  // Try to auto-detect user location on mount
+  // Fetch spots near a location
+  async function fetchSpotsNear(lat: number, lng: number) {
+    try {
+      const res = await fetch('/api/trpc/spots.nearby', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ json: { lat, lng, radiusKm: 30 } }),
+      })
+      if (!res.ok) return
+      const data = await res.json()
+      const newSpots = data?.result?.data?.json
+      if (Array.isArray(newSpots) && newSpots.length > 0) {
+        setSpots((prev) => {
+          const ids = new Set(prev.map((s) => s.id))
+          const unique = newSpots.filter((s: Spot) => !ids.has(s.id))
+          return [...prev, ...unique]
+        })
+      }
+    } catch { /* silent */ }
+  }
+
+  // Auto-detect user location on mount
   useEffect(() => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -113,6 +134,7 @@ export function SpotMap({ initialSpots }: SpotMapProps) {
           const { latitude, longitude } = pos.coords
           setViewport({ latitude, longitude, zoom: 13 })
           mapRef.current?.flyTo({ center: [longitude, latitude], zoom: 13, duration: 1500 })
+          fetchSpotsNear(latitude, longitude)
         },
         () => { /* user denied — stay on France view */ }
       )
@@ -133,6 +155,7 @@ export function SpotMap({ initialSpots }: SpotMapProps) {
           const [lng, lat] = feature.center
           setViewport({ longitude: lng, latitude: lat, zoom: 14 })
           mapRef.current?.flyTo({ center: [lng, lat], zoom: 14, duration: 1200 })
+          fetchSpotsNear(lat, lng)
         }
       })
       .catch(() => { /* silent */ })
@@ -185,6 +208,7 @@ export function SpotMap({ initialSpots }: SpotMapProps) {
     setShowSuggestions(false)
     setViewport({ longitude: lng, latitude: lat, zoom: 14 })
     mapRef.current?.flyTo({ center: [lng, lat], zoom: 14, duration: 1200 })
+    fetchSpotsNear(lat, lng)
   }
 
   const handleSearchSubmit = useCallback(
