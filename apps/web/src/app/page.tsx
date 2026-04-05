@@ -5,6 +5,72 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { Navbar } from '../components/navbar'
+import { TRPCProvider } from '../lib/trpc/client'
+
+function RevenueSimulator() {
+  const [pricePerHour, setPricePerHour] = useState(3)
+  const [hoursPerDay, setHoursPerDay] = useState(6)
+  const [daysPerWeek, setDaysPerWeek] = useState(5)
+
+  const grossMonthly = pricePerHour * hoursPerDay * daysPerWeek * 4.33
+  const netMonthly = Math.round(grossMonthly * 0.8)
+  const netYearly = netMonthly * 12
+
+  return (
+    <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur">
+      <p className="text-xs font-bold uppercase tracking-[0.15em] text-blue-400">Simulateur de revenus</p>
+      <p className="mt-1 mb-6 text-sm text-gray-500">Ajustez selon votre situation</p>
+
+      <div className="space-y-5">
+        {/* Price per hour */}
+        <div>
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-400">Prix par heure</span>
+            <span className="font-semibold text-white">{pricePerHour} EUR</span>
+          </div>
+          <input
+            type="range" min={1} max={10} step={0.5} value={pricePerHour}
+            onChange={(e) => setPricePerHour(Number(e.target.value))}
+            className="mt-2 w-full accent-[#0540FF]"
+          />
+        </div>
+
+        {/* Hours per day */}
+        <div>
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-400">Heures par jour</span>
+            <span className="font-semibold text-white">{hoursPerDay}h</span>
+          </div>
+          <input
+            type="range" min={1} max={24} step={1} value={hoursPerDay}
+            onChange={(e) => setHoursPerDay(Number(e.target.value))}
+            className="mt-2 w-full accent-[#0540FF]"
+          />
+        </div>
+
+        {/* Days per week */}
+        <div>
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-400">Jours par semaine</span>
+            <span className="font-semibold text-white">{daysPerWeek}j</span>
+          </div>
+          <input
+            type="range" min={1} max={7} step={1} value={daysPerWeek}
+            onChange={(e) => setDaysPerWeek(Number(e.target.value))}
+            className="mt-2 w-full accent-[#0540FF]"
+          />
+        </div>
+      </div>
+
+      {/* Result */}
+      <div className="mt-6 rounded-xl bg-[#0540FF]/15 ring-1 ring-[#0540FF]/30 p-4 text-center">
+        <p className="text-3xl font-extrabold text-white">{netMonthly.toLocaleString('fr-FR')} EUR</p>
+        <p className="text-xs text-blue-300">par mois (net apres 20% de commission)</p>
+        <p className="mt-2 text-sm text-gray-400">{netYearly.toLocaleString('fr-FR')} EUR / an</p>
+      </div>
+    </div>
+  )
+}
 
 export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState('')
@@ -16,6 +82,7 @@ export default function HomePage() {
   }
 
   return (
+    <TRPCProvider>
     <div className="min-h-screen bg-white">
       <Navbar />
 
@@ -265,34 +332,9 @@ export default function HomePage() {
                 </div>
               </div>
 
-              {/* Right — revenue calc */}
+              {/* Right — interactive revenue simulator */}
               <div className="flex items-center justify-center">
-                <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur">
-                  <p className="text-xs font-bold uppercase tracking-[0.15em] text-blue-400">Simulateur de revenus</p>
-                  <p className="mt-1 mb-6 text-sm text-gray-500">Base sur 3 EUR/h, commission 20%</p>
-                  <div className="space-y-3">
-                    {[
-                      { label: '4h / jour', val: '216 EUR', sub: 'par mois' },
-                      { label: '8h / jour', val: '432 EUR', sub: 'par mois' },
-                      { label: '24h / 7j', val: '1 080 EUR', sub: 'par mois', highlight: true },
-                    ].map(({ label, val, sub, highlight }) => (
-                      <div
-                        key={label}
-                        className={`flex items-center justify-between rounded-xl px-4 py-3.5 ${
-                          highlight
-                            ? 'bg-[#0540FF]/15 ring-1 ring-[#0540FF]/30'
-                            : 'border border-white/10 bg-white/5'
-                        }`}
-                      >
-                        <p className="text-sm text-gray-400">{label}</p>
-                        <div className="text-right">
-                          <p className={`text-sm font-bold ${highlight ? 'text-white' : 'text-gray-200'}`}>{val}</p>
-                          <p className="text-xs text-gray-500">{sub}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <RevenueSimulator />
               </div>
             </div>
           </div>
@@ -364,5 +406,6 @@ export default function HomePage() {
         </div>
       </footer>
     </div>
+    </TRPCProvider>
   )
 }

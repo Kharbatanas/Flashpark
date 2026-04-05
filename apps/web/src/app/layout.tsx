@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   title: 'Flashpark — Louez votre place de parking',
   description:
     'Trouvez et réservez des places de parking privées en quelques secondes. Flashpark, la marketplace P2P du parking.',
-  keywords: ['parking', 'location parking', 'place de parking', 'Nice', 'P2P parking'],
+  keywords: ['parking', 'location parking', 'place de parking', 'France', 'P2P parking', 'Montpellier', 'Nice', 'Paris'],
   openGraph: {
     title: 'Flashpark',
     description: "L'Airbnb du parking",

@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { eq, and, or, not, gte, lte } from 'drizzle-orm'
 import { TRPCError } from '@trpc/server'
 import { createTRPCRouter, protectedProcedure, hostProcedure } from '../trpc'
-import { bookings, spots, vehicles } from '@flashpark/db'
+import { bookings, spots, vehicles, availability } from '@flashpark/db'
 
 export const bookingsRouter = createTRPCRouter({
   // Create a booking (returns clientSecret for Stripe)
@@ -27,6 +27,23 @@ export const bookingsRouter = createTRPCRouter({
         where: and(eq(spots.id, spotId), eq(spots.status, 'active')),
       })
       if (!spot) throw new TRPCError({ code: 'NOT_FOUND', message: 'Place non disponible' })
+
+      // Check availability — if host blocked this period, reject
+      const blockedSlot = await ctx.db.query.availability.findFirst({
+        where: and(
+          eq(availability.spotId, spotId),
+          eq(availability.isAvailable, false),
+          // blocked slot overlaps with requested time
+          or(
+            and(gte(availability.startTime, startTime), lte(availability.startTime, endTime)),
+            and(gte(availability.endTime, startTime), lte(availability.endTime, endTime)),
+            and(lte(availability.startTime, startTime), gte(availability.endTime, endTime))
+          )
+        ),
+      })
+      if (blockedSlot) {
+        throw new TRPCError({ code: 'CONFLICT', message: 'Ce créneau est indisponible (bloqué par l\'hôte)' })
+      }
 
       // Check for conflicts — exclude cancelled/refunded bookings
       const conflicts = await ctx.db.query.bookings.findFirst({
