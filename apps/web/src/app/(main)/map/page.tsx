@@ -23,7 +23,7 @@ export default async function MapPage() {
     initialSpots = await caller.spots.nearby({
       lat: 46.603354,
       lng: 1.888334,
-      radiusKm: 500,
+      radiusKm: 1000,
     })
   } catch (err) {
     console.error('Failed to fetch initial spots:', err)
