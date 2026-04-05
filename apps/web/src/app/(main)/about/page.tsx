@@ -19,16 +19,16 @@ export default function AboutPage() {
         </Link>
 
         <h1 className="text-3xl font-extrabold text-[#1A1A2E]">A propos de Flashpark</h1>
-        <p className="mt-2 text-sm text-gray-500">La marketplace du parking prive a Nice</p>
+        <p className="mt-2 text-sm text-gray-500">La marketplace du parking prive en France</p>
 
         <div className="mt-10 space-y-8 text-sm leading-relaxed text-gray-600">
           <section>
             <h2 className="mb-3 text-lg font-bold text-[#1A1A2E]">Notre mission</h2>
             <p>
-              Flashpark est ne d&apos;un constat simple : a Nice, trouver une place de parking
-              releve du parcours du combattant, alors que des milliers de places privees restent
-              vides chaque jour. Notre mission est de connecter conducteurs et proprietaires pour
-              rendre le stationnement plus simple, plus abordable et plus intelligent.
+              Flashpark est ne d&apos;un constat simple : dans les grandes villes francaises, trouver
+              une place de parking releve du parcours du combattant, alors que des milliers de places
+              privees restent vides chaque jour. Notre mission est de connecter conducteurs et
+              proprietaires pour rendre le stationnement plus simple, plus abordable et plus intelligent.
             </p>
           </section>
 
@@ -43,12 +43,12 @@ export default function AboutPage() {
           </section>
 
           <section>
-            <h2 className="mb-3 text-lg font-bold text-[#1A1A2E]">Pourquoi Nice ?</h2>
+            <h2 className="mb-3 text-lg font-bold text-[#1A1A2E]">Disponible partout en France</h2>
             <p>
-              Nice est l&apos;une des villes les plus denses de France avec une pression de
-              stationnement parmi les plus elevees du pays. C&apos;est le terrain ideal pour lancer
-              Flashpark. Notre ambition : transformer le stationnement a Nice des l&apos;ete 2026,
-              puis etendre le service a d&apos;autres villes de la Cote d&apos;Azur et au-dela.
+              Flashpark est disponible dans toutes les grandes villes francaises : Paris, Lyon,
+              Marseille, Montpellier, Nice, Toulouse, Bordeaux et bien d&apos;autres. Notre ambition :
+              transformer le stationnement urbain en France des 2026, en commencant par les villes
+              ou la pression de stationnement est la plus forte.
             </p>
           </section>
 

@@ -16,6 +16,7 @@ interface FormData {
   pricePerDay: string
   status: 'active' | 'inactive'
   photos: string[]
+  parkingInstructions: string
 }
 
 const AMENITIES = [
@@ -48,6 +49,7 @@ export default function EditListingPage() {
     pricePerDay: '',
     status: 'active',
     photos: [],
+    parkingInstructions: '',
   })
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -66,6 +68,7 @@ export default function EditListingPage() {
         pricePerDay: spot.pricePerDay ? String(spot.pricePerDay) : '',
         status: spot.status === 'active' ? 'active' : 'inactive',
         photos: (spot.photos as string[]) ?? [],
+        parkingInstructions: (spot as any).parkingInstructions ?? '',
       })
     }
   }, [spot])
@@ -147,6 +150,7 @@ export default function EditListingPage() {
         description: form.description || undefined,
         amenities: form.amenities,
         photos: form.photos,
+        parkingInstructions: form.parkingInstructions || undefined,
         pricePerHour: Number(form.pricePerHour),
         pricePerDay: form.pricePerDay ? Number(form.pricePerDay) : undefined,
         status: form.status,
@@ -303,6 +307,20 @@ export default function EditListingPage() {
                   />
                 </div>
               </div>
+            </div>
+
+            {/* Parking instructions */}
+            <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+              <h2 className="mb-4 font-semibold text-[#1A1A2E]">Instructions d&apos;acces</h2>
+              <p className="mb-2 text-xs text-gray-500">Etage, code portail, numero de place, consignes...</p>
+              <textarea
+                value={form.parkingInstructions}
+                onChange={(e) => update({ parkingInstructions: e.target.value })}
+                rows={3}
+                maxLength={500}
+                placeholder="Ex: 2eme sous-sol, place 42. Code portail: 1234. Tourner a droite apres l'entree."
+                className="w-full resize-none rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-[#0540FF] focus:outline-none focus:ring-1 focus:ring-[#0540FF]"
+              />
             </div>
 
             {/* Availability link */}

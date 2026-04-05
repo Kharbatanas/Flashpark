@@ -51,6 +51,7 @@ interface SpotData {
   rating: string | null
   reviewCount: number
   maxVehicleHeight: string | null
+  parkingInstructions: string | null
   hostId: string
 }
 
@@ -178,13 +179,30 @@ export function SpotContent({ spot }: { spot: SpotData }) {
 
               {/* Max vehicle height */}
               {spot.maxVehicleHeight && (
-                <div className="mb-6 rounded-xl border border-gray-100 bg-white p-4">
+                <div className="mb-4 rounded-xl border border-gray-100 bg-white p-4">
                   <p className="text-sm text-gray-600">
                     <span className="font-medium text-[#1A1A2E]">Hauteur maximale :</span>{' '}
                     {Number(spot.maxVehicleHeight).toFixed(1)} m
                   </p>
                 </div>
               )}
+
+              {/* Parking instructions */}
+              {spot.parkingInstructions && (
+                <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50/50 p-4">
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-blue-600">Instructions d&apos;acces</p>
+                  <p className="text-sm text-gray-700 whitespace-pre-line">{spot.parkingInstructions}</p>
+                </div>
+              )}
+
+              {/* Cancellation policy */}
+              <div className="mb-6 rounded-xl border border-gray-100 bg-white p-4">
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Politique d&apos;annulation</p>
+                <p className="text-sm text-gray-600">
+                  Annulation gratuite jusqu&apos;a 24h avant le debut de la reservation.
+                  Au-dela, le montant total est du.
+                </p>
+              </div>
 
               <Separator className="my-6" />
 

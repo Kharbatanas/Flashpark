@@ -40,6 +40,7 @@ export const spots = pgTable('spots', {
   maxVehicleHeight: numeric('max_vehicle_height', { precision: 5, scale: 2 }), // in meters
   photos: jsonb('photos').$type<string[]>().notNull().default([]),
   amenities: jsonb('amenities').$type<string[]>().notNull().default([]),
+  parkingInstructions: text('parking_instructions'),
   instantBook: boolean('instant_book').notNull().default(true),
   rating: numeric('rating', { precision: 3, scale: 2 }),
   reviewCount: integer('review_count').notNull().default(0),

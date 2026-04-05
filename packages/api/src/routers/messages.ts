@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { eq, and, or, asc, desc } from 'drizzle-orm'
+import { eq, and, or, not, asc, desc, isNull } from 'drizzle-orm'
 import { TRPCError } from '@trpc/server'
 import { createTRPCRouter, protectedProcedure } from '../trpc'
 import { messages, bookings, spots } from '@flashpark/db'
@@ -66,7 +66,7 @@ export const messagesRouter = createTRPCRouter({
       return msg
     }),
 
-  // Mark messages as read
+  // Mark messages as read (only messages NOT sent by current user)
   markRead: protectedProcedure
     .input(z.object({ bookingId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
@@ -76,10 +76,8 @@ export const messagesRouter = createTRPCRouter({
         .where(
           and(
             eq(messages.bookingId, input.bookingId),
-            // Only mark OTHER person's messages as read
-            or(
-              eq(messages.senderId, ctx.userId) // actually we want NOT equal, but drizzle doesn't have neq easily
-            )
+            not(eq(messages.senderId, ctx.userId)),
+            isNull(messages.readAt)
           )
         )
       return { ok: true }

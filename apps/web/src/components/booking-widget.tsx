@@ -63,6 +63,16 @@ export function BookingWidget({ spot }: BookingWidgetProps) {
   })
   const addVehicle = api.vehicles.create.useMutation()
 
+  // Check slot availability in real-time
+  const start = new Date(startTime)
+  const end = new Date(endTime)
+  const slotValid = start < end && start > now
+
+  const { data: slotCheck } = api.bookings.checkSlot.useQuery(
+    { spotId: spot.id, startTime: start, endTime: end },
+    { enabled: slotValid, refetchOnWindowFocus: false }
+  )
+
   // Auto-select default vehicle when loaded
   useEffect(() => {
     if (myVehicles?.length && !selectedVehicleId) {
@@ -73,13 +83,12 @@ export function BookingWidget({ spot }: BookingWidgetProps) {
 
   const pricePerHour = Number(spot.pricePerHour)
 
-  const start = new Date(startTime)
-  const end = new Date(endTime)
   const hours = Math.max(0, (end.getTime() - start.getTime()) / (1000 * 60 * 60))
   const total = Math.round(hours * pricePerHour * 100) / 100
   const platformFee = Math.round(total * 0.2 * 100) / 100
 
-  const isValid = hours > 0 && hours <= 24 && start > now
+  const slotTaken = slotCheck && !slotCheck.available
+  const isValid = hours > 0 && hours <= 24 && start > now && !slotTaken
 
   const createBooking = api.bookings.create.useMutation()
 
@@ -188,6 +197,20 @@ export function BookingWidget({ spot }: BookingWidgetProps) {
               />
             </div>
           </div>
+
+          {/* Slot availability indicator */}
+          {slotValid && slotTaken && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {slotCheck?.reason === 'already_booked'
+                ? 'Ce creneau est deja reserve. Essayez d\'autres horaires.'
+                : 'Ce creneau est bloque par l\'hote.'}
+            </div>
+          )}
+          {slotValid && slotCheck?.available && (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+              Creneau disponible
+            </div>
+          )}
 
           {/* Price breakdown */}
           <AnimatePresence>

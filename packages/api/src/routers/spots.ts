@@ -68,6 +68,7 @@ export const spotsRouter = createTRPCRouter({
         parklioDeviceId: z.string().optional(),
         maxVehicleHeight: z.number().positive().optional(),
         amenities: z.array(z.string()).default([]),
+        parkingInstructions: z.string().max(500).optional(),
         instantBook: z.boolean().default(true),
         photos: z.array(z.string().url()).default([]),
       })
@@ -102,6 +103,7 @@ export const spotsRouter = createTRPCRouter({
         status: z.enum(['active', 'inactive']).optional(),
         amenities: z.array(z.string()).optional(),
         photos: z.array(z.string().url()).optional(),
+        parkingInstructions: z.string().max(500).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -114,6 +116,7 @@ export const spotsRouter = createTRPCRouter({
       if (rest.status !== undefined) setValues.status = rest.status
       if (rest.amenities !== undefined) setValues.amenities = rest.amenities
       if (rest.photos !== undefined) setValues.photos = rest.photos
+      if (rest.parkingInstructions !== undefined) setValues.parkingInstructions = rest.parkingInstructions
       if (pricePerHour !== undefined) setValues.pricePerHour = String(pricePerHour)
       if (pricePerDay !== undefined) setValues.pricePerDay = String(pricePerDay)
 

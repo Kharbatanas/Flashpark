@@ -52,7 +52,7 @@ function SpotListFallback({ spots }: { spots: Spot[] }) {
         </div>
       </FadeIn>
       <StaggerContainer className="grid gap-4 sm:grid-cols-2">
-        {spots.map((spot) => (
+        {filteredSpots.map((spot) => (
           <StaggerItem key={spot.id}>
             <HoverScale>
               <Link href={`/spot/${spot.id}`} className="block rounded-2xl border border-gray-100 bg-white p-4 shadow-sm hover:shadow-md transition-shadow">
@@ -90,8 +90,16 @@ export function SpotMap({ initialSpots }: SpotMapProps) {
   const [suggestions, setSuggestions] = useState<MapboxFeature[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [searchLoading, setSearchLoading] = useState(false)
+  const [filterType, setFilterType] = useState<string>('all')
+  const [filterMaxPrice, setFilterMaxPrice] = useState<number>(50)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const searchContainerRef = useRef<HTMLDivElement>(null)
+
+  const filteredSpots = spots.filter((s) => {
+    if (filterType !== 'all' && s.type !== filterType) return false
+    if (Number(s.pricePerHour) > filterMaxPrice) return false
+    return true
+  })
   const [viewport, setViewport] = useState({
     ...FRANCE_CENTER,
     zoom: 6,
@@ -274,6 +282,38 @@ export function SpotMap({ initialSpots }: SpotMapProps) {
         )}
       </motion.div>
 
+      {/* Filters */}
+      <div className="absolute left-4 top-[72px] z-10 flex flex-wrap gap-2">
+        <select
+          value={filterType}
+          onChange={(e) => setFilterType(e.target.value)}
+          className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-sm"
+        >
+          <option value="all">Tous les types</option>
+          <option value="outdoor">Exterieur</option>
+          <option value="indoor">Interieur</option>
+          <option value="garage">Garage</option>
+          <option value="covered">Couvert</option>
+          <option value="underground">Souterrain</option>
+        </select>
+        <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm">
+          <span className="text-xs text-gray-500">Max</span>
+          <input
+            type="range"
+            min={1}
+            max={20}
+            step={0.5}
+            value={filterMaxPrice}
+            onChange={(e) => setFilterMaxPrice(Number(e.target.value))}
+            className="w-20 accent-[#0540FF]"
+          />
+          <span className="text-xs font-semibold text-[#1A1A2E]">{filterMaxPrice} EUR/h</span>
+        </div>
+        <span className="flex items-center rounded-xl bg-white/90 px-2.5 py-1.5 text-xs text-gray-500 shadow-sm border border-gray-200">
+          {filteredSpots.length} place{filteredSpots.length !== 1 ? 's' : ''}
+        </span>
+      </div>
+
       {/* Map */}
       <Map
         ref={mapRef}
@@ -285,7 +325,7 @@ export function SpotMap({ initialSpots }: SpotMapProps) {
       >
         <NavigationControl position="bottom-right" />
 
-        {spots.map((spot) => (
+        {filteredSpots.map((spot) => (
           <Marker
             key={spot.id}
             longitude={Number(spot.longitude)}
