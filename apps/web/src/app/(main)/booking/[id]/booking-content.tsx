@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { QRCodeSVG } from 'qrcode.react'
 import { ReviewsSection } from '../../../../components/reviews-section'
 import { BookingMessages } from '../../../../components/booking-messages'
 import { PageTransition, FadeIn, StaggerContainer, StaggerItem, motion } from '../../../../components/motion'
@@ -162,19 +163,26 @@ export function BookingContent({
                   <p className="mb-3 text-xs font-medium uppercase tracking-wide text-gray-400">
                     Référence de réservation
                   </p>
-                  <div className="flex items-center gap-3 rounded-xl bg-gray-50 p-4">
-                    <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-lg border-2 border-dashed border-gray-200 bg-white">
-                      <svg className="h-8 w-8 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-                      </svg>
+                  <div className="flex items-center gap-4 rounded-xl bg-gray-50 p-4">
+                    <div className="flex-shrink-0 rounded-lg bg-white p-2">
+                      <QRCodeSVG
+                        value={qrCode ?? booking.id}
+                        size={80}
+                        bgColor="#ffffff"
+                        fgColor="#1A1A2E"
+                        level="M"
+                      />
                     </div>
                     <div>
-                      <p className="font-mono text-sm font-semibold text-[#1A1A2E]">
+                      <p className="font-mono text-lg font-bold text-[#1A1A2E]">
                         {qrCode ?? booking.id.slice(0, 8).toUpperCase()}
                       </p>
                       <p className="font-mono text-[10px] text-gray-400 break-all">{booking.id}</p>
                       {spot.hasSmartGate && (
-                        <p className="mt-1 text-xs text-[#10B981]">Acces Smart Gate active</p>
+                        <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-[#10B981]">
+                          <span className="flex h-2 w-2 rounded-full bg-emerald-400" />
+                          Acces Smart Gate active
+                        </p>
                       )}
                     </div>
                   </div>
