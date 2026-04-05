@@ -8,6 +8,7 @@ import { messagesRouter } from './routers/messages'
 import { availabilityRouter } from './routers/availability'
 import { verificationRouter } from './routers/verification'
 import { notificationsRouter } from './routers/notifications'
+import { wishlistsRouter } from './routers/wishlists'
 
 export const appRouter = createTRPCRouter({
   spots: spotsRouter,
@@ -19,6 +20,7 @@ export const appRouter = createTRPCRouter({
   availability: availabilityRouter,
   verification: verificationRouter,
   notifications: notificationsRouter,
+  wishlists: wishlistsRouter,
 })
 
 export type AppRouter = typeof appRouter
