@@ -14,7 +14,7 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
-import { Search, Star, MapPin, ChevronRight } from 'lucide-react-native'
+import { Search, Star, MapPin, ChevronRight, Bell } from 'lucide-react-native'
 import { supabase } from '../../lib/supabase'
 import { COLORS, TYPE_LABELS, PLACEHOLDER_PHOTOS } from '../../lib/constants'
 
@@ -151,6 +151,7 @@ export default function HomeScreen() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [unreadNotifs, setUnreadNotifs] = useState(0)
 
   const fetchUser = useCallback(async () => {
     try {
@@ -159,6 +160,21 @@ export default function HomeScreen() {
         const meta = user.user_metadata
         setUserName(meta?.first_name ?? meta?.full_name?.split(' ')[0] ?? null)
         setAvatarUrl(meta?.avatar_url ?? null)
+
+        // Fetch unread notification count
+        const { data: dbUser } = await supabase
+          .from('users')
+          .select('id')
+          .eq('supabase_id', user.id)
+          .single()
+        if (dbUser) {
+          const { count } = await supabase
+            .from('notifications')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', dbUser.id)
+            .is('read_at', null)
+          setUnreadNotifs(count ?? 0)
+        }
       }
     } catch {
       // Silently ignore auth errors
@@ -226,20 +242,36 @@ export default function HomeScreen() {
             </Text>
             <Text style={styles.subtitle}>Trouvez votre place de parking</Text>
           </View>
-          <TouchableOpacity
-            onPress={() => router.push('/(tabs)/profile')}
-            activeOpacity={0.7}
-          >
-            {avatarUrl ? (
-              <Image source={{ uri: avatarUrl }} style={styles.avatar} />
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <Text style={styles.avatarText}>
-                  {userName ? userName[0].toUpperCase() : '?'}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
+          <View style={styles.headerRight}>
+            <TouchableOpacity
+              onPress={() => router.push('/notifications')}
+              activeOpacity={0.7}
+              style={styles.bellBtn}
+            >
+              <Bell color={COLORS.gray700} size={22} />
+              {unreadNotifs > 0 && (
+                <View style={styles.bellBadge}>
+                  <Text style={styles.bellBadgeText}>
+                    {unreadNotifs > 9 ? '9+' : unreadNotifs}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => router.push('/(tabs)/profile')}
+              activeOpacity={0.7}
+            >
+              {avatarUrl ? (
+                <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+              ) : (
+                <View style={styles.avatarPlaceholder}>
+                  <Text style={styles.avatarText}>
+                    {userName ? userName[0].toUpperCase() : '?'}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Search Bar */}
@@ -399,6 +431,36 @@ const styles = StyleSheet.create({
   },
   headerLeft: {
     flex: 1,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  bellBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.gray100,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bellBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: COLORS.danger,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  bellBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.white,
   },
   greeting: {
     fontSize: 24,

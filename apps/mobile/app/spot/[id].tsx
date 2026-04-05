@@ -28,6 +28,8 @@ import {
   Plus,
   ChevronRight,
   User,
+  Car,
+  ChevronDown,
 } from 'lucide-react-native'
 import { supabase } from '../../lib/supabase'
 import {
@@ -56,6 +58,7 @@ interface Spot {
   rating: string | null
   review_count: number
   max_vehicle_height: string | null
+  parking_instructions: string | null
   host_id: string | null
 }
 
@@ -65,6 +68,14 @@ interface HostInfo {
   last_name: string
   avatar_url: string | null
   created_at: string
+}
+
+interface Vehicle {
+  id: string
+  license_plate: string
+  brand: string | null
+  model: string | null
+  vehicle_height: string | null
 }
 
 function formatPrice(price: string | number): string {
@@ -140,6 +151,9 @@ export default function SpotDetailScreen() {
   const [liked, setLiked] = useState(false)
   const [photoIndex, setPhotoIndex] = useState(0)
   const [hours, setHours] = useState(2)
+  const [vehicles, setVehicles] = useState<Vehicle[]>([])
+  const [selectedVehicle, setSelectedVehicle] = useState<string | null>(null)
+  const [showVehiclePicker, setShowVehiclePicker] = useState(false)
 
   const pricePerHour = spot ? Number(spot.price_per_hour) : 0
   const subtotal = Math.round(hours * pricePerHour * 100) / 100
@@ -154,7 +168,34 @@ export default function SpotDetailScreen() {
 
   useEffect(() => {
     if (id) loadSpot()
+    loadVehicles()
   }, [id])
+
+  async function loadVehicles() {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data: dbUser } = await supabase
+        .from('users')
+        .select('id')
+        .eq('supabase_id', user.id)
+        .single()
+      if (!dbUser) return
+
+      const { data } = await supabase
+        .from('vehicles')
+        .select('id, license_plate, brand, model, vehicle_height')
+        .eq('user_id', dbUser.id)
+        .order('created_at', { ascending: false })
+
+      if (data && data.length > 0) {
+        setVehicles(data)
+        setSelectedVehicle(data[0].id)
+      }
+    } catch {
+      // vehicles table may not exist yet
+    }
+  }
 
   async function loadSpot() {
     setLoading(true)
@@ -208,6 +249,13 @@ export default function SpotDetailScreen() {
     }
 
     if (!spot) return
+
+    // Validate future date
+    if (defaultStart <= new Date()) {
+      Alert.alert('Erreur', "L'heure de debut doit etre dans le futur")
+      return
+    }
+
     setBooking(true)
 
     try {
@@ -220,6 +268,49 @@ export default function SpotDetailScreen() {
       if (!dbUser) {
         setBooking(false)
         Alert.alert('Erreur', 'Profil introuvable. Veuillez vous reconnecter.')
+        return
+      }
+
+      // Check vehicle height against max_vehicle_height
+      if (selectedVehicle && spot.max_vehicle_height) {
+        const vehicle = vehicles.find(v => v.id === selectedVehicle)
+        if (vehicle?.vehicle_height && Number(vehicle.vehicle_height) > Number(spot.max_vehicle_height)) {
+          setBooking(false)
+          Alert.alert(
+            'Vehicule trop haut',
+            `Votre vehicule (${Number(vehicle.vehicle_height).toFixed(1)}m) depasse la hauteur max de ${Number(spot.max_vehicle_height).toFixed(1)}m.`
+          )
+          return
+        }
+      }
+
+      // Check for booking conflicts
+      const { data: conflicts } = await supabase
+        .from('bookings')
+        .select('id')
+        .eq('spot_id', spot.id)
+        .not('status', 'in', '("cancelled","refunded")')
+        .or(`and(start_time.gte.${defaultStart.toISOString()},start_time.lte.${defaultEnd.toISOString()}),and(end_time.gte.${defaultStart.toISOString()},end_time.lte.${defaultEnd.toISOString()}),and(start_time.lte.${defaultStart.toISOString()},end_time.gte.${defaultEnd.toISOString()})`)
+        .limit(1)
+
+      if (conflicts && conflicts.length > 0) {
+        setBooking(false)
+        Alert.alert('Creneau indisponible', 'Ce creneau est deja reserve. Essayez d\'autres horaires.')
+        return
+      }
+
+      // Check host availability (blocked slots)
+      const { data: blocked } = await supabase
+        .from('availability')
+        .select('id')
+        .eq('spot_id', spot.id)
+        .eq('is_available', false)
+        .or(`and(start_time.gte.${defaultStart.toISOString()},start_time.lte.${defaultEnd.toISOString()}),and(end_time.gte.${defaultStart.toISOString()},end_time.lte.${defaultEnd.toISOString()}),and(start_time.lte.${defaultStart.toISOString()},end_time.gte.${defaultEnd.toISOString()})`)
+        .limit(1)
+
+      if (blocked && blocked.length > 0) {
+        setBooking(false)
+        Alert.alert('Creneau bloque', 'Ce creneau est indisponible (bloque par l\'hote).')
         return
       }
 
@@ -238,6 +329,7 @@ export default function SpotDetailScreen() {
           platform_fee: String(platformFee),
           host_payout: String(hostPayout),
           status: 'pending',
+          ...(selectedVehicle ? { vehicle_id: selectedVehicle } : {}),
         })
         .select('id')
         .single()
@@ -245,7 +337,11 @@ export default function SpotDetailScreen() {
       setBooking(false)
 
       if (error) {
-        Alert.alert('Erreur', error.message)
+        if (error.message.includes('unique') || error.message.includes('conflict')) {
+          Alert.alert('Creneau indisponible', 'Ce creneau vient d\'etre reserve par quelqu\'un d\'autre.')
+        } else {
+          Alert.alert('Erreur', error.message)
+        }
       } else if (newBooking) {
         router.push(`/booking/${newBooking.id}`)
       }
@@ -484,6 +580,32 @@ export default function SpotDetailScreen() {
             </>
           )}
 
+          {/* Parking instructions */}
+          {spot.parking_instructions && (
+            <>
+              <View style={{ backgroundColor: '#EFF6FF', borderRadius: 14, padding: 14 }}>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: COLORS.primary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>
+                  Instructions d'acces
+                </Text>
+                <Text style={{ fontSize: 14, color: COLORS.gray700, lineHeight: 20 }}>
+                  {spot.parking_instructions}
+                </Text>
+              </View>
+              <View style={styles.divider} />
+            </>
+          )}
+
+          {/* Cancellation policy */}
+          <View style={{ backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.gray200, borderRadius: 14, padding: 14 }}>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: COLORS.gray400, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>
+              Politique d'annulation
+            </Text>
+            <Text style={{ fontSize: 13, color: COLORS.gray500, lineHeight: 20 }}>
+              Annulation gratuite jusqu'a 24h avant le debut. Au-dela, le montant total est du.
+            </Text>
+          </View>
+          <View style={styles.divider} />
+
           {/* Host info card */}
           {host && (
             <>
@@ -555,6 +677,53 @@ export default function SpotDetailScreen() {
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* Vehicle selector */}
+        {vehicles.length > 0 && (
+          <View style={styles.vehicleSection}>
+            <TouchableOpacity
+              style={styles.vehicleSelector}
+              onPress={() => setShowVehiclePicker(!showVehiclePicker)}
+              activeOpacity={0.7}
+            >
+              <Car color={COLORS.gray500} size={16} />
+              <Text style={styles.vehicleSelectorText} numberOfLines={1}>
+                {selectedVehicle
+                  ? (() => {
+                      const v = vehicles.find(veh => veh.id === selectedVehicle)
+                      return v ? `${v.brand ?? ''} ${v.model ?? ''} — ${v.license_plate}`.trim() : 'Selectionner'
+                    })()
+                  : 'Selectionner un vehicule'}
+              </Text>
+              <ChevronDown color={COLORS.gray400} size={16} />
+            </TouchableOpacity>
+            {showVehiclePicker && (
+              <View style={styles.vehicleDropdown}>
+                {vehicles.map(v => (
+                  <TouchableOpacity
+                    key={v.id}
+                    style={[
+                      styles.vehicleOption,
+                      v.id === selectedVehicle && styles.vehicleOptionActive,
+                    ]}
+                    onPress={() => {
+                      setSelectedVehicle(v.id)
+                      setShowVehiclePicker(false)
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[
+                      styles.vehicleOptionText,
+                      v.id === selectedVehicle && { color: COLORS.primary, fontWeight: '700' },
+                    ]}>
+                      {v.brand ?? ''} {v.model ?? ''} — {v.license_plate}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
 
         <View style={styles.footerTotalRow}>
           <Text style={styles.footerTotalLabel}>
@@ -947,6 +1116,49 @@ const styles = StyleSheet.create({
     color: COLORS.dark,
     minWidth: 32,
     textAlign: 'center',
+  },
+
+  /* Vehicle selector */
+  vehicleSection: {
+    marginBottom: 10,
+  },
+  vehicleSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: COLORS.gray50,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+  },
+  vehicleSelectorText: {
+    flex: 1,
+    fontSize: 13,
+    color: COLORS.dark,
+    fontWeight: '500',
+  },
+  vehicleDropdown: {
+    marginTop: 4,
+    backgroundColor: COLORS.white,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    overflow: 'hidden',
+  },
+  vehicleOption: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gray100,
+  },
+  vehicleOptionActive: {
+    backgroundColor: COLORS.primaryLight,
+  },
+  vehicleOptionText: {
+    fontSize: 13,
+    color: COLORS.dark,
   },
 
   /* Footer total */

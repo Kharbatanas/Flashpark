@@ -24,6 +24,7 @@ import {
   Check,
   X,
   CarFront,
+  CalendarOff,
 } from 'lucide-react-native'
 import { supabase } from '../../lib/supabase'
 import { COLORS, TYPE_LABELS, STATUS_CONFIG } from '../../lib/constants'
@@ -482,6 +483,24 @@ export default function HostScreen() {
               </>
             )}
 
+            {/* Quick actions */}
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Actions rapides</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.quickAction}
+              onPress={() => router.push('/host/availability')}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.quickActionIcon, { backgroundColor: COLORS.warningLight }]}>
+                <CalendarOff color={COLORS.warning} size={18} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.quickActionTitle}>Gerer les disponibilites</Text>
+                <Text style={styles.quickActionDesc}>Bloquer des creneaux sur vos annonces</Text>
+              </View>
+            </TouchableOpacity>
+
             {/* Listings section header */}
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Mes annonces</Text>
@@ -644,6 +663,37 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700',
     color: COLORS.dark,
+  },
+
+  // Quick actions
+  quickAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    backgroundColor: COLORS.white,
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: COLORS.gray100,
+  },
+  quickActionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickActionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.dark,
+  },
+  quickActionDesc: {
+    fontSize: 12,
+    color: COLORS.gray400,
+    marginTop: 1,
   },
 
   // Add button

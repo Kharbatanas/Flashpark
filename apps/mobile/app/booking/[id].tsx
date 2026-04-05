@@ -18,7 +18,9 @@ import {
   Calendar,
   Clock,
   Share2,
+  MessageCircle,
 } from 'lucide-react-native'
+import QRCode from 'react-native-qrcode-svg'
 import { supabase } from '../../lib/supabase'
 import { COLORS, STATUS_CONFIG } from '../../lib/constants'
 
@@ -161,11 +163,19 @@ export default function BookingConfirmationScreen() {
           <Text style={styles.heroSubtitle}>Ton parking t'attend</Text>
         </View>
 
-        {/* ===== QR Code placeholder ===== */}
+        {/* ===== QR Code ===== */}
         <View style={styles.qrSection}>
-          <View style={styles.qrPlaceholder}>
-            <Text style={styles.qrText}>QR</Text>
+          <View style={{ backgroundColor: COLORS.white, borderRadius: 16, padding: 16 }}>
+            <QRCode
+              value={booking.qr_code ?? booking.id}
+              size={160}
+              color={COLORS.dark}
+              backgroundColor={COLORS.white}
+            />
           </View>
+          <Text style={{ fontSize: 18, fontWeight: '800', color: COLORS.dark, marginTop: 12 }}>
+            {booking.qr_code ?? refCode}
+          </Text>
           <Text style={styles.qrHint}>
             Presentez ce code a votre arrivee
           </Text>
@@ -264,6 +274,17 @@ export default function BookingConfirmationScreen() {
 
         {/* ===== Action buttons ===== */}
         <View style={styles.actions}>
+          <TouchableOpacity
+            style={styles.messageBtn}
+            onPress={() => router.push(`/booking/chat?bookingId=${booking.id}`)}
+            activeOpacity={0.8}
+          >
+            <MessageCircle color={COLORS.primary} size={18} />
+            <Text style={styles.messageBtnText}>
+              Contacter l'hote
+            </Text>
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={styles.primaryBtn}
             onPress={() => router.push('/(tabs)/bookings')}
@@ -547,6 +568,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 24,
     gap: 12,
+  },
+  messageBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primaryLight,
+    borderRadius: 14,
+    paddingVertical: 16,
+  },
+  messageBtnText: {
+    color: COLORS.primary,
+    fontWeight: '700',
+    fontSize: 16,
   },
   primaryBtn: {
     backgroundColor: COLORS.primary,
