@@ -4,7 +4,7 @@ import { serverApi } from '../../../lib/trpc/server'
 
 export const dynamic = 'force-dynamic'
 
-export default async function MapPage() {
+async function MapContent() {
   let initialSpots: Array<{
     id: string
     title: string
@@ -29,6 +29,10 @@ export default async function MapPage() {
     console.error('Failed to fetch initial spots:', err)
   }
 
+  return <SpotMap initialSpots={initialSpots} />
+}
+
+export default function MapPage() {
   return (
     <Suspense fallback={
       <div className="flex h-[calc(100vh-72px)] items-center justify-center bg-white">
@@ -38,7 +42,7 @@ export default async function MapPage() {
         </div>
       </div>
     }>
-      <SpotMap initialSpots={initialSpots} />
+      <MapContent />
     </Suspense>
   )
 }
