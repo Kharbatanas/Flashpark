@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { motion, useScroll, useTransform, useInView } from 'framer-motion'
 import { Navbar } from '../components/navbar'
@@ -55,11 +54,11 @@ function Counter({ value, suffix = '' }: { value: number; suffix?: string }) {
 
 /* ───── Parking type categories ───── */
 const CATEGORIES = [
-  { key: 'outdoor', label: 'Exterieur', icon: Car, img: 'https://images.unsplash.com/photo-1506521781263-d8422e82f27a?w=400&h=300&fit=crop' },
-  { key: 'garage', label: 'Garage', icon: Warehouse, img: 'https://images.unsplash.com/photo-1558618666-fcd25c85f82e?w=400&h=300&fit=crop' },
-  { key: 'covered', label: 'Couvert', icon: Building2, img: 'https://images.unsplash.com/photo-1573348722427-f1d6819fdf98?w=400&h=300&fit=crop' },
-  { key: 'underground', label: 'Souterrain', icon: ParkingCircle, img: 'https://images.unsplash.com/photo-1590674899484-d5640e854abe?w=400&h=300&fit=crop' },
-  { key: 'smart', label: 'Smart Gate', icon: Zap, img: 'https://images.unsplash.com/photo-1611288875785-d0bef9e2fa48?w=400&h=300&fit=crop' },
+  { key: 'outdoor', label: 'Exterieur', icon: Car, color: 'from-sky-400 to-blue-500' },
+  { key: 'garage', label: 'Garage', icon: Warehouse, color: 'from-amber-400 to-orange-500' },
+  { key: 'covered', label: 'Couvert', icon: Building2, color: 'from-emerald-400 to-green-500' },
+  { key: 'underground', label: 'Souterrain', icon: ParkingCircle, color: 'from-violet-400 to-purple-500' },
+  { key: 'smart', label: 'Smart Gate', icon: Zap, color: 'from-blue-500 to-indigo-600' },
 ]
 
 /* ───── Simulator ───── */
@@ -216,26 +215,24 @@ export default function HomePage() {
         </motion.div>
       </section>
 
-      {/* ─── CATEGORY CARDS ─── */}
-      <section className="py-16 bg-white">
+      {/* ─── CATEGORY TABS ─── */}
+      <section className="py-12 bg-white border-b border-gray-100">
         <div className="mx-auto max-w-6xl px-6">
-          <Reveal>
-            <h2 className="text-2xl font-bold text-gray-900 mb-8">Explorer par type</h2>
-          </Reveal>
-          <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide -mx-6 px-6">
-            {CATEGORIES.map((cat, i) => (
-              <Reveal key={cat.key} delay={i * 0.06}>
-                <Link href={`/map?type=${cat.key}`}
-                  className="group flex-shrink-0 w-44">
-                  <div className="relative h-32 w-full overflow-hidden rounded-2xl bg-gray-100">
-                    <img src={cat.img} alt={cat.label}
-                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
-                  </div>
-                  <p className="mt-2.5 text-sm font-semibold text-gray-900">{cat.label}</p>
-                </Link>
-              </Reveal>
-            ))}
+          <div className="flex justify-center gap-8 md:gap-12 overflow-x-auto scrollbar-hide pb-2">
+            {CATEGORIES.map((cat, i) => {
+              const Icon = cat.icon
+              return (
+                <Reveal key={cat.key} delay={i * 0.05}>
+                  <Link href={`/map?type=${cat.key}`}
+                    className="group flex flex-col items-center gap-2 min-w-[72px]">
+                    <div className={`flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br ${cat.color} shadow-sm transition-all duration-200 group-hover:shadow-md group-hover:scale-105`}>
+                      <Icon className="h-6 w-6 text-white" strokeWidth={1.8} />
+                    </div>
+                    <span className="text-xs font-semibold text-gray-600 group-hover:text-gray-900 transition-colors">{cat.label}</span>
+                  </Link>
+                </Reveal>
+              )
+            })}
           </div>
         </div>
       </section>

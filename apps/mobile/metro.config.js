@@ -14,7 +14,7 @@ config.resolver.nodeModulesPaths = [
 
 // Mock native-only modules for web
 const nativeModuleStub = path.resolve(__dirname, 'stubs/native-stub.js')
-const nativeOnlyModules = ['react-native-maps']
+const nativeOnlyModules = ['react-native-maps', '@gorhom/bottom-sheet']
 
 const originalResolveRequest = config.resolver.resolveRequest
 config.resolver.resolveRequest = (context, moduleName, platform) => {
