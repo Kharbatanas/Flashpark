@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { href: '/bookings', label: 'Réservations', icon: '📋' },
   { href: '/payments', label: 'Paiements', icon: '€' },
   { href: '/reviews', label: 'Avis', icon: '⭐' },
+  { href: '/intelligence', label: 'Veille Marché', icon: '🕵️' },
   { href: '/support', label: 'Support', icon: '💬' },
   { href: '/settings', label: 'Paramètres', icon: '⚙️' },
 ]
