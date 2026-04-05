@@ -70,7 +70,7 @@ export function BookingWidget({ spot }: BookingWidgetProps) {
 
   const { data: slotCheck } = api.bookings.checkSlot.useQuery(
     { spotId: spot.id, startTime: start, endTime: end },
-    { enabled: slotValid, refetchOnWindowFocus: false }
+    { enabled: slotValid, refetchOnWindowFocus: false, retry: false }
   )
 
   // Auto-select default vehicle when loaded

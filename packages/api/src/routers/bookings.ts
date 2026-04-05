@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { eq, and, or, not, gte, lte } from 'drizzle-orm'
 import { TRPCError } from '@trpc/server'
-import { createTRPCRouter, protectedProcedure, hostProcedure } from '../trpc'
+import { createTRPCRouter, publicProcedure, protectedProcedure, hostProcedure } from '../trpc'
 import { bookings, spots, vehicles, availability } from '@flashpark/db'
 
 export const bookingsRouter = createTRPCRouter({
@@ -218,7 +218,7 @@ export const bookingsRouter = createTRPCRouter({
     }),
 
   // Public: check if a time slot is available for a spot
-  checkSlot: protectedProcedure
+  checkSlot: publicProcedure
     .input(z.object({
       spotId: z.string().uuid(),
       startTime: z.date(),
