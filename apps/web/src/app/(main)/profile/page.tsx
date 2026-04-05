@@ -72,13 +72,11 @@ function ProfileContent() {
   const router = useRouter()
   const { data: user, isLoading, refetch } = api.users.me.useQuery()
   const updateProfile = api.users.updateProfile.useMutation({ onSuccess: () => refetch() })
-  const becomeHost    = api.users.becomeHost.useMutation({ onSuccess: () => refetch() })
 
   const [activeTab, setActiveTab] = useState<Tab>('info')
   const [fullName, setFullName]   = useState('')
   const [phone, setPhone]         = useState('')
   const [saving, setSaving]       = useState(false)
-  const [hostLoading, setHostLoading] = useState(false)
   const [error, setError]         = useState<string | null>(null)
   const [success, setSuccess]     = useState(false)
 
@@ -106,18 +104,8 @@ function ProfileContent() {
     }
   }
 
-  async function handleBecomeHost() {
-    setHostLoading(true)
-    setError(null)
-    try {
-      await becomeHost.mutateAsync()
-      setSuccess(true)
-      setTimeout(() => setSuccess(false), 3000)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur')
-    } finally {
-      setHostLoading(false)
-    }
+  function handleBecomeHost() {
+    router.push('/host/onboarding')
   }
 
   const roleKey  = user?.role as keyof typeof ROLE_BADGE | undefined
@@ -323,10 +311,8 @@ function ProfileContent() {
                               </p>
                               <Button
                                 onClick={handleBecomeHost}
-                                disabled={hostLoading}
                                 className="mt-4 rounded-xl bg-[#0540FF] px-5 font-semibold hover:bg-[#0435D2]"
                               >
-                                {hostLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                                 Devenir hôte
                                 <ChevronRight className="ml-1 h-4 w-4" />
                               </Button>
