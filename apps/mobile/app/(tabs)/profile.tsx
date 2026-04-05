@@ -7,6 +7,7 @@ import {
   TextInput,
   Alert,
   ScrollView,
+  RefreshControl,
   Platform,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -17,13 +18,18 @@ import {
   ChevronRight,
   ChevronDown,
   ChevronUp,
-  Landmark,
   Bell,
   Lock,
   LifeBuoy,
   FileText,
   Shield,
   Zap,
+  Car,
+  CreditCard,
+  LayoutDashboard,
+  List,
+  TrendingUp,
+  UserCircle,
 } from 'lucide-react-native'
 import { supabase } from '../../lib/supabase'
 import { COLORS } from '../../lib/constants'
@@ -52,56 +58,40 @@ interface UserStats {
   memberSince: string
 }
 
-const MENU_ITEMS = [
-  { icon: Landmark, label: 'Compte bancaire', key: 'bank' },
-  { icon: Bell, label: 'Notifications', key: 'notifications' },
-  { icon: Lock, label: 'Mot de passe', key: 'password' },
-  { icon: LifeBuoy, label: 'Support / Aide', key: 'support' },
-  { icon: FileText, label: "Conditions d'utilisation", key: 'terms' },
-  { icon: Shield, label: 'Politique de confidentialite', key: 'privacy' },
-]
-
 /* ---- Skeleton ---- */
 function SkeletonBox({ width, height, borderRadius = 8, style }: {
   width: number | string; height: number; borderRadius?: number; style?: any
 }) {
   return (
-    <View style={[{ width: width as any, height, borderRadius, backgroundColor: 'rgba(255,255,255,0.2)' }, style]} />
+    <View style={[{ width: width as any, height, borderRadius, backgroundColor: COLORS.gray200 }, style]} />
   )
 }
 
 function ProfileSkeleton() {
   return (
     <View style={styles.container}>
-      {/* Header skeleton */}
       <View style={styles.headerGradient}>
         <SafeAreaView edges={['top']} style={styles.headerSafe}>
-          <View style={[styles.headerContent, { gap: 12 }]}>
-            <SkeletonBox width={88} height={88} borderRadius={44} />
-            <SkeletonBox width={160} height={22} borderRadius={6} />
-            <SkeletonBox width={200} height={13} borderRadius={4} />
+          <View style={styles.headerContent}>
+            <View style={[styles.avatarLarge, { backgroundColor: 'rgba(255,255,255,0.15)' }]} />
+            <SkeletonBox width={160} height={20} borderRadius={6} style={{ backgroundColor: 'rgba(255,255,255,0.2)', marginBottom: 6 }} />
+            <SkeletonBox width={200} height={13} borderRadius={4} style={{ backgroundColor: 'rgba(255,255,255,0.15)' }} />
           </View>
         </SafeAreaView>
       </View>
-
-      {/* Stats skeleton */}
-      <View style={[styles.statsRow, { justifyContent: 'center', gap: 20 }]}>
+      <View style={styles.statsRow}>
         {[0, 1, 2].map((i) => (
           <View key={i} style={styles.statItem}>
-            <View style={{ width: 40, height: 18, borderRadius: 4, backgroundColor: COLORS.gray200 }} />
-            <View style={{ width: 60, height: 11, borderRadius: 3, backgroundColor: COLORS.gray200, marginTop: 4 }} />
+            <SkeletonBox width={40} height={18} borderRadius={4} />
+            <SkeletonBox width={60} height={11} borderRadius={3} style={{ marginTop: 4 }} />
           </View>
         ))}
       </View>
-
-      {/* Menu skeleton */}
-      <View style={[styles.menuCard, { gap: 0 }]}>
-        {[0, 1, 2, 3, 4, 5].map((i) => (
-          <View key={i} style={[styles.menuRow, i < 5 && styles.menuRowBorder]}>
-            <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: COLORS.gray100 }} />
-            <View style={{ flex: 1, marginLeft: 12 }}>
-              <View style={{ width: '60%', height: 15, borderRadius: 4, backgroundColor: COLORS.gray100 }} />
-            </View>
+      <View style={[styles.sectionCard, { marginTop: 20 }]}>
+        {[0, 1, 2, 3, 4].map((i) => (
+          <View key={i} style={[styles.menuRow, i < 4 && styles.menuRowBorder]}>
+            <SkeletonBox width={36} height={36} borderRadius={10} />
+            <SkeletonBox width="55%" height={15} borderRadius={4} style={{ marginLeft: 12 }} />
           </View>
         ))}
       </View>
@@ -113,6 +103,7 @@ export default function ProfileScreen() {
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [stats, setStats] = useState<UserStats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [authed, setAuthed] = useState(false)
 
   // Edit profile state
@@ -125,14 +116,15 @@ export default function ProfileScreen() {
     loadProfile()
   }, [])
 
-  const loadProfile = useCallback(async () => {
-    setLoading(true)
+  const loadProfile = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true)
+    else setLoading(true)
+
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
+      const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
         setLoading(false)
+        setRefreshing(false)
         return
       }
       setAuthed(true)
@@ -153,42 +145,27 @@ export default function ProfileScreen() {
       // Silently ignore
     }
     setLoading(false)
+    setRefreshing(false)
   }, [])
 
   async function loadStats(dbUserId: string, createdAt: string) {
     try {
       const [bookingsRes, reviewsRes] = await Promise.all([
-        supabase
-          .from('bookings')
-          .select('id', { count: 'exact', head: true })
-          .eq('driver_id', dbUserId),
-        supabase
-          .from('reviews')
-          .select('id', { count: 'exact', head: true })
-          .eq('reviewer_id', dbUserId),
+        supabase.from('bookings').select('id', { count: 'exact', head: true }).eq('driver_id', dbUserId),
+        supabase.from('reviews').select('id', { count: 'exact', head: true }).eq('reviewer_id', dbUserId),
       ])
-
       const date = new Date(createdAt)
-      const memberSince = date.toLocaleDateString('fr-FR', {
-        month: 'short',
-        year: 'numeric',
-      })
-
       setStats({
         bookingsCount: bookingsRes.count ?? 0,
         reviewsCount: reviewsRes.count ?? 0,
-        memberSince,
+        memberSince: date.toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' }),
       })
     } catch {
-      // Tables may not exist yet
       const date = new Date(createdAt)
       setStats({
         bookingsCount: 0,
         reviewsCount: 0,
-        memberSince: date.toLocaleDateString('fr-FR', {
-          month: 'short',
-          year: 'numeric',
-        }),
+        memberSince: date.toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' }),
       })
     }
   }
@@ -225,11 +202,7 @@ export default function ProfileScreen() {
   async function handleBecomeHost() {
     if (!profile) return
     const newRole = profile.role === 'driver' ? 'both' : profile.role
-    const { error } = await supabase
-      .from('users')
-      .update({ role: newRole })
-      .eq('id', profile.id)
-
+    const { error } = await supabase.from('users').update({ role: newRole }).eq('id', profile.id)
     if (!error) {
       setProfile((prev) => (prev ? { ...prev, role: newRole } : prev))
       Alert.alert('Felicitations !', 'Vous etes maintenant hote Flashpark.')
@@ -253,13 +226,14 @@ export default function ProfileScreen() {
   }
 
   function handleMenuPress(key: string) {
-    Alert.alert('Bientot disponible', 'Cette fonctionnalite arrive bientot.')
+    if (key === 'personal') router.push('/settings/personal')
+    else if (key === 'vehicles') router.push('/settings/vehicles')
+    else if (key === 'host_dashboard') router.push('/(tabs)/host')
+    else Alert.alert('Bientot disponible', 'Cette fonctionnalite arrive bientot.')
   }
 
   // --- Loading state ---
-  if (loading) {
-    return <ProfileSkeleton />
-  }
+  if (loading) return <ProfileSkeleton />
 
   // --- Guest state ---
   if (!authed) {
@@ -270,14 +244,8 @@ export default function ProfileScreen() {
             <User color={COLORS.gray300} size={44} />
           </View>
           <Text style={styles.guestTitle}>Non connecte</Text>
-          <Text style={styles.guestSub}>
-            Connectez-vous pour acceder a votre profil
-          </Text>
-          <TouchableOpacity
-            style={styles.loginBtn}
-            onPress={() => router.push('/(auth)/login')}
-            activeOpacity={0.7}
-          >
+          <Text style={styles.guestSub}>Connectez-vous pour acceder a votre profil</Text>
+          <TouchableOpacity style={styles.loginBtn} onPress={() => router.push('/(auth)/login')} activeOpacity={0.7}>
             <Text style={styles.loginBtnText}>Se connecter</Text>
           </TouchableOpacity>
         </View>
@@ -285,23 +253,35 @@ export default function ProfileScreen() {
     )
   }
 
-  // --- Authenticated state ---
+  const isHost = profile?.role === 'host' || profile?.role === 'both'
+  const isDriver = profile?.role === 'driver' || profile?.role === 'both'
   const roleConf = profile
-    ? ROLE_CONFIG[profile.role] ?? {
-        label: profile.role,
-        color: COLORS.gray500,
-        bg: COLORS.gray50,
-      }
+    ? ROLE_CONFIG[profile.role] ?? { label: profile.role, color: COLORS.gray500, bg: COLORS.gray50 }
     : null
 
   const initials = profile?.full_name
-    ? profile.full_name
-        .split(' ')
-        .map((n) => n[0])
-        .join('')
-        .toUpperCase()
-        .slice(0, 2)
+    ? profile.full_name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
     : profile?.email?.[0]?.toUpperCase() ?? 'U'
+
+  const ACCOUNT_ITEMS = [
+    { icon: UserCircle, label: 'Informations personnelles', key: 'personal' },
+    { icon: Car, label: 'Vehicules', key: 'vehicles' },
+    { icon: CreditCard, label: 'Paiement', key: 'payment' },
+    { icon: Bell, label: 'Notifications', key: 'notifications' },
+    { icon: Lock, label: 'Securite', key: 'security' },
+  ]
+
+  const HOST_ITEMS = [
+    { icon: LayoutDashboard, label: 'Tableau de bord hote', key: 'host_dashboard' },
+    { icon: List, label: 'Mes annonces', key: 'listings' },
+    { icon: TrendingUp, label: 'Revenus', key: 'revenue' },
+  ]
+
+  const SUPPORT_ITEMS = [
+    { icon: LifeBuoy, label: "Centre d'aide", key: 'help' },
+    { icon: FileText, label: "Conditions d'utilisation", key: 'terms' },
+    { icon: Shield, label: 'Confidentialite', key: 'privacy' },
+  ]
 
   return (
     <View style={styles.container}>
@@ -309,8 +289,15 @@ export default function ProfileScreen() {
         style={styles.container}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => loadProfile(true)}
+            tintColor={COLORS.primary}
+          />
+        }
       >
-        {/* ---- Header with avatar ---- */}
+        {/* ---- Header ---- */}
         <View style={styles.headerGradient}>
           <SafeAreaView edges={['top']} style={styles.headerSafe}>
             <View style={styles.headerContent}>
@@ -348,43 +335,106 @@ export default function ProfileScreen() {
           </View>
         )}
 
-        {/* ---- Menu list ---- */}
+        {/* ---- Section: Mon compte ---- */}
+        <Text style={styles.sectionLabel}>Mon compte</Text>
         <View style={styles.menuCard}>
-          {MENU_ITEMS.map((item, index) => {
+          {ACCOUNT_ITEMS.map((item, index) => {
             const Icon = item.icon
             return (
               <TouchableOpacity
                 key={item.key}
-                style={[
-                  styles.menuRow,
-                  index < MENU_ITEMS.length - 1 && styles.menuRowBorder,
-                ]}
+                style={[styles.menuRow, index < ACCOUNT_ITEMS.length - 1 && styles.menuRowBorder]}
                 onPress={() => handleMenuPress(item.key)}
                 activeOpacity={0.6}
               >
                 <View style={styles.menuIconWrap}>
-                  <Icon color={COLORS.gray700} size={20} />
+                  <Icon color={COLORS.primary} size={18} />
                 </View>
                 <Text style={styles.menuLabel}>{item.label}</Text>
-                <ChevronRight color={COLORS.gray300} size={20} />
+                <ChevronRight color={COLORS.gray300} size={18} />
               </TouchableOpacity>
             )
           })}
         </View>
 
+        {/* ---- Section: Hebergement (hosts only) ---- */}
+        {isHost && (
+          <>
+            <Text style={styles.sectionLabel}>Hebergement</Text>
+            <View style={styles.menuCard}>
+              {HOST_ITEMS.map((item, index) => {
+                const Icon = item.icon
+                return (
+                  <TouchableOpacity
+                    key={item.key}
+                    style={[styles.menuRow, index < HOST_ITEMS.length - 1 && styles.menuRowBorder]}
+                    onPress={() => handleMenuPress(item.key)}
+                    activeOpacity={0.6}
+                  >
+                    <View style={[styles.menuIconWrap, { backgroundColor: COLORS.successLight }]}>
+                      <Icon color={COLORS.success} size={18} />
+                    </View>
+                    <Text style={styles.menuLabel}>{item.label}</Text>
+                    <ChevronRight color={COLORS.gray300} size={18} />
+                  </TouchableOpacity>
+                )
+              })}
+            </View>
+          </>
+        )}
+
+        {/* ---- Section: Assistance ---- */}
+        <Text style={styles.sectionLabel}>Assistance</Text>
+        <View style={styles.menuCard}>
+          {SUPPORT_ITEMS.map((item, index) => {
+            const Icon = item.icon
+            return (
+              <TouchableOpacity
+                key={item.key}
+                style={[styles.menuRow, index < SUPPORT_ITEMS.length - 1 && styles.menuRowBorder]}
+                onPress={() => handleMenuPress(item.key)}
+                activeOpacity={0.6}
+              >
+                <View style={[styles.menuIconWrap, { backgroundColor: COLORS.gray100 }]}>
+                  <Icon color={COLORS.gray700} size={18} />
+                </View>
+                <Text style={styles.menuLabel}>{item.label}</Text>
+                <ChevronRight color={COLORS.gray300} size={18} />
+              </TouchableOpacity>
+            )
+          })}
+        </View>
+
+        {/* ---- Devenir hote CTA ---- */}
+        {profile && !isHost && profile.role !== 'admin' && (
+          <TouchableOpacity style={styles.hostCta} onPress={handleBecomeHost} activeOpacity={0.85}>
+            <View style={styles.hostCtaInner}>
+              <View style={styles.hostCtaIconWrap}>
+                <Zap color={COLORS.white} size={22} fill={COLORS.white} />
+              </View>
+              <View style={styles.hostCtaTextWrap}>
+                <Text style={styles.hostCtaTitle}>Devenir hote Flashpark</Text>
+                <Text style={styles.hostCtaDesc}>
+                  Louez votre place et generez des revenus. Gratuit, sans engagement.
+                </Text>
+              </View>
+              <ChevronRight color="rgba(255,255,255,0.6)" size={20} />
+            </View>
+          </TouchableOpacity>
+        )}
+
         {/* ---- Edit profile (collapsible) ---- */}
-        <View style={styles.sectionCard}>
+        <View style={styles.editCard}>
           <TouchableOpacity
-            style={styles.sectionHeader}
+            style={styles.editHeader}
             onPress={() => setEditOpen((prev) => !prev)}
             activeOpacity={0.7}
           >
-            <Text style={styles.sectionTitle}>Modifier le profil</Text>
-            {editOpen ? (
-              <ChevronUp color={COLORS.gray400} size={20} />
-            ) : (
-              <ChevronDown color={COLORS.gray400} size={20} />
-            )}
+            <Text style={styles.editHeaderTitle}>Modifier le profil</Text>
+            {editOpen
+              ? <ChevronUp color={COLORS.gray400} size={20} />
+              : <ChevronDown color={COLORS.gray400} size={20} />
+            }
           </TouchableOpacity>
 
           {editOpen && (
@@ -424,36 +474,27 @@ export default function ProfileScreen() {
           )}
         </View>
 
-        {/* ---- Become host CTA ---- */}
-        {profile &&
-          profile.role !== 'host' &&
-          profile.role !== 'both' &&
-          profile.role !== 'admin' && (
-            <TouchableOpacity style={styles.hostCta} onPress={handleBecomeHost} activeOpacity={0.8}>
-              <View style={styles.hostCtaInner}>
-                <Zap color={COLORS.warning} size={22} />
-                <View style={styles.hostCtaTextWrap}>
-                  <Text style={styles.hostCtaTitle}>Devenir hote Flashpark</Text>
-                  <Text style={styles.hostCtaDesc}>
-                    Louez votre place et generez des revenus. Gratuit, sans engagement.
-                  </Text>
-                </View>
-                <ChevronRight color={COLORS.gray400} size={20} />
-              </View>
-            </TouchableOpacity>
-          )}
-
         {/* ---- Sign out ---- */}
         <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut} activeOpacity={0.7}>
           <LogOut color={COLORS.danger} size={18} />
           <Text style={styles.signOutText}>Se deconnecter</Text>
         </TouchableOpacity>
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: 48 }} />
       </ScrollView>
     </View>
   )
 }
+
+const CARD_SHADOW = Platform.select({
+  ios: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+  },
+  android: { elevation: 2 },
+}) as any
 
 const styles = StyleSheet.create({
   container: {
@@ -464,7 +505,7 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
 
-  // --- Header gradient ---
+  // --- Header ---
   headerGradient: {
     paddingBottom: 32,
     backgroundColor: COLORS.primary,
@@ -478,9 +519,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   avatarLarge: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: 'rgba(255,255,255,0.2)',
     borderWidth: 3,
     borderColor: 'rgba(255,255,255,0.4)',
@@ -489,15 +530,15 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   avatarLargeText: {
-    fontSize: 32,
+    fontSize: 30,
     fontWeight: '800',
     color: COLORS.white,
   },
   headerName: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '800',
     color: COLORS.white,
-    marginBottom: 2,
+    marginBottom: 3,
   },
   headerEmail: {
     fontSize: 13,
@@ -524,22 +565,14 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingVertical: 16,
     paddingHorizontal: 8,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.08,
-        shadowRadius: 12,
-      },
-      android: { elevation: 4 },
-    }),
+    ...CARD_SHADOW,
   },
   statItem: {
     flex: 1,
     alignItems: 'center',
   },
   statValue: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '800',
     color: COLORS.dark,
     marginBottom: 2,
@@ -548,6 +581,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: COLORS.gray400,
     fontWeight: '500',
+    textAlign: 'center',
   },
   statDivider: {
     width: 1,
@@ -555,27 +589,30 @@ const styles = StyleSheet.create({
     marginVertical: 2,
   },
 
-  // --- Menu ---
+  // --- Section labels ---
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.gray400,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginTop: 24,
+    marginBottom: 6,
+    marginHorizontal: 20,
+  },
+
+  // --- Menu card ---
   menuCard: {
     backgroundColor: COLORS.white,
     marginHorizontal: 16,
-    marginTop: 20,
     borderRadius: 16,
     overflow: 'hidden',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-      },
-      android: { elevation: 2 },
-    }),
+    ...CARD_SHADOW,
   },
   menuRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 15,
+    paddingVertical: 14,
     paddingHorizontal: 16,
   },
   menuRowBorder: {
@@ -586,7 +623,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: COLORS.gray50,
+    backgroundColor: COLORS.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -598,31 +635,62 @@ const styles = StyleSheet.create({
     color: COLORS.dark,
   },
 
-  // --- Edit profile ---
-  sectionCard: {
-    backgroundColor: COLORS.white,
+  // --- Host CTA ---
+  hostCta: {
     marginHorizontal: 16,
-    marginTop: 16,
+    marginTop: 20,
     borderRadius: 16,
     overflow: 'hidden',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-      },
-      android: { elevation: 2 },
-    }),
   },
-  sectionHeader: {
+  hostCtaInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    gap: 14,
+    backgroundColor: COLORS.primary,
+    borderRadius: 16,
+  },
+  hostCtaIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  hostCtaTextWrap: {
+    flex: 1,
+  },
+  hostCtaTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.white,
+    marginBottom: 3,
+  },
+  hostCtaDesc: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.7)',
+    lineHeight: 17,
+  },
+
+  // --- Edit profile ---
+  editCard: {
+    backgroundColor: COLORS.white,
+    marginHorizontal: 16,
+    marginTop: 20,
+    borderRadius: 16,
+    overflow: 'hidden',
+    ...CARD_SHADOW,
+  },
+  editHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 16,
   },
-  sectionTitle: {
+  editHeaderTitle: {
     fontSize: 15,
     fontWeight: '700',
     color: COLORS.dark,
@@ -631,6 +699,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 16,
     gap: 14,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.gray100,
+    paddingTop: 14,
   },
   inputGroup: {
     gap: 6,
@@ -665,48 +736,19 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
 
-  // --- Host CTA ---
-  hostCta: {
-    marginHorizontal: 16,
-    marginTop: 16,
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  hostCtaInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 18,
-    paddingHorizontal: 16,
-    gap: 12,
-    backgroundColor: COLORS.dark,
-    borderRadius: 16,
-  },
-  hostCtaTextWrap: {
-    flex: 1,
-  },
-  hostCtaTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: COLORS.white,
-    marginBottom: 2,
-  },
-  hostCtaDesc: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.6)',
-    lineHeight: 17,
-  },
-
   // --- Sign out ---
   signOutBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: COLORS.dangerLight,
+    borderWidth: 1.5,
+    borderColor: COLORS.danger,
     marginHorizontal: 16,
-    marginTop: 16,
+    marginTop: 20,
     borderRadius: 16,
     paddingVertical: 15,
+    backgroundColor: COLORS.white,
   },
   signOutText: {
     color: COLORS.danger,

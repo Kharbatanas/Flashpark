@@ -10,7 +10,7 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
-import { Calendar, MapPin, CarFront } from 'lucide-react-native'
+import { Calendar, MapPin, CarFront, Clock, ChevronRight, Star } from 'lucide-react-native'
 import { supabase } from '../../lib/supabase'
 import { COLORS, STATUS_CONFIG, PLACEHOLDER_PHOTOS } from '../../lib/constants'
 
@@ -77,17 +77,27 @@ function SkeletonBox({ width, height, borderRadius = 8, style }: {
 
 function BookingsSkeleton() {
   return (
-    <View style={{ padding: 16, gap: 12 }}>
+    <View style={{ padding: 16, gap: 14 }}>
       {[0, 1, 2, 3].map((i) => (
-        <View key={i} style={{ flexDirection: 'row', borderRadius: 16, overflow: 'hidden', backgroundColor: COLORS.white }}>
-          <SkeletonBox width={100} height={120} borderRadius={0} />
-          <View style={{ flex: 1, padding: 12, gap: 8 }}>
-            <SkeletonBox width="70%" height={15} borderRadius={4} />
-            <SkeletonBox width="50%" height={12} borderRadius={4} />
-            <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
-              <SkeletonBox width="40%" height={12} borderRadius={4} />
-              <SkeletonBox width="40%" height={12} borderRadius={4} />
+        <View
+          key={i}
+          style={{
+            flexDirection: 'row',
+            borderRadius: 18,
+            overflow: 'hidden',
+            backgroundColor: COLORS.white,
+            borderWidth: 1,
+            borderColor: COLORS.gray100,
+          }}
+        >
+          <SkeletonBox width={90} height={110} borderRadius={0} />
+          <View style={{ flex: 1, padding: 14, gap: 9 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <SkeletonBox width="60%" height={15} borderRadius={4} />
+              <SkeletonBox width="22%" height={22} borderRadius={20} />
             </View>
+            <SkeletonBox width="45%" height={12} borderRadius={4} />
+            <SkeletonBox width="70%" height={12} borderRadius={4} />
             <SkeletonBox width="30%" height={16} borderRadius={4} />
           </View>
         </View>
@@ -103,7 +113,7 @@ function SpotPhoto({ uri, style }: { uri: string | null; style: any }) {
   if (!uri || error) {
     return (
       <View style={[style, styles.cardImagePlaceholder]}>
-        <CarFront color={COLORS.gray300} size={24} />
+        <CarFront color={COLORS.primary} size={26} />
       </View>
     )
   }
@@ -115,6 +125,41 @@ function SpotPhoto({ uri, style }: { uri: string | null; style: any }) {
       resizeMode="cover"
       onError={() => setError(true)}
     />
+  )
+}
+
+/* ---- Empty state per tab ---- */
+function EmptyState({ tab, onCTA }: { tab: TabKey; onCTA: () => void }) {
+  const configs: Record<TabKey, { icon: any; title: string; subtitle: string; cta: string }> = {
+    current: {
+      icon: <Clock color={COLORS.primary} size={32} />,
+      title: 'Aucune reservation active',
+      subtitle: "Vous n'avez pas de reservation en cours actuellement",
+      cta: 'Explorer les places',
+    },
+    upcoming: {
+      icon: <Calendar color={COLORS.primary} size={32} />,
+      title: 'Rien de prevu',
+      subtitle: 'Vous n\'avez pas de reservation a venir. Planifiez votre prochain trajet !',
+      cta: 'Trouver une place',
+    },
+    past: {
+      icon: <CarFront color={COLORS.primary} size={32} />,
+      title: 'Aucune reservation passee',
+      subtitle: 'Votre historique de reservations apparaitra ici',
+      cta: 'Commencer a explorer',
+    },
+  }
+  const cfg = configs[tab]
+  return (
+    <View style={styles.empty}>
+      <View style={styles.emptyIconCircle}>{cfg.icon}</View>
+      <Text style={styles.emptyTitle}>{cfg.title}</Text>
+      <Text style={styles.emptySubtitle}>{cfg.subtitle}</Text>
+      <TouchableOpacity style={styles.ctaBtn} onPress={onCTA} activeOpacity={0.8}>
+        <Text style={styles.ctaBtnText}>{cfg.cta}</Text>
+      </TouchableOpacity>
+    </View>
   )
 }
 
@@ -131,9 +176,7 @@ export default function BookingsScreen() {
     else setLoading(true)
 
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
+      const { data: { user } } = await supabase.auth.getUser()
 
       if (!user) {
         setUserId(null)
@@ -194,17 +237,19 @@ export default function BookingsScreen() {
 
   const filtered = filterBookings(bookings, activeTab)
 
-  // --- Loading state ---
+  /* ---- Loading state ---- */
   if (loading) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
-          <Text style={styles.title}>Reservations</Text>
+          <Text style={styles.headerTitle}>Reservations</Text>
         </View>
         <View style={styles.tabBar}>
           {TABS.map((tab) => (
             <View key={tab.key} style={[styles.tab, tab.key === 'current' && styles.tabActive]}>
-              <SkeletonBox width={60} height={13} borderRadius={4} />
+              <Text style={[styles.tabText, tab.key === 'current' && styles.tabTextActive]}>
+                {tab.label}
+              </Text>
             </View>
           ))}
         </View>
@@ -213,25 +258,25 @@ export default function BookingsScreen() {
     )
   }
 
-  // --- Not logged in ---
+  /* ---- Not logged in ---- */
   if (!userId) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
-          <Text style={styles.title}>Reservations</Text>
+          <Text style={styles.headerTitle}>Reservations</Text>
         </View>
         <View style={styles.empty}>
           <View style={styles.emptyIconCircle}>
-            <Calendar color={COLORS.gray300} size={36} />
+            <Calendar color={COLORS.primary} size={32} />
           </View>
           <Text style={styles.emptyTitle}>Connectez-vous</Text>
           <Text style={styles.emptySubtitle}>
-            Connectez-vous pour voir vos reservations
+            Connectez-vous pour consulter vos reservations
           </Text>
           <TouchableOpacity
             style={styles.ctaBtn}
             onPress={() => router.push('/(auth)/login')}
-            activeOpacity={0.7}
+            activeOpacity={0.8}
           >
             <Text style={styles.ctaBtnText}>Se connecter</Text>
           </TouchableOpacity>
@@ -240,66 +285,51 @@ export default function BookingsScreen() {
     )
   }
 
-  // --- Main screen ---
+  /* ---- Main screen ---- */
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Reservations</Text>
-        <Text style={styles.subtitle}>
-          {bookings.length} reservation{bookings.length !== 1 ? 's' : ''}
-        </Text>
+        <Text style={styles.headerTitle}>Reservations</Text>
+        <View style={styles.headerCountPill}>
+          <Text style={styles.headerCountText}>
+            {bookings.length}
+          </Text>
+        </View>
       </View>
 
-      {/* Tab filters */}
-      <View style={styles.tabBar}>
-        {TABS.map((tab) => {
-          const isActive = activeTab === tab.key
-          const count = filterBookings(bookings, tab.key).length
-          return (
-            <TouchableOpacity
-              key={tab.key}
-              style={[styles.tab, isActive && styles.tabActive]}
-              onPress={() => setActiveTab(tab.key)}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
-                {tab.label}
-              </Text>
-              {count > 0 && (
-                <View style={[styles.tabBadge, isActive && styles.tabBadgeActive]}>
-                  <Text style={[styles.tabBadgeText, isActive && styles.tabBadgeTextActive]}>
-                    {count}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          )
-        })}
+      {/* Segmented control tabs */}
+      <View style={styles.segmentWrap}>
+        <View style={styles.segmentContainer}>
+          {TABS.map((tab) => {
+            const isActive = activeTab === tab.key
+            const count = filterBookings(bookings, tab.key).length
+            return (
+              <TouchableOpacity
+                key={tab.key}
+                style={[styles.segment, isActive && styles.segmentActive]}
+                onPress={() => setActiveTab(tab.key)}
+                activeOpacity={0.75}
+              >
+                <Text style={[styles.segmentText, isActive && styles.segmentTextActive]}>
+                  {tab.label}
+                </Text>
+                {count > 0 && (
+                  <View style={[styles.segmentBadge, isActive && styles.segmentBadgeActive]}>
+                    <Text style={[styles.segmentBadgeText, isActive && styles.segmentBadgeTextActive]}>
+                      {count}
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            )
+          })}
+        </View>
       </View>
 
       {/* List */}
       {filtered.length === 0 ? (
-        <View style={styles.empty}>
-          <View style={styles.emptyIconCircle}>
-            <CarFront color={COLORS.gray300} size={36} />
-          </View>
-          <Text style={styles.emptyTitle}>Aucune reservation</Text>
-          <Text style={styles.emptySubtitle}>
-            {activeTab === 'current'
-              ? 'Vous n\'avez pas de reservation en cours'
-              : activeTab === 'upcoming'
-                ? 'Aucune reservation a venir'
-                : 'Aucune reservation passee'}
-          </Text>
-          <TouchableOpacity
-            style={styles.ctaBtn}
-            onPress={() => router.push('/(tabs)/')}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.ctaBtnText}>Explorer les places</Text>
-          </TouchableOpacity>
-        </View>
+        <EmptyState tab={activeTab} onCTA={() => router.push('/(tabs)/')} />
       ) : (
         <FlatList
           data={filtered}
@@ -315,57 +345,69 @@ export default function BookingsScreen() {
               color: COLORS.gray500,
               bg: COLORS.gray50,
             }
+            const isCompleted = item.status === 'completed'
 
             return (
               <TouchableOpacity
                 style={styles.card}
                 onPress={() => router.push(`/booking/${item.id}`)}
-                activeOpacity={0.7}
+                activeOpacity={0.75}
               >
                 {/* Photo */}
                 <SpotPhoto uri={spot?.photo ?? null} style={styles.cardImage} />
 
                 {/* Content */}
                 <View style={styles.cardContent}>
+                  {/* Top: title + status badge */}
                   <View style={styles.cardTopRow}>
                     <Text style={styles.cardTitle} numberOfLines={1}>
                       {spot?.title ?? 'Parking'}
                     </Text>
-                    <View style={[styles.badge, { backgroundColor: status.bg }]}>
-                      <Text style={[styles.badgeText, { color: status.color }]}>
+                    <View style={[styles.statusBadge, { backgroundColor: status.bg }]}>
+                      <View style={[styles.statusDot, { backgroundColor: status.color }]} />
+                      <Text style={[styles.statusText, { color: status.color }]}>
                         {status.label}
                       </Text>
                     </View>
                   </View>
 
+                  {/* Address */}
                   {spot?.address && (
                     <View style={styles.addrRow}>
-                      <MapPin color={COLORS.gray400} size={12} />
+                      <MapPin color={COLORS.gray400} size={11} strokeWidth={2} />
                       <Text style={styles.cardAddr} numberOfLines={1}>
                         {spot.address}
                       </Text>
                     </View>
                   )}
 
+                  {/* Dates */}
                   <View style={styles.cardDates}>
-                    <View style={styles.dateCol}>
-                      <Text style={styles.dateLabel}>Arrivee</Text>
-                      <Text style={styles.dateValue}>
-                        {formatDateFR(item.start_time)}
-                      </Text>
-                    </View>
-                    <View style={styles.dateSep} />
-                    <View style={styles.dateCol}>
-                      <Text style={styles.dateLabel}>Depart</Text>
-                      <Text style={styles.dateValue}>
-                        {formatDateFR(item.end_time)}
-                      </Text>
-                    </View>
+                    <Clock color={COLORS.gray400} size={11} strokeWidth={2} />
+                    <Text style={styles.cardDateText} numberOfLines={1}>
+                      {formatDateFR(item.start_time)} — {formatDateFR(item.end_time)}
+                    </Text>
                   </View>
 
-                  <Text style={styles.price}>
-                    {formatPrice(item.total_price)} €
-                  </Text>
+                  {/* Bottom: price + action */}
+                  <View style={styles.cardBottom}>
+                    <Text style={styles.price}>{formatPrice(item.total_price)} €</Text>
+                    {isCompleted ? (
+                      <TouchableOpacity
+                        style={styles.reviewBtn}
+                        onPress={(e) => {
+                          e.stopPropagation()
+                          router.push(`/booking/review?bookingId=${item.id}&spotId=${item.spot_id}`)
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Star color={COLORS.warning} size={11} fill={COLORS.warning} />
+                        <Text style={styles.reviewBtnText}>Laisser un avis</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <ChevronRight color={COLORS.gray300} size={16} />
+                    )}
+                  </View>
                 </View>
               </TouchableOpacity>
             )
@@ -381,30 +423,108 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
+
+  /* Header */
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
     paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 12,
+    paddingTop: 10,
+    paddingBottom: 14,
     backgroundColor: COLORS.white,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.gray100,
   },
-  title: {
-    fontSize: 24,
+  headerTitle: {
+    fontSize: 26,
     fontWeight: '800',
     color: COLORS.dark,
+    letterSpacing: -0.4,
   },
-  subtitle: {
+  headerCountPill: {
+    backgroundColor: COLORS.gray100,
+    borderRadius: 12,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+  },
+  headerCountText: {
     fontSize: 13,
-    color: COLORS.gray400,
-    marginTop: 2,
+    fontWeight: '700',
+    color: COLORS.gray500,
   },
 
-  // Tab bar
+  /* Segmented control */
+  segmentWrap: {
+    backgroundColor: COLORS.white,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gray100,
+  },
+  segmentContainer: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.gray100,
+    borderRadius: 14,
+    padding: 3,
+    gap: 2,
+  },
+  segment: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 9,
+    borderRadius: 11,
+  },
+  segmentActive: {
+    backgroundColor: COLORS.dark,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOpacity: 0.12,
+        shadowRadius: 6,
+        shadowOffset: { width: 0, height: 2 },
+      },
+      android: { elevation: 3 },
+    }),
+  },
+  segmentText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.gray500,
+  },
+  segmentTextActive: {
+    color: COLORS.white,
+    fontWeight: '700',
+  },
+  segmentBadge: {
+    backgroundColor: COLORS.gray200,
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+  },
+  segmentBadgeActive: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  segmentBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.gray500,
+  },
+  segmentBadgeTextActive: {
+    color: COLORS.white,
+  },
+
+  /* Tab bar (used only in skeleton) */
   tabBar: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     gap: 8,
     backgroundColor: COLORS.white,
     borderBottomWidth: 1,
@@ -412,16 +532,14 @@ const styles = StyleSheet.create({
   },
   tab: {
     flex: 1,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 8,
-    borderRadius: 10,
+    paddingVertical: 9,
+    borderRadius: 11,
     backgroundColor: COLORS.gray100,
   },
   tabActive: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.dark,
   },
   tabText: {
     fontSize: 13,
@@ -430,39 +548,20 @@ const styles = StyleSheet.create({
   },
   tabTextActive: {
     color: COLORS.white,
-  },
-  tabBadge: {
-    backgroundColor: COLORS.gray200,
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 6,
-  },
-  tabBadgeActive: {
-    backgroundColor: 'rgba(255,255,255,0.25)',
-  },
-  tabBadgeText: {
-    fontSize: 11,
     fontWeight: '700',
-    color: COLORS.gray500,
-  },
-  tabBadgeTextActive: {
-    color: COLORS.white,
   },
 
-  // List
+  /* List */
   list: {
     padding: 16,
-    gap: 12,
+    gap: 14,
   },
 
-  // Card
+  /* Card */
   card: {
     flexDirection: 'row',
     backgroundColor: COLORS.white,
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: COLORS.gray100,
     overflow: 'hidden',
@@ -471,15 +570,15 @@ const styles = StyleSheet.create({
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.06,
-        shadowRadius: 8,
+        shadowRadius: 10,
       },
       android: { elevation: 3 },
     }),
   },
   cardImage: {
-    width: 100,
+    width: 90,
     height: '100%' as any,
-    minHeight: 120,
+    minHeight: 110,
     backgroundColor: COLORS.gray200,
   },
   cardImagePlaceholder: {
@@ -489,8 +588,9 @@ const styles = StyleSheet.create({
   },
   cardContent: {
     flex: 1,
-    padding: 12,
+    padding: 14,
     gap: 6,
+    justifyContent: 'space-between',
   },
   cardTopRow: {
     flexDirection: 'row',
@@ -503,15 +603,24 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: COLORS.dark,
     flex: 1,
+    lineHeight: 20,
   },
-  badge: {
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     borderRadius: 20,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
   },
-  badgeText: {
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusText: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   addrRow: {
     flexDirection: 'row',
@@ -526,70 +635,85 @@ const styles = StyleSheet.create({
   cardDates: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginTop: 2,
+    gap: 5,
   },
-  dateCol: {
-    flex: 1,
-  },
-  dateLabel: {
-    fontSize: 10,
-    color: COLORS.gray400,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  dateValue: {
+  cardDateText: {
     fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.dark,
-    marginTop: 1,
+    color: COLORS.gray500,
+    flex: 1,
+    fontWeight: '500',
   },
-  dateSep: {
-    width: 1,
-    height: 24,
-    backgroundColor: COLORS.gray200,
+  cardBottom: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 2,
   },
   price: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '800',
     color: COLORS.dark,
-    marginTop: 2,
+    letterSpacing: -0.2,
+  },
+  reviewBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: COLORS.warningLight,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  reviewBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.warning,
   },
 
-  // Empty state
+  /* Empty state */
   empty: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingHorizontal: 32,
+    gap: 10,
+    paddingHorizontal: 36,
   },
   emptyIconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: COLORS.gray100,
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: COLORS.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
   },
   emptyTitle: {
-    fontSize: 18,
+    fontSize: 19,
     fontWeight: '700',
     color: COLORS.dark,
+    textAlign: 'center',
   },
   emptySubtitle: {
     fontSize: 14,
     color: COLORS.gray400,
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: 21,
   },
   ctaBtn: {
-    marginTop: 12,
+    marginTop: 14,
     backgroundColor: COLORS.primary,
-    borderRadius: 12,
-    paddingHorizontal: 28,
-    paddingVertical: 12,
+    borderRadius: 14,
+    paddingHorizontal: 30,
+    paddingVertical: 13,
+    ...Platform.select({
+      ios: {
+        shadowColor: COLORS.primary,
+        shadowOpacity: 0.3,
+        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 4 },
+      },
+      android: { elevation: 4 },
+    }),
   },
   ctaBtnText: {
     color: COLORS.white,

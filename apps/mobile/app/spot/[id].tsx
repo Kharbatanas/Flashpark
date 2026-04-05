@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   Share,
   useWindowDimensions,
   ActivityIndicator,
+  Animated,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useLocalSearchParams, router } from 'expo-router'
@@ -30,6 +31,9 @@ import {
   User,
   Car,
   ChevronDown,
+  Info,
+  CheckCircle,
+  AlertCircle,
 } from 'lucide-react-native'
 import { supabase } from '../../lib/supabase'
 import {
@@ -39,7 +43,7 @@ import {
   PLACEHOLDER_PHOTOS,
 } from '../../lib/constants'
 
-const PHOTO_HEIGHT = 280
+const PHOTO_HEIGHT = 320
 
 interface Spot {
   id: string
@@ -100,20 +104,22 @@ function DetailSkeleton({ screenWidth }: { screenWidth: number }) {
   return (
     <View style={styles.container}>
       <SkeletonBox width={screenWidth} height={PHOTO_HEIGHT} borderRadius={0} />
-      <View style={{ padding: 20, gap: 14 }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-          <SkeletonBox width="40%" height={28} borderRadius={6} />
-          <SkeletonBox width="25%" height={20} borderRadius={6} />
+      <View style={{ padding: 24, gap: 16 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <SkeletonBox width="35%" height={32} borderRadius={6} />
+          <SkeletonBox width="28%" height={22} borderRadius={20} />
         </View>
-        <SkeletonBox width="80%" height={22} borderRadius={6} />
-        <SkeletonBox width="60%" height={14} borderRadius={4} />
-        <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-          <SkeletonBox width={80} height={32} borderRadius={20} />
-          <SkeletonBox width={100} height={32} borderRadius={20} />
+        <SkeletonBox width="75%" height={26} borderRadius={6} />
+        <SkeletonBox width="55%" height={16} borderRadius={4} />
+        <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+          <SkeletonBox width={90} height={34} borderRadius={20} />
+          <SkeletonBox width={110} height={34} borderRadius={20} />
         </View>
         <SkeletonBox width="100%" height={1} borderRadius={0} style={{ marginVertical: 8 }} />
-        <SkeletonBox width="30%" height={16} borderRadius={4} />
-        <SkeletonBox width="100%" height={60} borderRadius={8} />
+        <SkeletonBox width="100%" height={80} borderRadius={12} />
+        <SkeletonBox width="100%" height={1} borderRadius={0} style={{ marginVertical: 4 }} />
+        <SkeletonBox width="40%" height={18} borderRadius={4} />
+        <SkeletonBox width="100%" height={100} borderRadius={14} />
       </View>
     </View>
   )
@@ -137,6 +143,44 @@ function CarouselImage({ uri, width }: { uri: string; width: number }) {
         onLoad={() => setLoaded(true)}
         onError={() => { if (!error) setError(true) }}
       />
+      {/* Gradient overlay at bottom */}
+      <View style={styles.carouselGradient} />
+    </View>
+  )
+}
+
+/* ---- Expandable description ---- */
+function ExpandableText({ text, maxLines = 3 }: { text: string; maxLines?: number }) {
+  const [expanded, setExpanded] = useState(false)
+  const [showToggle, setShowToggle] = useState(false)
+
+  return (
+    <View>
+      <Text
+        style={styles.description}
+        numberOfLines={expanded ? undefined : maxLines}
+        onTextLayout={(e) => {
+          if (e.nativeEvent.lines.length > maxLines) setShowToggle(true)
+        }}
+      >
+        {text}
+      </Text>
+      {showToggle && (
+        <TouchableOpacity
+          onPress={() => setExpanded(!expanded)}
+          activeOpacity={0.7}
+          style={styles.readMoreBtn}
+        >
+          <Text style={styles.readMoreText}>
+            {expanded ? 'Reduire' : 'Lire la suite'}
+          </Text>
+          <ChevronDown
+            color={COLORS.primary}
+            size={14}
+            style={{ transform: [{ rotate: expanded ? '180deg' : '0deg' }] }}
+          />
+        </TouchableOpacity>
+      )}
     </View>
   )
 }
@@ -154,6 +198,7 @@ export default function SpotDetailScreen() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [selectedVehicle, setSelectedVehicle] = useState<string | null>(null)
   const [showVehiclePicker, setShowVehiclePicker] = useState(false)
+  const likeScale = useRef(new Animated.Value(1)).current
 
   const pricePerHour = spot ? Number(spot.price_per_hour) : 0
   const subtotal = Math.round(hours * pricePerHour * 100) / 100
@@ -207,13 +252,11 @@ export default function SpotDetailScreen() {
         .single()
 
       if (data) {
-        // Ensure photos and amenities are always arrays
         setSpot({
           ...data,
           photos: Array.isArray(data.photos) ? data.photos : [],
           amenities: Array.isArray(data.amenities) ? data.amenities : [],
         })
-        // Load host info
         if (data.host_id) {
           const { data: hostData } = await supabase
             .from('users')
@@ -236,10 +279,16 @@ export default function SpotDetailScreen() {
     })
   }
 
+  function handleLike() {
+    Animated.sequence([
+      Animated.spring(likeScale, { toValue: 1.35, useNativeDriver: true, speed: 50 }),
+      Animated.spring(likeScale, { toValue: 1, useNativeDriver: true, speed: 30 }),
+    ]).start()
+    setLiked(!liked)
+  }
+
   async function handleReserve() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+    const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       Alert.alert('Connexion requise', 'Connectez-vous pour reserver.', [
         { text: 'Annuler', style: 'cancel' },
@@ -250,7 +299,6 @@ export default function SpotDetailScreen() {
 
     if (!spot) return
 
-    // Validate future date
     if (defaultStart <= new Date()) {
       Alert.alert('Erreur', "L'heure de debut doit etre dans le futur")
       return
@@ -295,7 +343,7 @@ export default function SpotDetailScreen() {
 
       if (conflicts && conflicts.length > 0) {
         setBooking(false)
-        Alert.alert('Creneau indisponible', 'Ce creneau est deja reserve. Essayez d\'autres horaires.')
+        Alert.alert('Creneau indisponible', "Ce creneau est deja reserve. Essayez d'autres horaires.")
         return
       }
 
@@ -310,7 +358,7 @@ export default function SpotDetailScreen() {
 
       if (blocked && blocked.length > 0) {
         setBooking(false)
-        Alert.alert('Creneau bloque', 'Ce creneau est indisponible (bloque par l\'hote).')
+        Alert.alert('Creneau bloque', "Ce creneau est indisponible (bloque par l'hote).")
         return
       }
 
@@ -338,7 +386,7 @@ export default function SpotDetailScreen() {
 
       if (error) {
         if (error.message.includes('unique') || error.message.includes('conflict')) {
-          Alert.alert('Creneau indisponible', 'Ce creneau vient d\'etre reserve par quelqu\'un d\'autre.')
+          Alert.alert('Creneau indisponible', "Ce creneau vient d'etre reserve par quelqu'un d'autre.")
         } else {
           Alert.alert('Erreur', error.message)
         }
@@ -373,7 +421,9 @@ export default function SpotDetailScreen() {
           <ArrowLeft color={COLORS.dark} size={22} />
         </TouchableOpacity>
         <View style={styles.empty}>
-          <MapPin color={COLORS.gray300} size={48} />
+          <View style={styles.emptyIconCircle}>
+            <MapPin color={COLORS.gray300} size={36} />
+          </View>
           <Text style={styles.emptyTitle}>Parking introuvable</Text>
           <Text style={styles.emptySubtitle}>Cette place n'existe plus ou a ete supprimee</Text>
           <TouchableOpacity
@@ -402,7 +452,7 @@ export default function SpotDetailScreen() {
         contentContainerStyle={styles.scroll}
       >
         {/* ===== Photo Carousel ===== */}
-        <View style={styles.carouselWrap}>
+        <View style={[styles.carouselWrap, { height: PHOTO_HEIGHT }]}>
           <FlatList
             data={photos}
             horizontal
@@ -416,26 +466,23 @@ export default function SpotDetailScreen() {
             )}
           />
 
-          {/* Page indicators */}
+          {/* Dot indicators */}
           {photos.length > 1 && (
             <View style={styles.dotsRow}>
               {photos.map((_, i) => (
                 <View
                   key={i}
-                  style={[
-                    styles.dot,
-                    i === photoIndex && styles.dotActive,
-                  ]}
+                  style={[styles.dot, i === photoIndex && styles.dotActive]}
                 />
               ))}
             </View>
           )}
 
-          {/* Photo counter */}
+          {/* Photo counter pill */}
           {photos.length > 1 && (
             <View style={styles.photoCounter}>
               <Text style={styles.photoCounterText}>
-                {photoIndex + 1}/{photos.length}
+                {photoIndex + 1} / {photos.length}
               </Text>
             </View>
           )}
@@ -444,62 +491,56 @@ export default function SpotDetailScreen() {
           <TouchableOpacity
             style={styles.floatingBack}
             onPress={() => router.back()}
-            activeOpacity={0.7}
+            activeOpacity={0.8}
           >
-            <ArrowLeft color={COLORS.dark} size={22} />
+            <ArrowLeft color={COLORS.dark} size={20} strokeWidth={2.5} />
           </TouchableOpacity>
 
-          {/* Floating share + favorite */}
+          {/* Floating share + heart */}
           <View style={styles.floatingRight}>
-            <TouchableOpacity style={styles.floatingBtn} onPress={handleShare} activeOpacity={0.7}>
-              <Share2 color={COLORS.dark} size={20} />
+            <TouchableOpacity style={styles.floatingBtn} onPress={handleShare} activeOpacity={0.8}>
+              <Share2 color={COLORS.dark} size={18} />
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.floatingBtn}
-              onPress={() => setLiked(!liked)}
-              activeOpacity={0.7}
+              onPress={handleLike}
+              activeOpacity={0.8}
             >
-              <Heart
-                color={liked ? COLORS.danger : COLORS.dark}
-                fill={liked ? COLORS.danger : 'transparent'}
-                size={20}
-              />
+              <Animated.View style={{ transform: [{ scale: likeScale }] }}>
+                <Heart
+                  color={liked ? COLORS.danger : COLORS.dark}
+                  fill={liked ? COLORS.danger : 'transparent'}
+                  size={18}
+                />
+              </Animated.View>
             </TouchableOpacity>
           </View>
         </View>
 
         {/* ===== Body ===== */}
         <View style={styles.body}>
-          {/* Price + Rating */}
+
+          {/* Price + Rating row */}
           <View style={styles.priceRatingRow}>
             <Text style={styles.heroPrice}>
               {formatPrice(pricePerHour)} €
               <Text style={styles.heroPriceUnit}>/h</Text>
             </Text>
             {ratingValue !== null && (
-              <View style={styles.ratingBadge}>
-                {[1, 2, 3, 4, 5].map((s) => (
-                  <Star
-                    key={s}
-                    size={14}
-                    color={COLORS.warning}
-                    fill={ratingValue >= s ? COLORS.warning : 'transparent'}
-                  />
-                ))}
-                <Text style={styles.ratingText}>
-                  {ratingValue.toFixed(1)}
-                </Text>
-                <Text style={styles.reviewCount}>
-                  ({spot.review_count})
-                </Text>
+              <View style={styles.ratingPill}>
+                <Star size={13} color={COLORS.warning} fill={COLORS.warning} />
+                <Text style={styles.ratingText}>{ratingValue.toFixed(1)}</Text>
+                <Text style={styles.reviewCount}>({spot.review_count})</Text>
               </View>
             )}
           </View>
 
-          {/* Title + address */}
+          {/* Title */}
           <Text style={styles.title}>{spot.title}</Text>
+
+          {/* Address */}
           <View style={styles.addrRow}>
-            <MapPin color={COLORS.gray400} size={14} />
+            <MapPin color={COLORS.gray400} size={14} strokeWidth={2} />
             <Text style={styles.addr}>
               {spot.address}, {spot.city}
             </Text>
@@ -508,56 +549,77 @@ export default function SpotDetailScreen() {
           {/* Badges */}
           <View style={styles.badgeRow}>
             <View style={styles.badge}>
-              <Text style={styles.badgeText}>
-                {TYPE_LABELS[spot.type] ?? spot.type}
-              </Text>
+              <Text style={styles.badgeText}>{TYPE_LABELS[spot.type] ?? spot.type}</Text>
             </View>
             {spot.has_smart_gate && (
               <View style={[styles.badge, styles.badgeSuccess]}>
-                <Zap color={COLORS.success} size={12} />
-                <Text style={[styles.badgeText, { color: COLORS.success }]}>
-                  Smart Gate
-                </Text>
+                <Zap color={COLORS.success} size={11} fill={COLORS.success} />
+                <Text style={[styles.badgeText, { color: COLORS.success }]}>Smart Gate</Text>
               </View>
             )}
             {spot.instant_book && (
               <View style={[styles.badge, styles.badgePrimary]}>
-                <Clock color={COLORS.primary} size={12} />
-                <Text style={[styles.badgeText, { color: COLORS.primary }]}>
-                  Reservation instantanee
-                </Text>
+                <Clock color={COLORS.primary} size={11} />
+                <Text style={[styles.badgeText, { color: COLORS.primary }]}>Instantane</Text>
               </View>
             )}
           </View>
 
           <View style={styles.divider} />
 
-          {/* Description */}
-          {spot.description && (
+          {/* Host card */}
+          {host && (
             <>
-              <Text style={styles.sectionTitle}>Description</Text>
-              <Text style={styles.description}>{spot.description}</Text>
+              <View style={styles.hostCard}>
+                <View style={styles.hostAvatarWrap}>
+                  {host.avatar_url ? (
+                    <Image source={{ uri: host.avatar_url }} style={styles.hostAvatarImg} />
+                  ) : (
+                    <User color={COLORS.gray400} size={22} />
+                  )}
+                </View>
+                <View style={styles.hostInfo}>
+                  <Text style={styles.hostName}>
+                    {host.first_name} {host.last_name?.charAt(0)}.
+                  </Text>
+                  <Text style={styles.hostSince}>
+                    Hote depuis{' '}
+                    {new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' }).format(new Date(host.created_at))}
+                  </Text>
+                </View>
+                <View style={styles.verifiedBadge}>
+                  <CheckCircle color={COLORS.success} size={14} fill={COLORS.successLight} />
+                  <Text style={styles.verifiedText}>Verifie</Text>
+                </View>
+                <ChevronRight color={COLORS.gray300} size={18} />
+              </View>
               <View style={styles.divider} />
             </>
           )}
 
-          {/* Amenities grid */}
+          {/* Description (expandable) */}
+          {spot.description && (
+            <>
+              <Text style={styles.sectionTitle}>Description</Text>
+              <ExpandableText text={spot.description} maxLines={3} />
+              <View style={styles.divider} />
+            </>
+          )}
+
+          {/* Amenities 2-column grid */}
           {spot.amenities && spot.amenities.length > 0 && (
             <>
-              <Text style={styles.sectionTitle}>
-                Equipements & Securite
-              </Text>
+              <Text style={styles.sectionTitle}>Equipements & Securite</Text>
               <View style={styles.amenitiesGrid}>
                 {spot.amenities.map((a) => {
                   const info = AMENITY_LABELS[a]
                   return (
-                    <View key={a} style={[styles.amenityCard, { width: (SCREEN_WIDTH - 40 - 10) / 2 }]}>
-                      <Text style={styles.amenityIcon}>
-                        {info?.icon ?? '✓'}
-                      </Text>
-                      <Text style={styles.amenityLabel}>
-                        {info?.label ?? a}
-                      </Text>
+                    <View
+                      key={a}
+                      style={[styles.amenityCard, { width: (SCREEN_WIDTH - 48 - 10) / 2 }]}
+                    >
+                      <Text style={styles.amenityIcon}>{info?.icon ?? '✓'}</Text>
+                      <Text style={styles.amenityLabel}>{info?.label ?? a}</Text>
                     </View>
                   )
                 })}
@@ -566,14 +628,18 @@ export default function SpotDetailScreen() {
             </>
           )}
 
-          {/* Max height */}
+          {/* Max vehicle height */}
           {spot.max_vehicle_height && (
             <>
               <View style={styles.heightCard}>
-                <Shield color={COLORS.gray500} size={16} />
+                <View style={styles.heightIconWrap}>
+                  <Shield color={COLORS.primary} size={16} />
+                </View>
                 <Text style={styles.heightText}>
                   Hauteur maximale :{' '}
-                  {Number(spot.max_vehicle_height).toFixed(1).replace('.', ',')} m
+                  <Text style={{ fontWeight: '700', color: COLORS.dark }}>
+                    {Number(spot.max_vehicle_height).toFixed(1).replace('.', ',')} m
+                  </Text>
                 </Text>
               </View>
               <View style={styles.divider} />
@@ -583,97 +649,59 @@ export default function SpotDetailScreen() {
           {/* Parking instructions */}
           {spot.parking_instructions && (
             <>
-              <View style={{ backgroundColor: '#EFF6FF', borderRadius: 14, padding: 14 }}>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: COLORS.primary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>
-                  Instructions d'acces
-                </Text>
-                <Text style={{ fontSize: 14, color: COLORS.gray700, lineHeight: 20 }}>
-                  {spot.parking_instructions}
-                </Text>
+              <View style={styles.instructionsBox}>
+                <View style={styles.instructionsHeader}>
+                  <Info color={COLORS.primary} size={15} />
+                  <Text style={styles.instructionsLabel}>Instructions d'acces</Text>
+                </View>
+                <Text style={styles.instructionsText}>{spot.parking_instructions}</Text>
               </View>
               <View style={styles.divider} />
             </>
           )}
 
           {/* Cancellation policy */}
-          <View style={{ backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.gray200, borderRadius: 14, padding: 14 }}>
-            <Text style={{ fontSize: 11, fontWeight: '700', color: COLORS.gray400, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>
-              Politique d'annulation
-            </Text>
-            <Text style={{ fontSize: 13, color: COLORS.gray500, lineHeight: 20 }}>
+          <View style={styles.cancellationBox}>
+            <View style={styles.cancellationHeader}>
+              <AlertCircle color={COLORS.gray500} size={15} />
+              <Text style={styles.cancellationLabel}>Politique d'annulation</Text>
+            </View>
+            <Text style={styles.cancellationText}>
               Annulation gratuite jusqu'a 24h avant le debut. Au-dela, le montant total est du.
             </Text>
           </View>
-          <View style={styles.divider} />
-
-          {/* Host info card */}
-          {host && (
-            <>
-              <Text style={styles.sectionTitle}>Votre hote</Text>
-              <View style={styles.hostCard}>
-                <View style={styles.hostAvatar}>
-                  {host.avatar_url ? (
-                    <Image
-                      source={{ uri: host.avatar_url }}
-                      style={styles.hostAvatarImg}
-                    />
-                  ) : (
-                    <User color={COLORS.gray400} size={24} />
-                  )}
-                </View>
-                <View style={styles.hostInfo}>
-                  <Text style={styles.hostName}>
-                    {host.first_name} {host.last_name?.charAt(0)}.
-                  </Text>
-                  <Text style={styles.hostSince}>
-                    Membre depuis{' '}
-                    {new Intl.DateTimeFormat('fr-FR', {
-                      month: 'long',
-                      year: 'numeric',
-                    }).format(new Date(host.created_at))}
-                  </Text>
-                </View>
-                <ChevronRight color={COLORS.gray300} size={20} />
-              </View>
-            </>
-          )}
         </View>
       </ScrollView>
 
       {/* ===== Sticky Booking Footer ===== */}
       <View style={styles.footer}>
         <View style={styles.footerTop}>
-          <View style={styles.footerPriceWrap}>
+          {/* Price left */}
+          <View>
             <Text style={styles.footerPriceMain}>
               {formatPrice(pricePerHour)} €
               <Text style={styles.footerPriceUnit}>/h</Text>
             </Text>
           </View>
 
-          {/* Duration selector */}
+          {/* Duration stepper */}
           <View style={styles.durationSelector}>
             <TouchableOpacity
-              style={styles.durationBtn}
+              style={[styles.durationBtn, hours <= 1 && styles.durationBtnDisabled]}
               onPress={() => setHours(Math.max(1, hours - 1))}
               disabled={hours <= 1}
               activeOpacity={0.7}
             >
-              <Minus
-                color={hours <= 1 ? COLORS.gray300 : COLORS.dark}
-                size={16}
-              />
+              <Minus color={hours <= 1 ? COLORS.gray300 : COLORS.dark} size={15} strokeWidth={2.5} />
             </TouchableOpacity>
             <Text style={styles.durationText}>{hours}h</Text>
             <TouchableOpacity
-              style={styles.durationBtn}
+              style={[styles.durationBtn, hours >= 24 && styles.durationBtnDisabled]}
               onPress={() => setHours(Math.min(24, hours + 1))}
               disabled={hours >= 24}
               activeOpacity={0.7}
             >
-              <Plus
-                color={hours >= 24 ? COLORS.gray300 : COLORS.dark}
-                size={16}
-              />
+              <Plus color={hours >= 24 ? COLORS.gray300 : COLORS.dark} size={15} strokeWidth={2.5} />
             </TouchableOpacity>
           </View>
         </View>
@@ -686,7 +714,7 @@ export default function SpotDetailScreen() {
               onPress={() => setShowVehiclePicker(!showVehiclePicker)}
               activeOpacity={0.7}
             >
-              <Car color={COLORS.gray500} size={16} />
+              <Car color={COLORS.primary} size={15} />
               <Text style={styles.vehicleSelectorText} numberOfLines={1}>
                 {selectedVehicle
                   ? (() => {
@@ -695,16 +723,21 @@ export default function SpotDetailScreen() {
                     })()
                   : 'Selectionner un vehicule'}
               </Text>
-              <ChevronDown color={COLORS.gray400} size={16} />
+              <ChevronDown
+                color={COLORS.gray400}
+                size={15}
+                style={{ transform: [{ rotate: showVehiclePicker ? '180deg' : '0deg' }] }}
+              />
             </TouchableOpacity>
             {showVehiclePicker && (
               <View style={styles.vehicleDropdown}>
-                {vehicles.map(v => (
+                {vehicles.map((v, idx) => (
                   <TouchableOpacity
                     key={v.id}
                     style={[
                       styles.vehicleOption,
                       v.id === selectedVehicle && styles.vehicleOptionActive,
+                      idx < vehicles.length - 1 && { borderBottomWidth: 1, borderBottomColor: COLORS.gray100 },
                     ]}
                     onPress={() => {
                       setSelectedVehicle(v.id)
@@ -712,12 +745,16 @@ export default function SpotDetailScreen() {
                     }}
                     activeOpacity={0.7}
                   >
+                    <Car color={v.id === selectedVehicle ? COLORS.primary : COLORS.gray400} size={14} />
                     <Text style={[
                       styles.vehicleOptionText,
                       v.id === selectedVehicle && { color: COLORS.primary, fontWeight: '700' },
                     ]}>
                       {v.brand ?? ''} {v.model ?? ''} — {v.license_plate}
                     </Text>
+                    {v.id === selectedVehicle && (
+                      <CheckCircle color={COLORS.primary} size={14} />
+                    )}
                   </TouchableOpacity>
                 ))}
               </View>
@@ -725,28 +762,26 @@ export default function SpotDetailScreen() {
           </View>
         )}
 
+        {/* Total row */}
         <View style={styles.footerTotalRow}>
           <Text style={styles.footerTotalLabel}>
-            Total ({hours}h dont {formatPrice(fee)} € de frais)
+            Total ({hours}h · {formatPrice(fee)} € de frais inclus)
           </Text>
-          <Text style={styles.footerTotalValue}>
-            {formatPrice(total)} €
-          </Text>
+          <Text style={styles.footerTotalValue}>{formatPrice(total)} €</Text>
         </View>
 
+        {/* Reserve button */}
         <TouchableOpacity
-          style={[styles.reserveBtn, booking && { opacity: 0.6 }]}
+          style={[styles.reserveBtn, booking && styles.reserveBtnLoading]}
           onPress={handleReserve}
           disabled={booking}
-          activeOpacity={0.8}
+          activeOpacity={0.85}
         >
           {booking ? (
             <ActivityIndicator color={COLORS.white} size="small" />
           ) : (
             <Text style={styles.reserveBtnText}>
-              {spot.instant_book
-                ? 'Reserver maintenant'
-                : 'Demander une reservation'}
+              {spot.instant_book ? 'Reserver maintenant' : 'Demander une reservation'}
             </Text>
           )}
         </TouchableOpacity>
@@ -761,44 +796,55 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   scroll: {
-    paddingBottom: 200,
+    paddingBottom: 220,
   },
 
-  /* Carousel */
+  /* ---- Carousel ---- */
   carouselWrap: {
     position: 'relative',
-    height: PHOTO_HEIGHT,
     backgroundColor: COLORS.gray200,
+    overflow: 'hidden',
   },
   carouselImage: {
     height: PHOTO_HEIGHT,
     overflow: 'hidden',
   },
+  carouselGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 80,
+    // Simulated gradient using opacity layers
+    backgroundColor: 'rgba(0,0,0,0.18)',
+  },
   dotsRow: {
     position: 'absolute',
-    bottom: 16,
+    bottom: 18,
     left: 0,
     right: 0,
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 6,
+    alignItems: 'center',
+    gap: 5,
   },
   dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
     backgroundColor: 'rgba(255,255,255,0.5)',
   },
   dotActive: {
     backgroundColor: COLORS.white,
     width: 20,
+    borderRadius: 4,
   },
   photoCounter: {
     position: 'absolute',
-    bottom: 16,
+    bottom: 18,
     right: 16,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderRadius: 20,
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
@@ -806,33 +852,34 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: 12,
     fontWeight: '600',
+    letterSpacing: 0.3,
   },
 
-  /* Floating buttons */
+  /* ---- Floating buttons ---- */
   floatingBack: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 56 : 16,
+    top: Platform.OS === 'ios' ? 56 : 20,
     left: 16,
     zIndex: 10,
     backgroundColor: COLORS.white,
-    borderRadius: 20,
-    width: 40,
-    height: 40,
+    borderRadius: 22,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOpacity: 0.12,
-        shadowRadius: 8,
-        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.15,
+        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 3 },
       },
-      android: { elevation: 4 },
+      android: { elevation: 5 },
     }),
   },
   floatingRight: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 56 : 16,
+    top: Platform.OS === 'ios' ? 56 : 20,
     right: 16,
     zIndex: 10,
     flexDirection: 'row',
@@ -840,26 +887,28 @@ const styles = StyleSheet.create({
   },
   floatingBtn: {
     backgroundColor: COLORS.white,
-    borderRadius: 20,
-    width: 40,
-    height: 40,
+    borderRadius: 22,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOpacity: 0.12,
-        shadowRadius: 8,
-        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.15,
+        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 3 },
       },
-      android: { elevation: 4 },
+      android: { elevation: 5 },
     }),
   },
 
-  /* Body */
+  /* ---- Body ---- */
   body: {
-    padding: 20,
-    gap: 12,
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    paddingBottom: 16,
+    gap: 14,
   },
 
   /* Price + Rating */
@@ -869,28 +918,32 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   heroPrice: {
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: '800',
     color: COLORS.dark,
+    letterSpacing: -0.5,
   },
   heroPriceUnit: {
     fontSize: 16,
     fontWeight: '500',
-    color: COLORS.gray500,
+    color: COLORS.gray400,
   },
-  ratingBadge: {
+  ratingPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: 4,
+    backgroundColor: COLORS.warningLight,
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
   ratingText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     color: COLORS.dark,
-    marginLeft: 4,
   },
   reviewCount: {
-    fontSize: 13,
+    fontSize: 12,
     color: COLORS.gray400,
   },
 
@@ -899,16 +952,20 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '800',
     color: COLORS.dark,
+    lineHeight: 28,
+    letterSpacing: -0.3,
   },
   addrRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    marginTop: -2,
   },
   addr: {
     fontSize: 14,
     color: COLORS.gray500,
     flex: 1,
+    lineHeight: 20,
   },
 
   /* Badges */
@@ -916,7 +973,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginTop: 4,
+    marginTop: 2,
   },
   badge: {
     flexDirection: 'row',
@@ -942,27 +999,107 @@ const styles = StyleSheet.create({
   /* Divider */
   divider: {
     height: 1,
-    backgroundColor: COLORS.gray200,
-    marginVertical: 4,
+    backgroundColor: COLORS.gray100,
+    marginVertical: 6,
   },
 
-  /* Sections */
+  /* Section title */
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 17,
+    fontWeight: '700',
+    color: COLORS.dark,
+    letterSpacing: -0.2,
+  },
+
+  /* Description */
+  description: {
+    fontSize: 15,
+    color: COLORS.gray500,
+    lineHeight: 24,
+  },
+  readMoreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 8,
+  },
+  readMoreText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.primary,
+    textDecorationLine: 'underline',
+  },
+
+  /* Host card */
+  hostCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.gray100,
+    borderRadius: 18,
+    padding: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+      },
+      android: { elevation: 2 },
+    }),
+  },
+  hostAvatarWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: COLORS.gray100,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: COLORS.gray200,
+  },
+  hostAvatarImg: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+  },
+  hostInfo: {
+    flex: 1,
+  },
+  hostName: {
+    fontSize: 15,
     fontWeight: '700',
     color: COLORS.dark,
   },
-  description: {
-    fontSize: 14,
-    color: COLORS.gray500,
-    lineHeight: 22,
+  hostSince: {
+    fontSize: 12,
+    color: COLORS.gray400,
+    marginTop: 2,
+  },
+  verifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: COLORS.successLight,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  verifiedText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.success,
   },
 
-  /* Amenities grid — 2 columns */
+  /* Amenities 2-col grid */
   amenitiesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
+    marginTop: 4,
   },
   amenityCard: {
     flexDirection: 'row',
@@ -970,7 +1107,7 @@ const styles = StyleSheet.create({
     gap: 10,
     backgroundColor: COLORS.white,
     borderWidth: 1,
-    borderColor: COLORS.gray200,
+    borderColor: COLORS.gray100,
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -989,67 +1126,80 @@ const styles = StyleSheet.create({
   heightCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    backgroundColor: COLORS.white,
-    borderWidth: 1,
-    borderColor: COLORS.gray200,
+    gap: 12,
+    backgroundColor: COLORS.primaryLight,
     borderRadius: 14,
     padding: 14,
+  },
+  heightIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(5,64,255,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   heightText: {
     fontSize: 14,
     color: COLORS.gray700,
-  },
-
-  /* Host card */
-  hostCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: COLORS.white,
-    borderWidth: 1,
-    borderColor: COLORS.gray200,
-    borderRadius: 16,
-    padding: 16,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.04,
-        shadowRadius: 4,
-      },
-      android: { elevation: 1 },
-    }),
-  },
-  hostAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: COLORS.gray100,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  hostAvatarImg: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-  },
-  hostInfo: {
     flex: 1,
   },
-  hostName: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: COLORS.dark,
+
+  /* Parking instructions box */
+  instructionsBox: {
+    backgroundColor: COLORS.primaryLight,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(5,64,255,0.1)',
   },
-  hostSince: {
+  instructionsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  instructionsLabel: {
     fontSize: 12,
-    color: COLORS.gray400,
-    marginTop: 2,
+    fontWeight: '800',
+    color: COLORS.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  instructionsText: {
+    fontSize: 14,
+    color: COLORS.gray700,
+    lineHeight: 22,
   },
 
-  /* Sticky footer */
+  /* Cancellation policy */
+  cancellationBox: {
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.gray100,
+    borderRadius: 16,
+    padding: 16,
+  },
+  cancellationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  cancellationLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: COLORS.gray500,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  cancellationText: {
+    fontSize: 13,
+    color: COLORS.gray500,
+    lineHeight: 20,
+  },
+
+  /* ---- Sticky footer ---- */
   footer: {
     position: 'absolute',
     bottom: 0,
@@ -1057,64 +1207,69 @@ const styles = StyleSheet.create({
     right: 0,
     backgroundColor: COLORS.white,
     borderTopWidth: 1,
-    borderTopColor: COLORS.gray200,
+    borderTopColor: COLORS.gray100,
     paddingHorizontal: 20,
     paddingTop: 14,
-    paddingBottom: Platform.OS === 'ios' ? 34 : 16,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 18,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOpacity: 0.06,
-        shadowRadius: 12,
+        shadowOpacity: 0.08,
+        shadowRadius: 16,
         shadowOffset: { width: 0, height: -4 },
       },
-      android: { elevation: 8 },
+      android: { elevation: 10 },
     }),
   },
   footerTop: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  footerPriceWrap: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
+    marginBottom: 12,
   },
   footerPriceMain: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '800',
     color: COLORS.dark,
+    letterSpacing: -0.3,
   },
   footerPriceUnit: {
     fontSize: 14,
     fontWeight: '500',
-    color: COLORS.gray500,
+    color: COLORS.gray400,
   },
 
-  /* Duration selector */
+  /* Duration stepper */
   durationSelector: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    borderWidth: 1,
+    gap: 2,
+    borderWidth: 1.5,
     borderColor: COLORS.gray200,
-    borderRadius: 12,
+    borderRadius: 14,
     paddingHorizontal: 4,
-    paddingVertical: 2,
+    paddingVertical: 3,
+    backgroundColor: COLORS.gray50,
   },
   durationBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+  },
+  durationBtnDisabled: {
+    borderColor: COLORS.gray100,
+    backgroundColor: COLORS.gray50,
   },
   durationText: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '800',
     color: COLORS.dark,
-    minWidth: 32,
+    minWidth: 34,
     textAlign: 'center',
   },
 
@@ -1126,39 +1281,51 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: COLORS.gray50,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    backgroundColor: COLORS.primaryLight,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
     borderWidth: 1,
-    borderColor: COLORS.gray200,
+    borderColor: 'rgba(5,64,255,0.12)',
   },
   vehicleSelectorText: {
     flex: 1,
     fontSize: 13,
     color: COLORS.dark,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   vehicleDropdown: {
-    marginTop: 4,
+    marginTop: 6,
     backgroundColor: COLORS.white,
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: COLORS.gray200,
     overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 4 },
+      },
+      android: { elevation: 4 },
+    }),
   },
   vehicleOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
     paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray100,
+    paddingVertical: 12,
   },
   vehicleOptionActive: {
     backgroundColor: COLORS.primaryLight,
   },
   vehicleOptionText: {
+    flex: 1,
     fontSize: 13,
     color: COLORS.dark,
+    fontWeight: '500',
   },
 
   /* Footer total */
@@ -1167,6 +1334,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
+    paddingHorizontal: 2,
   },
   footerTotalLabel: {
     fontSize: 12,
@@ -1177,19 +1345,33 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '800',
     color: COLORS.dark,
+    letterSpacing: -0.3,
   },
 
   /* Reserve button */
   reserveBtn: {
     backgroundColor: COLORS.primary,
-    borderRadius: 14,
-    paddingVertical: 16,
+    borderRadius: 16,
+    paddingVertical: 17,
     alignItems: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: COLORS.primary,
+        shadowOpacity: 0.35,
+        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 4 },
+      },
+      android: { elevation: 4 },
+    }),
+  },
+  reserveBtnLoading: {
+    opacity: 0.7,
   },
   reserveBtnText: {
     color: COLORS.white,
     fontWeight: '800',
     fontSize: 16,
+    letterSpacing: 0.2,
   },
 
   /* Empty state */
@@ -1197,30 +1379,39 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 10,
     paddingHorizontal: 32,
   },
+  emptyIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: COLORS.gray100,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
   emptyTitle: {
-    fontSize: 18,
+    fontSize: 19,
     fontWeight: '700',
     color: COLORS.dark,
-    marginTop: 8,
   },
   emptySubtitle: {
     fontSize: 14,
     color: COLORS.gray400,
     textAlign: 'center',
+    lineHeight: 20,
   },
   emptyBtn: {
-    marginTop: 12,
+    marginTop: 14,
     backgroundColor: COLORS.primary,
-    borderRadius: 12,
-    paddingHorizontal: 24,
-    paddingVertical: 10,
+    borderRadius: 14,
+    paddingHorizontal: 28,
+    paddingVertical: 12,
   },
   emptyBtnText: {
     color: COLORS.white,
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: 15,
   },
 })

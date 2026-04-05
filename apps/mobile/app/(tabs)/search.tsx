@@ -10,8 +10,11 @@ import {
   useWindowDimensions,
   Platform,
   RefreshControl,
+  ScrollView,
+  Keyboard,
 } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { router } from 'expo-router'
 import {
   Search,
@@ -23,8 +26,11 @@ import {
   X,
   Zap,
   ArrowUpDown,
+  Clock,
+  BookOpen,
 } from 'lucide-react-native'
 import { SafeMapView, SafeMarker } from '../../components/safe-map'
+import BottomSheet, { BottomSheetFlatList } from '@gorhom/bottom-sheet'
 import { supabase } from '../../lib/supabase'
 import {
   COLORS,
@@ -51,7 +57,10 @@ interface Spot {
 type ViewMode = 'list' | 'map'
 type PriceSort = 'none' | 'asc' | 'desc'
 
-const TYPE_KEYS = Object.keys(TYPE_LABELS)
+const RECENT_KEY = 'flashpark_recent_searches'
+const MAX_RECENT = 6
+
+const TYPE_FILTER_KEYS = Object.keys(TYPE_LABELS)
 
 function getSpotPhoto(spot: Spot, index: number = 0): string {
   if (spot.photos && Array.isArray(spot.photos) && spot.photos.length > 0) {
@@ -64,8 +73,13 @@ function formatPrice(price: string | number): string {
   return Number(price).toFixed(2).replace('.', ',')
 }
 
-/* ---- Skeleton components ---- */
-function SkeletonBox({ width, height, borderRadius = 8, style }: {
+/* ---- Skeleton ---- */
+function SkeletonBox({
+  width,
+  height,
+  borderRadius = 8,
+  style,
+}: {
   width: number | string
   height: number
   borderRadius?: number
@@ -82,19 +96,19 @@ function SkeletonBox({ width, height, borderRadius = 8, style }: {
 }
 
 function SearchSkeleton({ screenWidth }: { screenWidth: number }) {
-  const photoH = (screenWidth - 40) * 0.6
+  const cardW = (screenWidth - 16 * 2 - 12) / 2
+  const photoH = cardW * 0.75
   return (
-    <View style={{ padding: 20, gap: 20 }}>
-      {[0, 1, 2].map((i) => (
-        <View key={i} style={{ borderRadius: 16, overflow: 'hidden', backgroundColor: COLORS.white }}>
-          <SkeletonBox width="100%" height={photoH} borderRadius={0} />
-          <View style={{ padding: 14, gap: 8 }}>
-            <SkeletonBox width="70%" height={16} borderRadius={4} />
-            <SkeletonBox width="50%" height={13} borderRadius={4} />
-            <SkeletonBox width="30%" height={17} borderRadius={4} />
+    <View style={{ padding: 16, gap: 16 }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+        {[0, 1, 2, 3].map((i) => (
+          <View key={i} style={{ width: cardW, gap: 8 }}>
+            <SkeletonBox width={cardW} height={photoH} borderRadius={12} />
+            <SkeletonBox width={cardW * 0.7} height={13} borderRadius={4} />
+            <SkeletonBox width={cardW * 0.4} height={12} borderRadius={4} />
           </View>
-        </View>
-      ))}
+        ))}
+      </View>
     </View>
   )
 }
@@ -108,22 +122,148 @@ function SpotImage({ uri, style }: { uri: string; style: any }) {
   return (
     <View style={style}>
       {!loaded && (
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: COLORS.gray200 }]} />
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            { backgroundColor: COLORS.gray200, borderRadius: 12 },
+          ]}
+        />
       )}
       <Image
         source={{ uri: error ? fallbackUri : uri }}
         style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]}
         resizeMode="cover"
         onLoad={() => setLoaded(true)}
-        onError={() => { if (!error) setError(true) }}
+        onError={() => {
+          if (!error) setError(true)
+        }}
       />
     </View>
   )
 }
 
+/* ---- Grid card (same design as Home) ---- */
+function SpotCard({
+  item,
+  index,
+  cardWidth,
+  isFavorite,
+  onToggleFavorite,
+}: {
+  item: Spot
+  index: number
+  cardWidth: number
+  isFavorite: boolean
+  onToggleFavorite: (spotId: string) => void
+}) {
+  const photoHeight = cardWidth * 0.75
+
+  return (
+    <TouchableOpacity
+      style={[styles.gridCard, { width: cardWidth }]}
+      onPress={() => router.push(`/spot/${item.id}`)}
+      activeOpacity={0.92}
+    >
+      <View style={[styles.gridPhotoWrap, { height: photoHeight }]}>
+        <SpotImage
+          uri={getSpotPhoto(item, index)}
+          style={[StyleSheet.absoluteFill, { borderRadius: 12 }]}
+        />
+        <TouchableOpacity
+          style={styles.heartBtn}
+          onPress={() => onToggleFavorite(item.id)}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          activeOpacity={0.7}
+        >
+          <Heart
+            color={isFavorite ? COLORS.danger : COLORS.white}
+            fill={isFavorite ? COLORS.danger : 'transparent'}
+            size={18}
+            strokeWidth={2.5}
+          />
+        </TouchableOpacity>
+        <View style={styles.priceBadge}>
+          <Text style={styles.priceBadgeText}>
+            {formatPrice(item.price_per_hour)} €
+          </Text>
+          <Text style={styles.priceBadgeUnit}>/h</Text>
+        </View>
+      </View>
+      <View style={styles.gridCardInfo}>
+        <Text style={styles.gridCardTitle} numberOfLines={1}>
+          {item.title}
+        </Text>
+        {item.rating ? (
+          <View style={styles.ratingRow}>
+            <Star color={COLORS.warning} fill={COLORS.warning} size={11} />
+            <Text style={styles.ratingText}>
+              {Number(item.rating).toFixed(1)}
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.ratingRow}>
+            <Star color={COLORS.gray300} size={11} />
+            <Text style={styles.newText}>Nouveau</Text>
+          </View>
+        )}
+      </View>
+    </TouchableOpacity>
+  )
+}
+
+/* ---- Map bottom sheet card (horizontal compact) ---- */
+function MapSpotCard({ item }: { item: Spot }) {
+  return (
+    <TouchableOpacity
+      style={styles.mapCard}
+      onPress={() => router.push(`/spot/${item.id}`)}
+      activeOpacity={0.85}
+    >
+      <View style={styles.mapCardPhoto}>
+        <SpotImage
+          uri={getSpotPhoto(item)}
+          style={[StyleSheet.absoluteFill, { borderRadius: 10 }]}
+        />
+      </View>
+      <View style={styles.mapCardInfo}>
+        <Text style={styles.mapCardTitle} numberOfLines={1}>
+          {item.title}
+        </Text>
+        <View style={styles.addressRow}>
+          <MapPin color={COLORS.gray400} size={11} />
+          <Text style={styles.addressText} numberOfLines={1}>
+            {item.address}
+          </Text>
+        </View>
+        <View style={styles.mapCardFooter}>
+          <Text style={styles.mapCardPrice}>
+            {formatPrice(item.price_per_hour)} €
+            <Text style={styles.mapCardPriceUnit}>/h</Text>
+          </Text>
+          {item.rating && (
+            <View style={styles.ratingRow}>
+              <Star color={COLORS.warning} fill={COLORS.warning} size={11} />
+              <Text style={styles.ratingText}>
+                {Number(item.rating).toFixed(1)}
+              </Text>
+            </View>
+          )}
+        </View>
+        {item.has_smart_gate && (
+          <View style={styles.smartGateBadge}>
+            <Zap color={COLORS.primary} size={11} />
+            <Text style={styles.smartGateText}>Smart Gate</Text>
+          </View>
+        )}
+      </View>
+    </TouchableOpacity>
+  )
+}
+
 export default function SearchScreen() {
   const { width: SCREEN_WIDTH } = useWindowDimensions()
-  const PHOTO_HEIGHT = (SCREEN_WIDTH - 40) * 0.6
+  const insets = useSafeAreaInsets()
+  const CARD_WIDTH = (SCREEN_WIDTH - 16 * 2 - 12) / 2
 
   const [query, setQuery] = useState('')
   const [allSpots, setAllSpots] = useState<Spot[]>([])
@@ -131,16 +271,71 @@ export default function SearchScreen() {
   const [refreshing, setRefreshing] = useState(false)
   const [viewMode, setViewMode] = useState<ViewMode>('list')
   const [mapAvailable, setMapAvailable] = useState(true)
+  const [favorites, setFavorites] = useState<Set<string>>(new Set())
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
   // Filters
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set())
   const [priceSort, setPriceSort] = useState<PriceSort>('none')
   const [smartGateOnly, setSmartGateOnly] = useState(false)
-  const [favorites, setFavorites] = useState<Set<string>>(new Set())
+  const [instantBookOnly, setInstantBookOnly] = useState(false)
 
   // Map
   const [selectedMarker, setSelectedMarker] = useState<Spot | null>(null)
   const mapRef = useRef<any>(null)
+  const bottomSheetRef = useRef<BottomSheet>(null)
+  const listRef = useRef<FlatList>(null)
+
+  // Recent searches
+  const [recentSearches, setRecentSearches] = useState<string[]>([])
+  const inputRef = useRef<TextInput>(null)
+
+  const fetchFavorites = useCallback(async (userId: string) => {
+    try {
+      const { data } = await supabase
+        .from('wishlists')
+        .select('spot_id')
+        .eq('user_id', userId)
+      if (data) {
+        setFavorites(new Set(data.map((w: { spot_id: string }) => w.spot_id)))
+      }
+    } catch {
+      // ignore
+    }
+  }, [])
+
+  const toggleFavorite = useCallback(async (spotId: string) => {
+    if (!currentUserId) return
+    const isLiked = favorites.has(spotId)
+    setFavorites((prev) => {
+      const next = new Set(prev)
+      if (isLiked) next.delete(spotId)
+      else next.add(spotId)
+      return next
+    })
+    try {
+      if (isLiked) {
+        const { data: existing } = await supabase
+          .from('wishlists')
+          .select('id')
+          .eq('user_id', currentUserId)
+          .eq('spot_id', spotId)
+          .single()
+        if (existing) {
+          await supabase.from('wishlists').delete().eq('id', existing.id)
+        }
+      } else {
+        await supabase.from('wishlists').insert({ user_id: currentUserId, spot_id: spotId })
+      }
+    } catch {
+      setFavorites((prev) => {
+        const next = new Set(prev)
+        if (isLiked) next.add(spotId)
+        else next.delete(spotId)
+        return next
+      })
+    }
+  }, [currentUserId, favorites])
 
   const fetchSpots = useCallback(async () => {
     try {
@@ -159,13 +354,61 @@ export default function SearchScreen() {
     }
   }, [])
 
+  const loadRecentSearches = useCallback(async () => {
+    try {
+      const raw = await AsyncStorage.getItem(RECENT_KEY)
+      if (raw) setRecentSearches(JSON.parse(raw))
+    } catch {
+      // ignore
+    }
+  }, [])
+
+  const saveSearch = useCallback(async (term: string) => {
+    const trimmed = term.trim()
+    if (!trimmed) return
+    try {
+      const raw = await AsyncStorage.getItem(RECENT_KEY)
+      const prev: string[] = raw ? JSON.parse(raw) : []
+      const updated = [trimmed, ...prev.filter((s) => s !== trimmed)].slice(
+        0,
+        MAX_RECENT
+      )
+      await AsyncStorage.setItem(RECENT_KEY, JSON.stringify(updated))
+      setRecentSearches(updated)
+    } catch {
+      // ignore
+    }
+  }, [])
+
+  const removeRecentSearch = useCallback(async (term: string) => {
+    try {
+      const updated = recentSearches.filter((s) => s !== term)
+      await AsyncStorage.setItem(RECENT_KEY, JSON.stringify(updated))
+      setRecentSearches(updated)
+    } catch {
+      // ignore
+    }
+  }, [recentSearches])
+
   useEffect(() => {
     async function init() {
-      await fetchSpots()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data: dbUser } = await supabase
+          .from('users')
+          .select('id')
+          .eq('supabase_id', user.id)
+          .single()
+        if (dbUser) {
+          setCurrentUserId(dbUser.id)
+          fetchFavorites(dbUser.id)
+        }
+      }
+      await Promise.all([fetchSpots(), loadRecentSearches()])
       setLoading(false)
     }
     init()
-  }, [fetchSpots])
+  }, [fetchSpots, loadRecentSearches, fetchFavorites])
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
@@ -173,11 +416,20 @@ export default function SearchScreen() {
     setRefreshing(false)
   }, [fetchSpots])
 
+  const handleSearchSubmit = useCallback(() => {
+    if (query.trim()) saveSearch(query)
+    Keyboard.dismiss()
+  }, [query, saveSearch])
+
+  const applyRecentSearch = useCallback((term: string) => {
+    setQuery(term)
+    Keyboard.dismiss()
+  }, [])
+
   // Filtered + sorted spots
   const filteredSpots = (() => {
     let result = [...allSpots]
 
-    // Text search
     if (query.trim()) {
       const q = query.toLowerCase()
       result = result.filter(
@@ -188,17 +440,14 @@ export default function SearchScreen() {
       )
     }
 
-    // Type filter
     if (selectedTypes.size > 0) {
       result = result.filter((s) => selectedTypes.has(s.type))
     }
 
-    // Smart gate filter
     if (smartGateOnly) {
       result = result.filter((s) => s.has_smart_gate)
     }
 
-    // Price sort
     if (priceSort === 'asc') {
       result.sort((a, b) => Number(a.price_per_hour) - Number(b.price_per_hour))
     } else if (priceSort === 'desc') {
@@ -211,11 +460,8 @@ export default function SearchScreen() {
   const toggleType = (type: string) => {
     setSelectedTypes((prev) => {
       const next = new Set(prev)
-      if (next.has(type)) {
-        next.delete(type)
-      } else {
-        next.add(type)
-      }
+      if (next.has(type)) next.delete(type)
+      else next.add(type)
       return next
     })
   }
@@ -228,276 +474,150 @@ export default function SearchScreen() {
     })
   }
 
-  const toggleFavorite = (id: string) => {
-    setFavorites((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) {
-        next.delete(id)
-      } else {
-        next.add(id)
-      }
-      return next
-    })
-  }
-
   const hasActiveFilters =
-    selectedTypes.size > 0 || priceSort !== 'none' || smartGateOnly
+    selectedTypes.size > 0 || priceSort !== 'none' || smartGateOnly || instantBookOnly
 
   const clearFilters = () => {
     setSelectedTypes(new Set())
     setPriceSort('none')
     setSmartGateOnly(false)
-    setQuery('')
+    setInstantBookOnly(false)
   }
 
   const priceSortLabel =
     priceSort === 'asc' ? 'Prix ↑' : priceSort === 'desc' ? 'Prix ↓' : 'Prix'
 
-  // If map can't load, silently fall back to list
   const handleMapError = useCallback(() => {
     setMapAvailable(false)
     setViewMode('list')
   }, [])
 
-  // Render a spot card for the list view
-  const renderSpotCard = ({ item, index }: { item: Spot; index: number }) => (
-    <TouchableOpacity
-      style={styles.card}
-      onPress={() => router.push(`/spot/${item.id}`)}
-      activeOpacity={0.7}
-    >
-      {/* Photo */}
-      <View style={styles.cardPhotoWrap}>
-        <SpotImage
-          uri={getSpotPhoto(item, index)}
-          style={[styles.cardPhoto, { height: PHOTO_HEIGHT }]}
-        />
-        {/* Favorite button */}
-        <TouchableOpacity
-          style={styles.favoriteBtn}
-          onPress={() => toggleFavorite(item.id)}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          activeOpacity={0.7}
-        >
-          <Heart
-            color={favorites.has(item.id) ? COLORS.danger : COLORS.white}
-            fill={favorites.has(item.id) ? COLORS.danger : 'transparent'}
-            size={20}
-          />
-        </TouchableOpacity>
+  // When a marker is tapped in map mode, snap sheet up slightly
+  const handleMarkerPress = useCallback((spot: Spot) => {
+    setSelectedMarker(spot)
+    bottomSheetRef.current?.snapToIndex(1)
+  }, [])
 
-        {/* Type badge on photo */}
-        <View style={styles.typeBadgeOnPhoto}>
-          <Text style={styles.typeBadgeOnPhotoText}>
-            {TYPE_LABELS[item.type] ?? item.type}
-          </Text>
-        </View>
-      </View>
-
-      {/* Info */}
-      <View style={styles.cardInfo}>
-        <View style={styles.cardTitleRow}>
-          <Text style={styles.cardTitle} numberOfLines={1}>
-            {item.title}
-          </Text>
-          {item.rating && (
-            <View style={styles.ratingRow}>
-              <Star color={COLORS.warning} fill={COLORS.warning} size={13} />
-              <Text style={styles.ratingText}>
-                {Number(item.rating).toFixed(1)}
-              </Text>
-              <Text style={styles.reviewCount}>({item.review_count})</Text>
-            </View>
-          )}
-        </View>
-
-        <View style={styles.addressRow}>
-          <MapPin color={COLORS.gray400} size={13} />
-          <Text style={styles.addressText} numberOfLines={1}>
-            {item.address}, {item.city}
-          </Text>
-        </View>
-
-        <View style={styles.cardFooter}>
-          <View style={styles.priceRow}>
-            <Text style={styles.priceValue}>
-              {formatPrice(item.price_per_hour)} €
-            </Text>
-            <Text style={styles.priceUnit}> /heure</Text>
-          </View>
-          {item.has_smart_gate && (
-            <View style={styles.smartGateBadge}>
-              <Zap color={COLORS.primary} size={12} />
-              <Text style={styles.smartGateText}>Smart Gate</Text>
-            </View>
-          )}
-        </View>
-      </View>
-    </TouchableOpacity>
-  )
-
-  // Map marker preview card
-  const renderMarkerPreview = () => {
-    if (!selectedMarker) return null
-    const spot = selectedMarker
-    return (
-      <View style={styles.previewCard}>
-        <TouchableOpacity
-          style={styles.previewContent}
-          onPress={() => router.push(`/spot/${spot.id}`)}
-          activeOpacity={0.7}
-        >
-          <SpotImage
-            uri={getSpotPhoto(spot)}
-            style={styles.previewPhoto}
-          />
-          <View style={styles.previewInfo}>
-            <Text style={styles.previewTitle} numberOfLines={1}>
-              {spot.title}
-            </Text>
-            <View style={styles.addressRow}>
-              <MapPin color={COLORS.gray400} size={11} />
-              <Text style={styles.previewAddress} numberOfLines={1}>
-                {spot.address}
-              </Text>
-            </View>
-            <View style={styles.previewFooter}>
-              <Text style={styles.previewPrice}>
-                {formatPrice(spot.price_per_hour)} €
-                <Text style={styles.previewPriceUnit}>/h</Text>
-              </Text>
-              {spot.rating && (
-                <View style={styles.ratingRow}>
-                  <Star color={COLORS.warning} fill={COLORS.warning} size={12} />
-                  <Text style={styles.ratingText}>
-                    {Number(spot.rating).toFixed(1)}
-                  </Text>
-                </View>
-              )}
-            </View>
-            <TouchableOpacity
-              style={styles.previewBtn}
-              onPress={() => router.push(`/spot/${spot.id}`)}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.previewBtnText}>Voir</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.previewClose}
-          onPress={() => setSelectedMarker(null)}
-          activeOpacity={0.7}
-        >
-          <X color={COLORS.gray500} size={18} />
-        </TouchableOpacity>
-      </View>
-    )
-  }
+  const showEmpty = !loading && filteredSpots.length === 0
+  const showRecent = query === '' && recentSearches.length > 0
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Search Bar */}
+      {/* Search Header */}
       <View style={styles.header}>
         <View style={styles.searchRow}>
           <View style={styles.inputWrap}>
-            <Search color={COLORS.gray400} size={18} />
+            <Search color={COLORS.gray400} size={18} strokeWidth={2.5} />
             <TextInput
+              ref={inputRef}
               style={styles.input}
               placeholder="Adresse, quartier, ville..."
               placeholderTextColor={COLORS.gray400}
               value={query}
               onChangeText={setQuery}
               returnKeyType="search"
+              onSubmitEditing={handleSearchSubmit}
               autoCapitalize="none"
+              autoCorrect={false}
             />
             {query.length > 0 && (
-              <TouchableOpacity onPress={() => setQuery('')} activeOpacity={0.7}>
-                <X color={COLORS.gray400} size={18} />
+              <TouchableOpacity
+                onPress={() => setQuery('')}
+                activeOpacity={0.7}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <X color={COLORS.gray400} size={16} />
               </TouchableOpacity>
             )}
           </View>
         </View>
 
-        {/* Filter Chips */}
-        <FlatList
-          data={[
-            ...TYPE_KEYS.map((k) => ({ key: k, label: TYPE_LABELS[k] })),
-          ]}
-          keyExtractor={(item) => item.key}
+        {/* Filter chips */}
+        <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.chipList}
-          ListHeaderComponent={
-            <View style={styles.chipRow}>
-              {/* Price sort chip */}
-              <TouchableOpacity
-                style={[
-                  styles.chip,
-                  priceSort !== 'none' && styles.chipActive,
-                ]}
-                onPress={cyclePriceSort}
-                activeOpacity={0.7}
-              >
-                <ArrowUpDown
-                  color={priceSort !== 'none' ? COLORS.white : COLORS.gray700}
-                  size={14}
-                />
-                <Text
-                  style={[
-                    styles.chipText,
-                    priceSort !== 'none' && styles.chipTextActive,
-                  ]}
-                >
-                  {priceSortLabel}
-                </Text>
-              </TouchableOpacity>
-
-              {/* Smart Gate chip */}
-              <TouchableOpacity
-                style={[styles.chip, smartGateOnly && styles.chipActive]}
-                onPress={() => setSmartGateOnly(!smartGateOnly)}
-                activeOpacity={0.7}
-              >
-                <Zap
-                  color={smartGateOnly ? COLORS.white : COLORS.gray700}
-                  size={14}
-                />
-                <Text
-                  style={[
-                    styles.chipText,
-                    smartGateOnly && styles.chipTextActive,
-                  ]}
-                >
-                  Smart Gate
-                </Text>
-              </TouchableOpacity>
-            </View>
-          }
-          renderItem={({ item }) => (
+        >
+          {/* Type filter chips */}
+          {TYPE_FILTER_KEYS.map((k) => (
             <TouchableOpacity
-              style={[
-                styles.chip,
-                selectedTypes.has(item.key) && styles.chipActive,
-              ]}
-              onPress={() => toggleType(item.key)}
+              key={k}
+              style={[styles.chip, selectedTypes.has(k) && styles.chipActive]}
+              onPress={() => toggleType(k)}
               activeOpacity={0.7}
             >
               <Text
                 style={[
                   styles.chipText,
-                  selectedTypes.has(item.key) && styles.chipTextActive,
+                  selectedTypes.has(k) && styles.chipTextActive,
                 ]}
               >
-                {item.label}
+                {TYPE_LABELS[k]}
               </Text>
             </TouchableOpacity>
-          )}
-        />
+          ))}
 
-        {/* View toggle + result count */}
-        <View style={styles.viewToggleRow}>
-          <View style={styles.resultInfo}>
+          {/* Price sort chip */}
+          <TouchableOpacity
+            style={[styles.chip, priceSort !== 'none' && styles.chipActive]}
+            onPress={cyclePriceSort}
+            activeOpacity={0.7}
+          >
+            <ArrowUpDown
+              color={priceSort !== 'none' ? COLORS.white : COLORS.gray700}
+              size={13}
+            />
+            <Text
+              style={[
+                styles.chipText,
+                priceSort !== 'none' && styles.chipTextActive,
+              ]}
+            >
+              {priceSortLabel}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Smart Gate chip */}
+          <TouchableOpacity
+            style={[styles.chip, smartGateOnly && styles.chipActive]}
+            onPress={() => setSmartGateOnly(!smartGateOnly)}
+            activeOpacity={0.7}
+          >
+            <Zap
+              color={smartGateOnly ? COLORS.white : COLORS.gray700}
+              size={13}
+            />
+            <Text
+              style={[styles.chipText, smartGateOnly && styles.chipTextActive]}
+            >
+              Smart Gate
+            </Text>
+          </TouchableOpacity>
+
+          {/* Instant book chip */}
+          <TouchableOpacity
+            style={[styles.chip, instantBookOnly && styles.chipActive]}
+            onPress={() => setInstantBookOnly(!instantBookOnly)}
+            activeOpacity={0.7}
+          >
+            <BookOpen
+              color={instantBookOnly ? COLORS.white : COLORS.gray700}
+              size={13}
+            />
+            <Text
+              style={[
+                styles.chipText,
+                instantBookOnly && styles.chipTextActive,
+              ]}
+            >
+              Réservation instant
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
+
+        {/* Result count + clear */}
+        {!loading && (
+          <View style={styles.resultsBar}>
             <Text style={styles.resultCount}>
               {filteredSpots.length} place{filteredSpots.length !== 1 ? 's' : ''}
             </Text>
@@ -507,78 +627,88 @@ export default function SearchScreen() {
               </TouchableOpacity>
             )}
           </View>
-          <View style={styles.viewToggle}>
-            <TouchableOpacity
-              style={[
-                styles.viewToggleBtn,
-                viewMode === 'list' && styles.viewToggleBtnActive,
-              ]}
-              onPress={() => setViewMode('list')}
-              activeOpacity={0.7}
-            >
-              <List
-                color={viewMode === 'list' ? COLORS.white : COLORS.gray500}
-                size={16}
-              />
-            </TouchableOpacity>
-            {mapAvailable && (
-              <TouchableOpacity
-                style={[
-                  styles.viewToggleBtn,
-                  viewMode === 'map' && styles.viewToggleBtnActive,
-                ]}
-                onPress={() => {
-                  setViewMode('map')
-                  setSelectedMarker(null)
-                }}
-                activeOpacity={0.7}
-              >
-                <MapIcon
-                  color={viewMode === 'map' ? COLORS.white : COLORS.gray500}
-                  size={16}
-                />
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
+        )}
       </View>
 
-      {/* Content Area */}
+      {/* Content area */}
       {loading ? (
         <SearchSkeleton screenWidth={SCREEN_WIDTH} />
       ) : viewMode === 'list' ? (
-        filteredSpots.length === 0 ? (
-          <View style={styles.centered}>
-            <MapPin color={COLORS.gray300} size={48} />
-            <Text style={styles.emptyTitle}>Aucun resultat</Text>
-            <Text style={styles.emptySubtitle}>
-              Essayez de modifier vos filtres
-            </Text>
-            {hasActiveFilters && (
-              <TouchableOpacity style={styles.emptyBtn} onPress={clearFilters} activeOpacity={0.7}>
-                <Text style={styles.emptyBtnText}>Effacer les filtres</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        ) : (
-          <FlatList
-            data={filteredSpots}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.listContent}
-            showsVerticalScrollIndicator={false}
-            renderItem={renderSpotCard}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={onRefresh}
-                tintColor={COLORS.primary}
-                colors={[COLORS.primary]}
-              />
-            }
-          />
-        )
+        <>
+          {/* Recent searches (shown when input empty and no text) */}
+          {showRecent && (
+            <View style={styles.recentWrap}>
+              <Text style={styles.recentTitle}>Recherches récentes</Text>
+              {recentSearches.map((term) => (
+                <TouchableOpacity
+                  key={term}
+                  style={styles.recentItem}
+                  onPress={() => applyRecentSearch(term)}
+                  activeOpacity={0.7}
+                >
+                  <Clock color={COLORS.gray400} size={15} />
+                  <Text style={styles.recentText}>{term}</Text>
+                  <TouchableOpacity
+                    onPress={() => removeRecentSearch(term)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    activeOpacity={0.7}
+                  >
+                    <X color={COLORS.gray300} size={14} />
+                  </TouchableOpacity>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+
+          {showEmpty ? (
+            <View style={styles.centered}>
+              <MapPin color={COLORS.gray300} size={48} />
+              <Text style={styles.emptyTitle}>Aucun résultat</Text>
+              <Text style={styles.emptySubtitle}>
+                Essayez de modifier vos filtres
+              </Text>
+              {hasActiveFilters && (
+                <TouchableOpacity
+                  style={styles.emptyBtn}
+                  onPress={clearFilters}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.emptyBtnText}>Effacer les filtres</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ) : (
+            <FlatList
+              ref={listRef}
+              data={filteredSpots}
+              keyExtractor={(item) => item.id}
+              numColumns={2}
+              columnWrapperStyle={styles.columnWrapper}
+              contentContainerStyle={styles.listContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={onRefresh}
+                  tintColor={COLORS.primary}
+                  colors={[COLORS.primary]}
+                />
+              }
+              renderItem={({ item, index }) => (
+                <SpotCard
+                  item={item}
+                  index={index}
+                  cardWidth={CARD_WIDTH}
+                  isFavorite={favorites.has(item.id)}
+                  onToggleFavorite={toggleFavorite}
+                />
+              )}
+            />
+          )}
+        </>
       ) : (
-        // Map View
+        /* Map view with bottom sheet */
         <View style={styles.mapContainer}>
           <SafeMapView
             mapRef={mapRef}
@@ -587,7 +717,6 @@ export default function SearchScreen() {
             showsUserLocation
             onPress={() => setSelectedMarker(null)}
             fallback={
-              // If map fails, silently switch to list
               <View style={styles.map} onLayout={handleMapError} />
             }
           >
@@ -600,7 +729,7 @@ export default function SearchScreen() {
                     latitude: Number(spot.latitude),
                     longitude: Number(spot.longitude),
                   }}
-                  onPress={() => setSelectedMarker(spot)}
+                  onPress={() => handleMarkerPress(spot)}
                 >
                   <View
                     style={[
@@ -623,8 +752,94 @@ export default function SearchScreen() {
               ))}
           </SafeMapView>
 
-          {/* Marker preview card */}
-          {renderMarkerPreview()}
+          {/* Bottom sheet with spot cards */}
+          <BottomSheet
+            ref={bottomSheetRef}
+            snapPoints={['20%', '45%', '85%']}
+            index={1}
+            backgroundStyle={styles.sheetBackground}
+            handleIndicatorStyle={styles.sheetHandle}
+          >
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>
+                {filteredSpots.length} place{filteredSpots.length !== 1 ? 's' : ''}
+              </Text>
+            </View>
+            <BottomSheetFlatList
+              data={filteredSpots}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={styles.sheetList}
+              renderItem={({ item }) => <MapSpotCard item={item} />}
+            />
+          </BottomSheet>
+        </View>
+      )}
+
+      {/* Floating List/Map toggle */}
+      {!loading && (
+        <View
+          style={[
+            styles.toggleWrap,
+            {
+              bottom:
+                viewMode === 'map'
+                  ? insets.bottom + 16
+                  : insets.bottom + 24,
+            },
+          ]}
+          pointerEvents="box-none"
+        >
+          <View style={styles.togglePill}>
+            <TouchableOpacity
+              style={[
+                styles.toggleBtn,
+                viewMode === 'list' && styles.toggleBtnActive,
+              ]}
+              onPress={() => setViewMode('list')}
+              activeOpacity={0.8}
+            >
+              <List
+                color={viewMode === 'list' ? COLORS.white : COLORS.gray700}
+                size={15}
+              />
+              <Text
+                style={[
+                  styles.toggleBtnText,
+                  viewMode === 'list' && styles.toggleBtnTextActive,
+                ]}
+              >
+                Liste
+              </Text>
+            </TouchableOpacity>
+
+            {mapAvailable && (
+              <TouchableOpacity
+                style={[
+                  styles.toggleBtn,
+                  viewMode === 'map' && styles.toggleBtnActive,
+                ]}
+                onPress={() => {
+                  setViewMode('map')
+                  setSelectedMarker(null)
+                  Keyboard.dismiss()
+                }}
+                activeOpacity={0.8}
+              >
+                <MapIcon
+                  color={viewMode === 'map' ? COLORS.white : COLORS.gray700}
+                  size={15}
+                />
+                <Text
+                  style={[
+                    styles.toggleBtnText,
+                    viewMode === 'map' && styles.toggleBtnTextActive,
+                  ]}
+                >
+                  Carte
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       )}
     </SafeAreaView>
@@ -640,10 +855,10 @@ const styles = StyleSheet.create({
   // Header
   header: {
     backgroundColor: COLORS.white,
-    paddingTop: 8,
-    paddingBottom: 12,
+    paddingTop: 10,
+    paddingBottom: 10,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray100,
+    borderBottomColor: COLORS.gray200,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -655,21 +870,19 @@ const styles = StyleSheet.create({
     }),
   },
 
-  // Search
+  // Search input
   searchRow: {
     paddingHorizontal: 16,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   inputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: COLORS.gray50,
-    borderRadius: 12,
+    backgroundColor: COLORS.gray100,
+    borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: Platform.OS === 'ios' ? 12 : 8,
-    borderWidth: 1,
-    borderColor: COLORS.gray200,
   },
   input: {
     flex: 1,
@@ -683,18 +896,14 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingBottom: 4,
   },
-  chipRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: COLORS.gray50,
+    gap: 5,
+    backgroundColor: COLORS.white,
     borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 13,
+    paddingVertical: 7,
     borderWidth: 1,
     borderColor: COLORS.gray200,
   },
@@ -711,21 +920,16 @@ const styles = StyleSheet.create({
     color: COLORS.white,
   },
 
-  // View toggle row
-  viewToggleRow: {
+  // Result bar
+  resultsBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    marginTop: 10,
-  },
-  resultInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
+    paddingTop: 8,
   },
   resultCount: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     color: COLORS.gray500,
   },
@@ -734,153 +938,260 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.primary,
   },
-  viewToggle: {
-    flexDirection: 'row',
-    backgroundColor: COLORS.gray100,
-    borderRadius: 10,
-    padding: 3,
-  },
-  viewToggleBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  viewToggleBtnActive: {
-    backgroundColor: COLORS.primary,
-  },
 
-  // List view
-  listContent: {
-    padding: 20,
-    gap: 20,
-    paddingBottom: 40,
-  },
-
-  // Card
-  card: {
+  // Recent searches
+  recentWrap: {
     backgroundColor: COLORS.white,
-    borderRadius: 16,
-    overflow: 'hidden',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.08,
-        shadowRadius: 12,
-      },
-      android: { elevation: 4 },
-    }),
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gray100,
   },
-  cardPhotoWrap: {
+  recentTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.gray500,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 10,
+  },
+  recentItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 8,
+  },
+  recentText: {
+    flex: 1,
+    fontSize: 15,
+    color: COLORS.dark,
+  },
+
+  // List grid
+  listContent: {
+    padding: 16,
+    paddingBottom: 100,
+  },
+  columnWrapper: {
+    gap: 12,
+    marginBottom: 20,
+  },
+
+  // Grid card
+  gridCard: {
+    // width set dynamically
+  },
+  gridPhotoWrap: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: COLORS.gray200,
     position: 'relative',
   },
-  cardPhoto: {
-    width: '100%',
-    backgroundColor: COLORS.gray200,
-    overflow: 'hidden',
-  },
-  favoriteBtn: {
+  heartBtn: {
     position: 'absolute',
-    top: 12,
-    right: 12,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    top: 8,
+    right: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.25)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  typeBadgeOnPhoto: {
+  priceBadge: {
     position: 'absolute',
-    bottom: 12,
-    left: 12,
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    borderRadius: 8,
-    paddingHorizontal: 10,
+    bottom: 8,
+    left: 8,
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    paddingHorizontal: 8,
     paddingVertical: 4,
+    borderRadius: 8,
   },
-  typeBadgeOnPhotoText: {
+  priceBadgeText: {
     fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.dark,
+    fontWeight: '800',
+    color: COLORS.white,
   },
-
-  // Card info
-  cardInfo: {
-    padding: 14,
+  priceBadgeUnit: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.8)',
   },
-  cardTitleRow: {
+  gridCardInfo: {
+    marginTop: 8,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 6,
   },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: '700',
+  gridCardTitle: {
+    fontSize: 13,
+    fontWeight: '600',
     color: COLORS.dark,
     flex: 1,
-    marginRight: 8,
+    marginRight: 6,
   },
   ratingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
   },
   ratingText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     color: COLORS.gray700,
   },
-  reviewCount: {
-    fontSize: 12,
+  newText: {
+    fontSize: 11,
     color: COLORS.gray400,
+    fontWeight: '500',
+  },
+
+  // Map
+  mapContainer: {
+    flex: 1,
+  },
+  map: {
+    flex: 1,
+  },
+  markerBubble: {
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.15,
+        shadowRadius: 4,
+      },
+      android: { elevation: 4 },
+    }),
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+  },
+  markerBubbleSelected: {
+    backgroundColor: COLORS.dark,
+    borderColor: COLORS.dark,
+  },
+  markerText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: COLORS.dark,
+  },
+  markerTextSelected: {
+    color: COLORS.white,
+  },
+
+  // Bottom sheet
+  sheetBackground: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  },
+  sheetHandle: {
+    backgroundColor: COLORS.gray300,
+    width: 40,
+  },
+  sheetHeader: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gray100,
+  },
+  sheetTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.dark,
+  },
+  sheetList: {
+    padding: 16,
+    gap: 12,
+    paddingBottom: 40,
+  },
+
+  // Map bottom sheet card
+  mapCard: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.white,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.gray100,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 6,
+      },
+      android: { elevation: 2 },
+    }),
+  },
+  mapCardPhoto: {
+    width: 90,
+    height: 90,
+    backgroundColor: COLORS.gray200,
+    position: 'relative',
+  },
+  mapCardInfo: {
+    flex: 1,
+    padding: 10,
+    justifyContent: 'space-between',
+  },
+  mapCardTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.dark,
   },
   addressRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginBottom: 8,
+    marginTop: 2,
   },
   addressText: {
-    fontSize: 13,
+    fontSize: 12,
     color: COLORS.gray500,
     flex: 1,
   },
-  cardFooter: {
+  mapCardFooter: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginTop: 4,
   },
-  priceRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-  },
-  priceValue: {
-    fontSize: 17,
+  mapCardPrice: {
+    fontSize: 15,
     fontWeight: '800',
     color: COLORS.primary,
   },
-  priceUnit: {
-    fontSize: 13,
+  mapCardPriceUnit: {
+    fontSize: 11,
+    fontWeight: '500',
     color: COLORS.gray500,
   },
   smartGateBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
+    marginTop: 4,
+    alignSelf: 'flex-start',
     backgroundColor: COLORS.primaryLight,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
   },
   smartGateText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
     color: COLORS.primary,
   },
 
-  // Empty + centered
+  // Empty
   centered: {
     flex: 1,
     alignItems: 'center',
@@ -912,53 +1223,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
-  // Map view
-  mapContainer: {
-    flex: 1,
-  },
-  map: {
-    flex: 1,
-  },
-
-  // Map markers (Airbnb-style price bubbles)
-  markerBubble: {
-    backgroundColor: COLORS.white,
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.15,
-        shadowRadius: 4,
-      },
-      android: { elevation: 4 },
-    }),
-    borderWidth: 1,
-    borderColor: COLORS.gray200,
-  },
-  markerBubbleSelected: {
-    backgroundColor: COLORS.dark,
-    borderColor: COLORS.dark,
-  },
-  markerText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: COLORS.dark,
-  },
-  markerTextSelected: {
-    color: COLORS.white,
-  },
-
-  // Map preview card
-  previewCard: {
+  // Floating toggle pill
+  toggleWrap: {
     position: 'absolute',
-    bottom: 20,
-    left: 16,
-    right: 16,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    pointerEvents: 'box-none',
+  },
+  togglePill: {
+    flexDirection: 'row',
     backgroundColor: COLORS.white,
-    borderRadius: 16,
+    borderRadius: 30,
+    padding: 4,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -968,69 +1245,24 @@ const styles = StyleSheet.create({
       },
       android: { elevation: 6 },
     }),
-    overflow: 'hidden',
   },
-  previewContent: {
+  toggleBtn: {
     flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 26,
   },
-  previewPhoto: {
-    width: 110,
-    height: 130,
-    backgroundColor: COLORS.gray200,
-    overflow: 'hidden',
+  toggleBtnActive: {
+    backgroundColor: COLORS.dark,
   },
-  previewInfo: {
-    flex: 1,
-    padding: 12,
-    justifyContent: 'space-between',
-  },
-  previewTitle: {
-    fontSize: 15,
+  toggleBtnText: {
+    fontSize: 14,
     fontWeight: '700',
-    color: COLORS.dark,
+    color: COLORS.gray700,
   },
-  previewAddress: {
-    fontSize: 12,
-    color: COLORS.gray500,
-    flex: 1,
-  },
-  previewFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 4,
-  },
-  previewPrice: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: COLORS.primary,
-  },
-  previewPriceUnit: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: COLORS.gray500,
-  },
-  previewBtn: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 10,
-    paddingVertical: 8,
-    alignItems: 'center',
-    marginTop: 6,
-  },
-  previewBtnText: {
+  toggleBtnTextActive: {
     color: COLORS.white,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  previewClose: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: COLORS.gray100,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 })

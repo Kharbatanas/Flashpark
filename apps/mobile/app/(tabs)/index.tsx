@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   View,
   Text,
@@ -9,12 +9,21 @@ import {
   Image,
   RefreshControl,
   useWindowDimensions,
-  Animated,
   Platform,
+  Animated,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
-import { Search, Star, MapPin, ChevronRight, Bell } from 'lucide-react-native'
+import {
+  Search,
+  Star,
+  Heart,
+  Car,
+  Home as HomeIcon,
+  Building2,
+  CircleParking,
+  Zap,
+} from 'lucide-react-native'
 import { supabase } from '../../lib/supabase'
 import { COLORS, TYPE_LABELS, PLACEHOLDER_PHOTOS } from '../../lib/constants'
 
@@ -31,6 +40,16 @@ interface Spot {
   has_smart_gate: boolean
 }
 
+// Category definitions for the horizontal tab pills
+const CATEGORIES = [
+  { key: 'all', label: 'Tous', Icon: Search },
+  { key: 'outdoor', label: 'Extérieur', Icon: Car },
+  { key: 'garage', label: 'Garage', Icon: HomeIcon },
+  { key: 'covered', label: 'Couvert', Icon: Building2 },
+  { key: 'underground', label: 'Souterrain', Icon: CircleParking },
+  { key: 'smart_gate', label: 'Smart Gate', Icon: Zap },
+] as const
+
 function getSpotPhoto(spot: Spot, index: number = 0): string {
   if (spot.photos && Array.isArray(spot.photos) && spot.photos.length > 0) {
     return spot.photos[0]
@@ -38,12 +57,22 @@ function getSpotPhoto(spot: Spot, index: number = 0): string {
   return PLACEHOLDER_PHOTOS[index % PLACEHOLDER_PHOTOS.length]
 }
 
+function getPhotoCount(spot: Spot): number {
+  if (spot.photos && Array.isArray(spot.photos)) return spot.photos.length
+  return 1
+}
+
 function formatPrice(price: string | number): string {
   return Number(price).toFixed(2).replace('.', ',')
 }
 
 /* ---- Skeleton shimmer placeholder ---- */
-function SkeletonBox({ width, height, borderRadius = 8, style }: {
+function SkeletonBox({
+  width,
+  height,
+  borderRadius = 8,
+  style,
+}: {
   width: number | string
   height: number
   borderRadius?: number
@@ -64,75 +93,93 @@ function SkeletonBox({ width, height, borderRadius = 8, style }: {
   )
 }
 
-function HomeSkeleton({ screenWidth }: { screenWidth: number }) {
-  const cardW = screenWidth * 0.6
+function GridSkeleton({ cardWidth }: { cardWidth: number }) {
+  const photoHeight = cardWidth * 0.75 // 4:3 ratio
   return (
-    <ScrollView showsVerticalScrollIndicator={false} style={styles.container}>
-      {/* Header skeleton */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <SkeletonBox width={180} height={26} borderRadius={6} />
-          <SkeletonBox width={200} height={14} borderRadius={4} style={{ marginTop: 8 }} />
-        </View>
-        <SkeletonBox width={44} height={44} borderRadius={22} />
-      </View>
-
+    <View style={skeletonStyles.wrapper}>
       {/* Search bar skeleton */}
-      <View style={{ paddingHorizontal: 20, marginTop: 12 }}>
-        <SkeletonBox width="100%" height={48} borderRadius={14} />
+      <SkeletonBox
+        width="100%"
+        height={52}
+        borderRadius={26}
+        style={{ marginBottom: 20 }}
+      />
+      {/* Category pills skeleton */}
+      <View style={skeletonStyles.pillRow}>
+        {[80, 90, 80, 100, 80].map((w, i) => (
+          <SkeletonBox key={i} width={w} height={36} borderRadius={20} />
+        ))}
       </View>
-
-      {/* Nearby section skeleton */}
-      <View style={{ marginTop: 28, paddingHorizontal: 20 }}>
-        <SkeletonBox width={120} height={18} borderRadius={6} />
-        <View style={{ flexDirection: 'row', gap: 12, marginTop: 14 }}>
-          {[0, 1].map((i) => (
-            <View key={i} style={{ width: cardW, borderRadius: 16, overflow: 'hidden' }}>
-              <SkeletonBox width={cardW} height={cardW * 0.55} borderRadius={0} />
-              <View style={{ padding: 12, gap: 8 }}>
-                <SkeletonBox width={cardW * 0.7} height={14} borderRadius={4} />
-                <SkeletonBox width={cardW * 0.4} height={16} borderRadius={4} />
-              </View>
-            </View>
-          ))}
-        </View>
-      </View>
-
-      {/* Popular section skeleton */}
-      <View style={{ marginTop: 28, paddingHorizontal: 20 }}>
-        <SkeletonBox width={150} height={18} borderRadius={6} />
-        {[0, 1, 2].map((i) => (
-          <View key={i} style={{ flexDirection: 'row', marginTop: 12, borderRadius: 16, overflow: 'hidden' }}>
-            <SkeletonBox width={100} height={100} borderRadius={0} />
-            <View style={{ flex: 1, padding: 12, gap: 8 }}>
-              <SkeletonBox width="80%" height={14} borderRadius={4} />
-              <SkeletonBox width="60%" height={12} borderRadius={4} />
-              <SkeletonBox width="40%" height={14} borderRadius={4} />
-            </View>
+      {/* Grid skeleton */}
+      <View style={skeletonStyles.grid}>
+        {[0, 1, 2, 3].map((i) => (
+          <View key={i} style={[skeletonStyles.gridItem, { width: cardWidth }]}>
+            <SkeletonBox
+              width={cardWidth}
+              height={photoHeight}
+              borderRadius={12}
+            />
+            <SkeletonBox
+              width={cardWidth * 0.7}
+              height={14}
+              borderRadius={4}
+              style={{ marginTop: 10 }}
+            />
+            <SkeletonBox
+              width={cardWidth * 0.45}
+              height={12}
+              borderRadius={4}
+              style={{ marginTop: 6 }}
+            />
           </View>
         ))}
       </View>
-      <View style={{ height: 40 }} />
-    </ScrollView>
+    </View>
   )
 }
 
-/* ---- Spot photo with loading placeholder ---- */
-function SpotImage({ uri, style, resizeMode = 'cover' }: { uri: string; style: any; resizeMode?: string }) {
+const skeletonStyles = StyleSheet.create({
+  wrapper: {
+    padding: 16,
+  },
+  pillRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 20,
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+  },
+  gridItem: {
+    // width set dynamically
+  },
+})
+
+/* ---- Spot image with loading placeholder ---- */
+function SpotImage({
+  uri,
+  style,
+}: {
+  uri: string
+  style: any
+}) {
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState(false)
-
   const fallbackUri = PLACEHOLDER_PHOTOS[0]
 
   return (
     <View style={style}>
       {!loaded && (
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: COLORS.gray200 }]} />
+        <View
+          style={[StyleSheet.absoluteFill, { backgroundColor: COLORS.gray200, borderRadius: 12 }]}
+        />
       )}
       <Image
         source={{ uri: error ? fallbackUri : uri }}
         style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]}
-        resizeMode={resizeMode as any}
+        resizeMode="cover"
         onLoad={() => setLoaded(true)}
         onError={() => {
           if (!error) setError(true)
@@ -142,50 +189,175 @@ function SpotImage({ uri, style, resizeMode = 'cover' }: { uri: string; style: a
   )
 }
 
+/* ---- Grid card (Airbnb listing style) ---- */
+function SpotCard({
+  item,
+  index,
+  cardWidth,
+  isFavorite,
+  onToggleFavorite,
+}: {
+  item: Spot
+  index: number
+  cardWidth: number
+  isFavorite: boolean
+  onToggleFavorite: (spotId: string) => void
+}) {
+  const photoHeight = cardWidth * 0.75 // 4:3
+  const photoCount = getPhotoCount(item)
+
+  return (
+    <TouchableOpacity
+      style={[styles.gridCard, { width: cardWidth }]}
+      onPress={() => router.push(`/spot/${item.id}`)}
+      activeOpacity={0.92}
+    >
+      {/* Photo */}
+      <View
+        style={[
+          styles.gridPhotoWrap,
+          { height: photoHeight },
+        ]}
+      >
+        <SpotImage
+          uri={getSpotPhoto(item, index)}
+          style={[StyleSheet.absoluteFill, { borderRadius: 12 }]}
+        />
+
+        {/* Photo dots */}
+        {photoCount > 1 && (
+          <View style={styles.photoDots}>
+            {Array.from({ length: Math.min(photoCount, 5) }).map((_, i) => (
+              <View
+                key={i}
+                style={[
+                  styles.photoDot,
+                  i === 0 && styles.photoDotActive,
+                ]}
+              />
+            ))}
+          </View>
+        )}
+
+        {/* Heart button */}
+        <TouchableOpacity
+          style={styles.heartBtn}
+          onPress={() => onToggleFavorite(item.id)}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          activeOpacity={0.7}
+        >
+          <Heart
+            color={isFavorite ? COLORS.danger : COLORS.white}
+            fill={isFavorite ? COLORS.danger : 'transparent'}
+            size={18}
+            strokeWidth={2.5}
+          />
+        </TouchableOpacity>
+
+        {/* Price badge */}
+        <View style={styles.priceBadge}>
+          <Text style={styles.priceBadgeText}>
+            {formatPrice(item.price_per_hour)} €
+          </Text>
+          <Text style={styles.priceBadgeUnit}>/h</Text>
+        </View>
+      </View>
+
+      {/* Info */}
+      <View style={styles.gridCardInfo}>
+        <Text style={styles.gridCardTitle} numberOfLines={1}>
+          {item.title}
+        </Text>
+        {item.rating ? (
+          <View style={styles.gridCardRating}>
+            <Star
+              color={COLORS.warning}
+              fill={COLORS.warning}
+              size={11}
+            />
+            <Text style={styles.gridCardRatingText}>
+              {Number(item.rating).toFixed(1)}
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.gridCardRating}>
+            <Star color={COLORS.gray300} size={11} />
+            <Text style={styles.gridCardNewText}>Nouveau</Text>
+          </View>
+        )}
+      </View>
+    </TouchableOpacity>
+  )
+}
+
 export default function HomeScreen() {
   const { width: SCREEN_WIDTH } = useWindowDimensions()
-  const NEARBY_CARD_WIDTH = SCREEN_WIDTH * 0.6
+  // 2-column grid: 16px padding each side + 12px gap between
+  const CARD_WIDTH = (SCREEN_WIDTH - 16 * 2 - 12) / 2
 
   const [spots, setSpots] = useState<Spot[]>([])
-  const [userName, setUserName] = useState<string | null>(null)
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
-  const [refreshing, setRefreshing] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [unreadNotifs, setUnreadNotifs] = useState(0)
+  const [refreshing, setRefreshing] = useState(false)
+  const [activeCategory, setActiveCategory] = useState<string>('all')
+  const [favorites, setFavorites] = useState<Set<string>>(new Set())
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
-  const fetchUser = useCallback(async () => {
+  const fetchFavorites = useCallback(async (userId: string) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const meta = user.user_metadata
-        setUserName(meta?.first_name ?? meta?.full_name?.split(' ')[0] ?? null)
-        setAvatarUrl(meta?.avatar_url ?? null)
-
-        // Fetch unread notification count
-        const { data: dbUser } = await supabase
-          .from('users')
-          .select('id')
-          .eq('supabase_id', user.id)
-          .single()
-        if (dbUser) {
-          const { count } = await supabase
-            .from('notifications')
-            .select('id', { count: 'exact', head: true })
-            .eq('user_id', dbUser.id)
-            .is('read_at', null)
-          setUnreadNotifs(count ?? 0)
-        }
+      const { data } = await supabase
+        .from('wishlists')
+        .select('spot_id')
+        .eq('user_id', userId)
+      if (data) {
+        setFavorites(new Set(data.map((w: { spot_id: string }) => w.spot_id)))
       }
     } catch {
-      // Silently ignore auth errors
+      // ignore
     }
   }, [])
+
+  const toggleFavorite = useCallback(async (spotId: string) => {
+    if (!currentUserId) return
+    const isLiked = favorites.has(spotId)
+    // Optimistic update
+    setFavorites((prev) => {
+      const next = new Set(prev)
+      if (isLiked) next.delete(spotId)
+      else next.add(spotId)
+      return next
+    })
+    try {
+      if (isLiked) {
+        const { data: existing } = await supabase
+          .from('wishlists')
+          .select('id')
+          .eq('user_id', currentUserId)
+          .eq('spot_id', spotId)
+          .single()
+        if (existing) {
+          await supabase.from('wishlists').delete().eq('id', existing.id)
+        }
+      } else {
+        await supabase.from('wishlists').insert({ user_id: currentUserId, spot_id: spotId })
+      }
+    } catch {
+      // Revert on error
+      setFavorites((prev) => {
+        const next = new Set(prev)
+        if (isLiked) next.add(spotId)
+        else next.delete(spotId)
+        return next
+      })
+    }
+  }, [currentUserId, favorites])
 
   const fetchSpots = useCallback(async () => {
     try {
       const { data } = await supabase
         .from('spots')
-        .select('id, title, address, city, price_per_hour, type, rating, review_count, photos, has_smart_gate')
+        .select(
+          'id, title, address, city, price_per_hour, type, rating, review_count, photos, has_smart_gate'
+        )
         .eq('status', 'active')
         .order('review_count', { ascending: false })
         .limit(20)
@@ -198,32 +370,71 @@ export default function HomeScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
-    await Promise.all([fetchUser(), fetchSpots()])
+    await fetchSpots()
     setRefreshing(false)
-  }, [fetchUser, fetchSpots])
+  }, [fetchSpots])
 
   useEffect(() => {
     async function init() {
-      await Promise.all([fetchUser(), fetchSpots()])
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data: dbUser } = await supabase
+          .from('users')
+          .select('id')
+          .eq('supabase_id', user.id)
+          .single()
+        if (dbUser) {
+          setCurrentUserId(dbUser.id)
+          await fetchFavorites(dbUser.id)
+        }
+      }
+      await fetchSpots()
       setLoading(false)
     }
     init()
-  }, [fetchUser, fetchSpots])
+  }, [fetchSpots, fetchFavorites])
 
-  const nearbySpots = spots.slice(0, 8)
-  const popularSpots = spots.slice(0, 10)
+  // Filter spots by active category
+  const filteredSpots = (() => {
+    if (activeCategory === 'all') return spots
+    if (activeCategory === 'smart_gate') return spots.filter((s) => s.has_smart_gate)
+    return spots.filter((s) => s.type === activeCategory)
+  })()
 
   if (loading) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <HomeSkeleton screenWidth={SCREEN_WIDTH} />
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16 }}
+        >
+          <GridSkeleton cardWidth={CARD_WIDTH} />
+        </ScrollView>
       </SafeAreaView>
     )
   }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView
+      {/* Sticky search bar */}
+      <View style={styles.topBar}>
+        <TouchableOpacity
+          style={styles.searchPill}
+          onPress={() => router.push('/(tabs)/search')}
+          activeOpacity={0.85}
+        >
+          <Search color={COLORS.gray400} size={17} strokeWidth={2.5} />
+          <Text style={styles.searchPillText}>Ou se garer?</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Category tabs + grid */}
+      <FlatList
+        data={filteredSpots}
+        keyExtractor={(item) => item.id}
+        numColumns={2}
+        columnWrapperStyle={styles.columnWrapper}
+        contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -233,183 +444,64 @@ export default function HomeScreen() {
             colors={[COLORS.primary]}
           />
         }
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Text style={styles.greeting}>
-              Bonjour{userName ? ` ${userName}` : ''} 👋
-            </Text>
-            <Text style={styles.subtitle}>Trouvez votre place de parking</Text>
-          </View>
-          <View style={styles.headerRight}>
-            <TouchableOpacity
-              onPress={() => router.push('/notifications')}
-              activeOpacity={0.7}
-              style={styles.bellBtn}
-            >
-              <Bell color={COLORS.gray700} size={22} />
-              {unreadNotifs > 0 && (
-                <View style={styles.bellBadge}>
-                  <Text style={styles.bellBadgeText}>
-                    {unreadNotifs > 9 ? '9+' : unreadNotifs}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => router.push('/(tabs)/profile')}
-              activeOpacity={0.7}
-            >
-              {avatarUrl ? (
-                <Image source={{ uri: avatarUrl }} style={styles.avatar} />
-              ) : (
-                <View style={styles.avatarPlaceholder}>
-                  <Text style={styles.avatarText}>
-                    {userName ? userName[0].toUpperCase() : '?'}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Search Bar */}
-        <TouchableOpacity
-          style={styles.searchBar}
-          onPress={() => router.push('/(tabs)/search')}
-          activeOpacity={0.7}
-        >
-          <Search color={COLORS.gray400} size={20} />
-          <Text style={styles.searchText}>Rechercher une place...</Text>
-        </TouchableOpacity>
-
-        {/* Nearby Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>A proximite</Text>
-            <TouchableOpacity
-              style={styles.seeAllBtn}
-              onPress={() => router.push('/(tabs)/search')}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.seeAllText}>Voir tout</Text>
-              <ChevronRight color={COLORS.primary} size={16} />
-            </TouchableOpacity>
-          </View>
-
-          {nearbySpots.length === 0 ? (
-            <View style={styles.emptySection}>
-              <MapPin color={COLORS.gray300} size={32} />
-              <Text style={styles.emptySectionText}>Aucune place disponible</Text>
-            </View>
-          ) : (
-            <FlatList
-              data={nearbySpots}
-              keyExtractor={(item) => `nearby-${item.id}`}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.nearbyList}
-              renderItem={({ item, index }) => (
+        ListHeaderComponent={
+          /* Category pills */
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryList}
+            style={styles.categoryScroll}
+          >
+            {CATEGORIES.map(({ key, label, Icon }) => {
+              const isActive = activeCategory === key
+              return (
                 <TouchableOpacity
-                  style={[styles.nearbyCard, { width: NEARBY_CARD_WIDTH }]}
-                  onPress={() => router.push(`/spot/${item.id}`)}
-                  activeOpacity={0.7}
+                  key={key}
+                  style={[
+                    styles.categoryPill,
+                    isActive && styles.categoryPillActive,
+                  ]}
+                  onPress={() => setActiveCategory(key)}
+                  activeOpacity={0.75}
                 >
-                  <SpotImage
-                    uri={getSpotPhoto(item, index)}
-                    style={[styles.nearbyPhoto, { height: NEARBY_CARD_WIDTH * 0.55 }]}
+                  <Icon
+                    color={isActive ? COLORS.primary : COLORS.gray500}
+                    size={15}
+                    strokeWidth={2}
                   />
-                  <View style={styles.nearbyBody}>
-                    <Text style={styles.nearbyTitle} numberOfLines={1}>
-                      {item.title}
-                    </Text>
-                    <View style={styles.nearbyRow}>
-                      <Text style={styles.nearbyPrice}>
-                        {formatPrice(item.price_per_hour)} €
-                      </Text>
-                      <Text style={styles.nearbyPriceUnit}>/heure</Text>
-                    </View>
-                    {item.rating && (
-                      <View style={styles.ratingRow}>
-                        <Star color={COLORS.warning} fill={COLORS.warning} size={12} />
-                        <Text style={styles.ratingText}>
-                          {Number(item.rating).toFixed(1)}
-                        </Text>
-                        <Text style={styles.reviewCount}>
-                          ({item.review_count})
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                </TouchableOpacity>
-              )}
-            />
-          )}
-        </View>
-
-        {/* Popular Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Places populaires</Text>
-          </View>
-
-          {popularSpots.length === 0 ? (
-            <View style={styles.emptySection}>
-              <Star color={COLORS.gray300} size={32} />
-              <Text style={styles.emptySectionText}>Aucune place populaire</Text>
-            </View>
-          ) : (
-            popularSpots.map((item, index) => (
-              <TouchableOpacity
-                key={`popular-${item.id}`}
-                style={styles.popularCard}
-                onPress={() => router.push(`/spot/${item.id}`)}
-                activeOpacity={0.7}
-              >
-                <SpotImage
-                  uri={getSpotPhoto(item, index)}
-                  style={styles.popularPhoto}
-                />
-                <View style={styles.popularBody}>
-                  <Text style={styles.popularTitle} numberOfLines={1}>
-                    {item.title}
+                  <Text
+                    style={[
+                      styles.categoryLabel,
+                      isActive && styles.categoryLabelActive,
+                    ]}
+                  >
+                    {label}
                   </Text>
-                  <View style={styles.popularAddressRow}>
-                    <MapPin color={COLORS.gray400} size={12} />
-                    <Text style={styles.popularAddress} numberOfLines={1}>
-                      {item.address}, {item.city}
-                    </Text>
-                  </View>
-                  <View style={styles.popularFooter}>
-                    <View style={styles.popularPriceRow}>
-                      <Text style={styles.popularPrice}>
-                        {formatPrice(item.price_per_hour)} €
-                      </Text>
-                      <Text style={styles.popularPriceUnit}>/heure</Text>
-                    </View>
-                    <View style={styles.popularMeta}>
-                      <Text style={styles.typeBadge}>
-                        {TYPE_LABELS[item.type] ?? item.type}
-                      </Text>
-                      {item.rating && (
-                        <View style={styles.ratingRow}>
-                          <Star color={COLORS.warning} fill={COLORS.warning} size={11} />
-                          <Text style={styles.ratingText}>
-                            {Number(item.rating).toFixed(1)}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            ))
-          )}
-        </View>
-
-        <View style={{ height: 24 }} />
-      </ScrollView>
+                  {isActive && <View style={styles.categoryUnderline} />}
+                </TouchableOpacity>
+              )
+            })}
+          </ScrollView>
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyWrap}>
+            <CircleParking color={COLORS.gray300} size={48} />
+            <Text style={styles.emptyTitle}>Aucune place disponible</Text>
+            <Text style={styles.emptySubtitle}>
+              Modifiez la catégorie ou revenez plus tard
+            </Text>
+          </View>
+        }
+        renderItem={({ item, index }) => (
+          <SpotCard
+            item={item}
+            index={index}
+            cardWidth={CARD_WIDTH}
+            isFavorite={favorites.has(item.id)}
+            onToggleFavorite={toggleFavorite}
+          />
+        )}
+      />
     </SafeAreaView>
   )
 }
@@ -420,292 +512,202 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
 
-  // Header
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 8,
-  },
-  headerLeft: {
-    flex: 1,
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  bellBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: COLORS.gray100,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  bellBadge: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: COLORS.danger,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-  },
-  bellBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: COLORS.white,
-  },
-  greeting: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: COLORS.dark,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: COLORS.gray500,
-    marginTop: 4,
-  },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: COLORS.gray200,
-  },
-  avatarPlaceholder: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: {
-    color: COLORS.white,
-    fontSize: 18,
-    fontWeight: '700',
-  },
-
-  // Search Bar
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginHorizontal: 20,
-    marginTop: 12,
-    marginBottom: 8,
-    backgroundColor: COLORS.white,
-    borderRadius: 14,
+  // Top search bar
+  topBar: {
     paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 4,
+    backgroundColor: COLORS.background,
+  },
+  searchPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: COLORS.white,
+    borderRadius: 30,
+    paddingHorizontal: 20,
     paddingVertical: 14,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06,
-        shadowRadius: 8,
-      },
-      android: { elevation: 3 },
-    }),
-    borderWidth: 1,
-    borderColor: COLORS.gray100,
-  },
-  searchText: {
-    color: COLORS.gray400,
-    fontSize: 15,
-  },
-
-  // Section
-  section: {
-    marginTop: 24,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    marginBottom: 14,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: COLORS.dark,
-  },
-  seeAllBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-  },
-  seeAllText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.primary,
-  },
-
-  // Empty section
-  emptySection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 32,
-    gap: 8,
-  },
-  emptySectionText: {
-    fontSize: 14,
-    color: COLORS.gray400,
-    fontWeight: '500',
-  },
-
-  // Nearby Cards (horizontal)
-  nearbyList: {
-    paddingHorizontal: 20,
-    gap: 12,
-  },
-  nearbyCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 16,
-    overflow: 'hidden',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.08,
+        shadowOpacity: 0.1,
         shadowRadius: 10,
       },
       android: { elevation: 4 },
     }),
   },
-  nearbyPhoto: {
-    width: '100%',
-    backgroundColor: COLORS.gray200,
-    overflow: 'hidden',
-  },
-  nearbyBody: {
-    padding: 12,
-  },
-  nearbyTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: COLORS.dark,
-    marginBottom: 6,
-  },
-  nearbyRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    marginBottom: 4,
-  },
-  nearbyPrice: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: COLORS.primary,
-  },
-  nearbyPriceUnit: {
-    fontSize: 12,
-    color: COLORS.gray500,
-    marginLeft: 2,
+  searchPillText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: COLORS.gray400,
   },
 
-  // Rating
-  ratingRow: {
+  // Category pills
+  categoryScroll: {
+    marginBottom: 16,
+  },
+  categoryList: {
+    paddingHorizontal: 0,
+    gap: 6,
+    paddingBottom: 2,
+  },
+  categoryPill: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: COLORS.gray200,
+    backgroundColor: COLORS.white,
+    position: 'relative',
+  },
+  categoryPillActive: {
+    borderColor: COLORS.dark,
+    borderWidth: 2,
+    backgroundColor: COLORS.white,
+  },
+  categoryLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: COLORS.gray500,
+  },
+  categoryLabelActive: {
+    fontWeight: '700',
+    color: COLORS.dark,
+  },
+  categoryUnderline: {
+    position: 'absolute',
+    bottom: -2,
+    left: 14,
+    right: 14,
+    height: 2,
+    backgroundColor: COLORS.dark,
+    borderRadius: 1,
+  },
+
+  // Grid list
+  listContent: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 32,
+  },
+  columnWrapper: {
+    gap: 12,
+    marginBottom: 20,
+  },
+
+  // Grid card
+  gridCard: {
+    // width set dynamically
+  },
+  gridPhotoWrap: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: COLORS.gray200,
+    position: 'relative',
+  },
+  photoDots: {
+    position: 'absolute',
+    bottom: 8,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
     gap: 4,
   },
-  ratingText: {
+  photoDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.55)',
+  },
+  photoDotActive: {
+    backgroundColor: COLORS.white,
+    width: 6,
+    height: 6,
+  },
+  heartBtn: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  priceBadge: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  priceBadgeText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: COLORS.white,
+  },
+  priceBadgeUnit: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.8)',
+  },
+  gridCardInfo: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  gridCardTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.dark,
+    flex: 1,
+    marginRight: 6,
+  },
+  gridCardRating: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  gridCardRatingText: {
     fontSize: 12,
     fontWeight: '600',
     color: COLORS.gray700,
   },
-  reviewCount: {
+  gridCardNewText: {
     fontSize: 11,
     color: COLORS.gray400,
+    fontWeight: '500',
   },
 
-  // Popular Cards (vertical list)
-  popularCard: {
-    flexDirection: 'row',
-    backgroundColor: COLORS.white,
-    borderRadius: 16,
-    marginHorizontal: 20,
-    marginBottom: 12,
-    overflow: 'hidden',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06,
-        shadowRadius: 8,
-      },
-      android: { elevation: 3 },
-    }),
-    borderWidth: 1,
-    borderColor: COLORS.gray100,
+  // Empty state
+  emptyWrap: {
+    paddingTop: 60,
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 32,
   },
-  popularPhoto: {
-    width: 100,
-    height: 100,
-    backgroundColor: COLORS.gray200,
-    overflow: 'hidden',
-  },
-  popularBody: {
-    flex: 1,
-    padding: 12,
-    justifyContent: 'space-between',
-  },
-  popularTitle: {
-    fontSize: 14,
+  emptyTitle: {
+    fontSize: 17,
     fontWeight: '700',
     color: COLORS.dark,
-  },
-  popularAddressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
     marginTop: 4,
   },
-  popularAddress: {
-    fontSize: 12,
-    color: COLORS.gray500,
-    flex: 1,
-  },
-  popularFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 6,
-  },
-  popularPriceRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-  },
-  popularPrice: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: COLORS.primary,
-  },
-  popularPriceUnit: {
-    fontSize: 11,
-    color: COLORS.gray500,
-    marginLeft: 2,
-  },
-  popularMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  typeBadge: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: COLORS.gray500,
-    backgroundColor: COLORS.gray100,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    overflow: 'hidden',
+  emptySubtitle: {
+    fontSize: 13,
+    color: COLORS.gray400,
+    textAlign: 'center',
+    lineHeight: 19,
   },
 })

@@ -25,6 +25,7 @@ import {
   X,
   CarFront,
   CalendarOff,
+  ArrowLeft,
 } from 'lucide-react-native'
 import { supabase } from '../../lib/supabase'
 import { COLORS, TYPE_LABELS, STATUS_CONFIG } from '../../lib/constants'
@@ -377,10 +378,21 @@ export default function HostScreen() {
           <>
             {/* Header */}
             <View style={styles.header}>
-              <Text style={styles.title}>Tableau de bord hote</Text>
-              <Text style={styles.subtitle}>
-                {spots.length} annonce{spots.length !== 1 ? 's' : ''}
-              </Text>
+              <View style={styles.headerRow}>
+                <TouchableOpacity
+                  onPress={() => router.back()}
+                  style={styles.backBtn}
+                  activeOpacity={0.7}
+                >
+                  <ArrowLeft color={COLORS.dark} size={20} />
+                </TouchableOpacity>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.title}>Tableau de bord hote</Text>
+                  <Text style={styles.subtitle}>
+                    {spots.length} annonce{spots.length !== 1 ? 's' : ''}
+                  </Text>
+                </View>
+              </View>
             </View>
 
             {/* Stats grid */}
@@ -587,12 +599,25 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   header: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 12,
     backgroundColor: COLORS.white,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.gray100,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.gray100,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: {
     fontSize: 24,

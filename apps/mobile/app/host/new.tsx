@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import * as Location from 'expo-location'
+import { Sun, Building2, Home, Umbrella, CircleParking } from 'lucide-react-native'
 import { supabase } from '../../lib/supabase'
 import { MAPBOX_TOKEN } from '../../lib/constants'
 
@@ -39,12 +40,12 @@ interface FormState {
 
 const TOTAL_STEPS = 4
 
-const SPOT_TYPES: { value: SpotType; label: string; icon: string }[] = [
-  { value: 'outdoor', label: 'Extérieur', icon: '☀️' },
-  { value: 'indoor', label: 'Intérieur', icon: '🏢' },
-  { value: 'garage', label: 'Garage', icon: '🏠' },
-  { value: 'covered', label: 'Couvert', icon: '⛱️' },
-  { value: 'underground', label: 'Souterrain', icon: '🚇' },
+const SPOT_TYPES: { value: SpotType; label: string; Icon: any }[] = [
+  { value: 'outdoor', label: 'Extérieur', Icon: Sun },
+  { value: 'indoor', label: 'Intérieur', Icon: Building2 },
+  { value: 'garage', label: 'Garage', Icon: Home },
+  { value: 'covered', label: 'Couvert', Icon: Umbrella },
+  { value: 'underground', label: 'Souterrain', Icon: CircleParking },
 ]
 
 const AMENITY_LIST = [
@@ -101,16 +102,25 @@ function Step1({ data, onChange }: { data: FormState; onChange: (type: SpotType)
       <Text style={s.stepTitle}>Type de place</Text>
       <Text style={s.stepSub}>Quel type de parking proposez-vous ?</Text>
       <View style={s.typeGrid}>
-        {SPOT_TYPES.map((t) => (
-          <TouchableOpacity
-            key={t.value}
-            style={[s.typeCard, data.type === t.value && s.typeCardActive]}
-            onPress={() => onChange(t.value)}
-          >
-            <Text style={s.typeIcon}>{t.icon}</Text>
-            <Text style={[s.typeLabel, data.type === t.value && s.typeLabelActive]}>{t.label}</Text>
-          </TouchableOpacity>
-        ))}
+        {SPOT_TYPES.map((t) => {
+          const isActive = data.type === t.value
+          return (
+            <TouchableOpacity
+              key={t.value}
+              style={[s.typeCard, isActive && s.typeCardActive]}
+              onPress={() => onChange(t.value)}
+            >
+              <View style={[s.typeIconWrap, isActive && s.typeIconWrapActive]}>
+                <t.Icon
+                  color={isActive ? '#0540FF' : '#6B7280'}
+                  size={24}
+                  strokeWidth={2}
+                />
+              </View>
+              <Text style={[s.typeLabel, isActive && s.typeLabelActive]}>{t.label}</Text>
+            </TouchableOpacity>
+          )
+        })}
       </View>
     </View>
   )
@@ -576,13 +586,24 @@ const s = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     borderWidth: 2,
-    borderColor: '#F3F4F6',
+    borderColor: '#E5E7EB',
     alignItems: 'center',
-    paddingVertical: 16,
+    paddingVertical: 20,
     paddingHorizontal: 8,
+    gap: 10,
   },
   typeCardActive: { borderColor: '#0540FF', backgroundColor: '#EFF6FF' },
-  typeIcon: { fontSize: 28, marginBottom: 8 },
+  typeIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  typeIconWrapActive: {
+    backgroundColor: '#DBEAFE',
+  },
   typeLabel: { fontSize: 13, fontWeight: '700', color: '#6B7280' },
   typeLabelActive: { color: '#0540FF' },
   // Fields
@@ -590,12 +611,12 @@ const s = StyleSheet.create({
   label: { fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 6 },
   input: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    borderWidth: 1,
+    borderRadius: 16,
+    borderWidth: 1.5,
     borderColor: '#E5E7EB',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 14,
+    paddingHorizontal: 16,
+    height: 48,
+    fontSize: 15,
     color: '#1A1A2E',
   },
   textarea: { height: 96, paddingTop: 12 },
@@ -692,7 +713,7 @@ const s = StyleSheet.create({
     paddingVertical: 15,
     alignItems: 'center',
   },
-  submitBtn: { backgroundColor: '#10B981' },
+  submitBtn: { backgroundColor: '#0540FF' },
   btnDisabled: { opacity: 0.6 },
   primaryBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
 })
