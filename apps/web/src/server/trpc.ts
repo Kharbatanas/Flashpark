@@ -34,37 +34,13 @@ export async function createContext(opts?: { req?: Request }) {
   let dbUserId: string | null = null
   let userRole: string | null = null
 
-  if (supabaseUserId && supabaseUser) {
-    let dbUser = await db.query.users.findFirst({
+  if (supabaseUserId) {
+    const dbUser = await db.query.users.findFirst({
       where: eq(users.supabaseId, supabaseUserId),
     })
 
-    // Auto-create DB record for email/password signups that bypassed /auth/callback
-    if (!dbUser) {
-      try {
-        const [created] = await db
-          .insert(users)
-          .values({
-            supabaseId: supabaseUserId,
-            email: supabaseUser.email!,
-            fullName:
-              supabaseUser.user_metadata?.full_name ??
-              supabaseUser.user_metadata?.name ??
-              supabaseUser.email?.split('@')[0] ??
-              'Utilisateur',
-            avatarUrl: supabaseUser.user_metadata?.avatar_url ?? null,
-            role: 'driver',
-          })
-          .returning()
-        dbUser = created
-      } catch {
-        // Race condition — another request created the record; re-fetch
-        dbUser = await db.query.users.findFirst({
-          where: eq(users.supabaseId, supabaseUserId),
-        })
-      }
-    }
-
+    // If no DB user exists, the user hasn't completed the signup flow via /auth/callback.
+    // Do NOT auto-create — return null userId so protectedProcedure blocks them.
     dbUserId = dbUser?.id ?? null
     userRole = dbUser?.role ?? null
   }

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { db, bookings, users } from '@flashpark/db'
 import { eq } from 'drizzle-orm'
+import { rateLimit, getClientIp } from '../../../../lib/rate-limit'
 
 export const runtime = 'nodejs'
 
@@ -10,6 +11,13 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 })
 
 export async function POST(request: Request) {
+  // Rate limit: 100 webhook events per minute per IP (Stripe sends bursts)
+  const ip = getClientIp(request)
+  const rl = rateLimit(`webhook:${ip}`, { limit: 100, windowSec: 60 })
+  if (!rl.allowed) {
+    return NextResponse.json({ error: 'Rate limited' }, { status: 429, headers: rl.headers })
+  }
+
   const body = await request.text()
   const sig = request.headers.get('stripe-signature')
 
@@ -19,17 +27,14 @@ export async function POST(request: Request) {
 
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
   if (!webhookSecret) {
-    console.error('STRIPE_WEBHOOK_SECRET is not set')
-    return NextResponse.json({ error: 'Webhook secret not configured' }, { status: 500 })
+    return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
   }
 
   let event: Stripe.Event
   try {
     event = stripe.webhooks.constructEvent(body, sig, webhookSecret)
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Invalid signature'
-    console.error('Webhook signature verification failed:', message)
-    return NextResponse.json({ error: `Webhook Error: ${message}` }, { status: 400 })
+  } catch {
+    return NextResponse.json({ error: 'Invalid webhook signature' }, { status: 400 })
   }
 
   try {
@@ -38,7 +43,14 @@ export async function POST(request: Request) {
       const bookingId = session.metadata?.bookingId
 
       if (!bookingId) {
-        console.error('checkout.session.completed: missing bookingId in metadata', session.id)
+        return NextResponse.json({ received: true })
+      }
+
+      // Cross-validate: booking must exist and be in a confirmable state
+      const booking = await db.query.bookings.findFirst({
+        where: eq(bookings.id, bookingId),
+      })
+      if (!booking || booking.status === 'cancelled' || booking.status === 'refunded') {
         return NextResponse.json({ received: true })
       }
 
@@ -62,7 +74,6 @@ export async function POST(request: Request) {
       const bookingId = paymentIntent.metadata?.bookingId
 
       if (!bookingId) {
-        console.error('payment_intent.payment_failed: missing bookingId in metadata', paymentIntent.id)
         return NextResponse.json({ received: true })
       }
 
@@ -78,7 +89,6 @@ export async function POST(request: Request) {
       const bookingId = session.metadata?.bookingId
 
       if (!bookingId) {
-        console.error('checkout.session.expired: missing bookingId in metadata', session.id)
         return NextResponse.json({ received: true })
       }
 
@@ -102,17 +112,28 @@ export async function POST(request: Request) {
 
     if (event.type === 'account.updated') {
       const account = event.data.object as Stripe.Account
-      // Mark host as verified if Stripe charges_enabled (fully onboarded)
-      if (account.charges_enabled) {
+      // Full verification: charges enabled AND no outstanding requirements
+      const isFullyVerified =
+        account.charges_enabled &&
+        account.payouts_enabled &&
+        (!account.requirements?.currently_due?.length) &&
+        (!account.requirements?.past_due?.length)
+
+      if (isFullyVerified) {
         await db
           .update(users)
-          .set({ updatedAt: new Date() })
+          .set({ isVerified: true, updatedAt: new Date() })
+          .where(eq(users.stripeAccountId, account.id))
+      } else if (!account.charges_enabled) {
+        // Account was disabled — remove verification
+        await db
+          .update(users)
+          .set({ isVerified: false, updatedAt: new Date() })
           .where(eq(users.stripeAccountId, account.id))
       }
     }
-  } catch (err) {
-    console.error('Webhook handler error:', err)
-    return NextResponse.json({ error: 'Internal handler error' }, { status: 500 })
+  } catch {
+    return NextResponse.json({ error: 'Webhook processing error' }, { status: 500 })
   }
 
   return NextResponse.json({ received: true })

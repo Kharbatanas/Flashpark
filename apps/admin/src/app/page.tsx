@@ -8,7 +8,7 @@ async function getStats() {
   const supabase = createSupabaseServerClient()
 
   const results = await Promise.all([
-    supabase.from('users').select('*', { count: 'exact', head: true }),
+    supabase.from('users').select('id', { count: 'exact', head: true }),
     supabase.from('spots').select('*', { count: 'exact', head: true }),
     supabase.from('bookings').select('*', { count: 'exact', head: true }),
     supabase.from('spots').select('*', { count: 'exact', head: true }).eq('status', 'active'),
@@ -23,8 +23,8 @@ async function getStats() {
       .eq('status', 'active')
       .order('review_count', { ascending: false })
       .limit(3),
-    supabase.from('users').select('*', { count: 'exact', head: true }).or('role.eq.driver,role.eq.both'),
-    supabase.from('users').select('*', { count: 'exact', head: true }).or('role.eq.host,role.eq.both'),
+    supabase.from('users').select('id', { count: 'exact', head: true }).or('role.eq.driver,role.eq.both'),
+    supabase.from('users').select('id', { count: 'exact', head: true }).or('role.eq.host,role.eq.both'),
   ])
 
   const usersCount = results[0].count

@@ -83,9 +83,8 @@ export async function PATCH(
       .single()
 
     if (updateError) {
-      console.error('Supabase update error:', updateError)
       return NextResponse.json(
-        { error: `Erreur de mise à jour: ${updateError.message}` },
+        { error: 'Erreur de mise à jour' },
         { status: 500 }
       )
     }
@@ -98,10 +97,9 @@ export async function PATCH(
     }
 
     return NextResponse.json({ ok: true, previousStatus: updated.status, newStatus: status })
-  } catch (err) {
-    console.error('API error:', err)
+  } catch {
     return NextResponse.json(
-      { error: `Erreur serveur: ${err instanceof Error ? err.message : 'inconnue'}` },
+      { error: 'Erreur serveur' },
       { status: 500 }
     )
   }

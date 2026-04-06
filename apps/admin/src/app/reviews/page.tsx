@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from '../../lib/supabase/server'
 import { Sidebar } from '../../components/sidebar'
+import { ReviewActions } from './review-actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -152,11 +153,14 @@ export default async function ReviewsAdminPage() {
                           )}
                         </div>
                       </div>
-                      <span className="text-xs text-gray-400 whitespace-nowrap shrink-0">
-                        {new Date(review.created_at).toLocaleDateString('fr-FR', {
-                          day: 'numeric', month: 'short', year: 'numeric',
-                        })}
-                      </span>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span className="text-xs text-gray-400 whitespace-nowrap">
+                          {new Date(review.created_at).toLocaleDateString('fr-FR', {
+                            day: 'numeric', month: 'short', year: 'numeric',
+                          })}
+                        </span>
+                        <ReviewActions reviewId={review.id} />
+                      </div>
                     </div>
                   </div>
                 ))

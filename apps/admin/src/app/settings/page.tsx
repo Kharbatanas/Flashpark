@@ -90,7 +90,7 @@ export default function SettingsAdminPage() {
                 </div>
                 <div className="divide-y divide-gray-50">
                   {[
-                    { label: 'Environnement', value: process.env.NODE_ENV ?? 'development' },
+                    { label: 'Environnement', value: 'Production' },
                     { label: 'Base de donnees', value: 'Supabase (PostgreSQL)' },
                     { label: 'Hebergement', value: 'Vercel' },
                     { label: 'Version', value: '0.1.0 (MVP)' },

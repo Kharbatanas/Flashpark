@@ -239,6 +239,28 @@ function Step4Photos({
   const inputRef = useRef<HTMLInputElement>(null)
   const supabase = createSupabaseBrowserClient()
 
+  const IMAGE_SIGNATURES: Array<{ mime: string; bytes: number[] }> = [
+    { mime: 'image/jpeg', bytes: [0xFF, 0xD8, 0xFF] },
+    { mime: 'image/png', bytes: [0x89, 0x50, 0x4E, 0x47] },
+    { mime: 'image/gif', bytes: [0x47, 0x49, 0x46] },
+    { mime: 'image/webp', bytes: [0x52, 0x49, 0x46, 0x46] },
+  ]
+
+  const SAFE_EXTENSIONS: Record<string, string> = {
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/gif': 'gif',
+    'image/webp': 'webp',
+  }
+
+  async function isValidImage(file: File): Promise<boolean> {
+    const buffer = await file.slice(0, 12).arrayBuffer()
+    const bytes = new Uint8Array(buffer)
+    return IMAGE_SIGNATURES.some(sig =>
+      sig.bytes.every((b, i) => bytes[i] === b)
+    )
+  }
+
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return
     setUploading(true)
@@ -251,8 +273,13 @@ function Step4Photos({
         setUploadError('Chaque photo doit faire moins de 5 Mo')
         continue
       }
-      const ext = file.name.split('.').pop()
-      const path = `spots/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+      const valid = await isValidImage(file)
+      if (!valid) {
+        setUploadError('Format de fichier invalide. Seuls JPEG, PNG, GIF et WebP sont acceptes.')
+        continue
+      }
+      const ext = SAFE_EXTENSIONS[file.type] ?? 'jpg'
+      const path = `spots/${Date.now()}-${crypto.randomUUID()}.${ext}`
       const { error } = await supabase.storage.from('spot-photos').upload(path, file, { upsert: false })
       if (error) {
         setUploadError(`Erreur upload : ${error.message}`)

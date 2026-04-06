@@ -6,10 +6,10 @@ import { createTRPCRouter, publicProcedure, protectedProcedure, hostProcedure } 
 import { bookings, spots, vehicles, availability } from '@flashpark/db'
 import { createNotification } from '../lib/notify'
 
-function generateQrCode(startTime: Date): string {
-  const uid = crypto.randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase()
-  const date = startTime.toISOString().slice(2, 10).replace(/-/g, '')
-  return `FP-${uid}-${date}`
+function generateQrCode(): string {
+  // 16 hex chars from a full UUID = ~64 bits of entropy (brute-force resistant)
+  const uid = crypto.randomUUID().replace(/-/g, '').slice(0, 16).toUpperCase()
+  return `FP-${uid}`
 }
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
@@ -81,7 +81,7 @@ export const bookingsRouter = createTRPCRouter({
       // Instant book: skip pending, confirm immediately and generate QR
       const isInstantBook = spot.instantBook === true
       const initialStatus = isInstantBook ? 'confirmed' : 'pending'
-      const qrCode = isInstantBook ? generateQrCode(startTime) : null
+      const qrCode = isInstantBook ? generateQrCode() : null
 
       // TRANSACTION: conflict check + insert (atomic — prevents race condition)
       const [booking] = await ctx.db.transaction(async (tx) => {
@@ -145,7 +145,7 @@ export const bookingsRouter = createTRPCRouter({
           ? `Réservation confirmée automatiquement pour "${spot.title}"`
           : `Nouvelle demande de réservation pour "${spot.title}"`,
         data: { bookingId: booking.id, spotId },
-      }).catch(() => {})
+      }).catch((err) => console.warn('[notify] Notification failed:', err))
 
       return { booking, totalPrice, platformFee }
     }),
@@ -190,26 +190,48 @@ export const bookingsRouter = createTRPCRouter({
       const now = new Date()
       const hoursUntilStart = (booking.startTime.getTime() - now.getTime()) / (1000 * 60 * 60)
 
-      // Cancellation policy (only applies to confirmed + paid bookings)
-      // pending bookings: full refund (not yet charged)
-      // confirmed, > 24h before start: full refund
-      // confirmed, < 24h and > 2h: 50% refund
-      // confirmed, < 2h: no refund
+      // Cancellation policy:
+      // - pending or confirmed with payment intent, > 24h before start: full refund
+      // - confirmed with payment intent, 2–24h before start: 50% refund
+      // - confirmed with payment intent, < 2h before start: no refund
+      // - no payment intent: no refund needed (not yet charged)
       let refundAmountCents: number | null = null
-      if (booking.status === 'confirmed' && booking.stripePaymentIntentId) {
+      if (booking.stripePaymentIntentId) {
         const totalCents = Math.round(parseFloat(booking.totalPrice) * 100)
-        if (hoursUntilStart > 24) {
-          refundAmountCents = totalCents // full refund
+        if (booking.status === 'pending') {
+          // Pending bookings always get full refund (payment was captured but not yet confirmed)
+          refundAmountCents = totalCents
+        } else if (hoursUntilStart > 24) {
+          refundAmountCents = totalCents
         } else if (hoursUntilStart > 2) {
-          refundAmountCents = Math.round(totalCents * 0.5) // 50% refund
+          refundAmountCents = Math.round(totalCents * 0.5)
         } else {
-          refundAmountCents = 0 // no refund
+          refundAmountCents = 0
         }
       }
 
+      // Issue Stripe refund BEFORE updating status — fail-closed
+      const needsRefund = refundAmountCents !== null && refundAmountCents > 0 && booking.stripePaymentIntentId
+      if (needsRefund) {
+        try {
+          await stripe.refunds.create({
+            payment_intent: booking.stripePaymentIntentId!,
+            amount: refundAmountCents!,
+          })
+        } catch (err) {
+          // Refund failed — do NOT cancel the booking, surface the error
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: "Le remboursement a échoué. La réservation n'a pas été annulée. Veuillez réessayer ou contacter le support.",
+          })
+        }
+      }
+
+      // Refund succeeded (or not needed) — now cancel the booking
+      const finalStatus = needsRefund ? 'refunded' : 'cancelled'
       const [updated] = await ctx.db
         .update(bookings)
-        .set({ status: 'cancelled', cancelledAt: now, cancelledBy: ctx.userId, updatedAt: now })
+        .set({ status: finalStatus, cancelledAt: now, cancelledBy: ctx.userId, updatedAt: now })
         .where(and(
           eq(bookings.id, input.id),
           eq(bookings.driverId, ctx.userId),
@@ -221,24 +243,6 @@ export const bookingsRouter = createTRPCRouter({
         throw new TRPCError({ code: 'CONFLICT', message: 'Le statut de la réservation a changé entre-temps' })
       }
 
-      // Issue Stripe refund if applicable
-      if (refundAmountCents !== null && refundAmountCents > 0 && booking.stripePaymentIntentId) {
-        try {
-          await stripe.refunds.create({
-            payment_intent: booking.stripePaymentIntentId,
-            amount: refundAmountCents,
-          })
-          await ctx.db
-            .update(bookings)
-            .set({ status: 'refunded', updatedAt: new Date() })
-            .where(eq(bookings.id, input.id))
-          return { ...updated, status: 'refunded' as const, refundedAmount: refundAmountCents / 100 }
-        } catch (err) {
-          // Refund failed — booking is still cancelled, log for manual review
-          console.error('Stripe refund failed for booking', input.id, err)
-        }
-      }
-
       // Notify host of driver cancellation
       const cancelledSpot = await ctx.db.query.spots.findFirst({ where: eq(spots.id, booking.spotId) })
       if (cancelledSpot) {
@@ -248,7 +252,7 @@ export const bookingsRouter = createTRPCRouter({
           title: 'Réservation annulée',
           body: `Le conducteur a annulé sa réservation pour "${cancelledSpot.title}"`,
           data: { bookingId: booking.id, spotId: cancelledSpot.id },
-        }).catch(() => {})
+        }).catch((err) => console.warn('[notify] Notification failed:', err))
       }
 
       const refundedAmount = refundAmountCents !== null ? refundAmountCents / 100 : null
@@ -274,7 +278,7 @@ export const bookingsRouter = createTRPCRouter({
         throw new TRPCError({ code: 'BAD_REQUEST', message: "Cette réservation n'est pas en attente" })
       }
 
-      const qrCode = generateQrCode(new Date(booking.startTime))
+      const qrCode = generateQrCode()
 
       const [updated] = await ctx.db
         .update(bookings)
@@ -296,7 +300,7 @@ export const bookingsRouter = createTRPCRouter({
         title: 'Réservation confirmée',
         body: `Votre réservation pour "${spot.title}" a été confirmée`,
         data: { bookingId: booking.id, spotId: spot.id, qrCode },
-      }).catch(() => {})
+      }).catch((err) => console.warn('[notify] Notification failed:', err))
 
       return updated
     }),
@@ -340,7 +344,7 @@ export const bookingsRouter = createTRPCRouter({
         title: 'Réservation refusée',
         body: `Votre demande de réservation pour "${spot.title}" a été refusée par l'hôte`,
         data: { bookingId: booking.id, spotId: spot.id },
-      }).catch(() => {})
+      }).catch((err) => console.warn('[notify] Notification failed:', err))
 
       return updated
     }),
@@ -367,24 +371,27 @@ export const bookingsRouter = createTRPCRouter({
         throw new TRPCError({ code: 'BAD_REQUEST', message: "Impossible d'annuler une réservation déjà commencée" })
       }
 
+      // Full refund since host cancelled — refund BEFORE status change (fail-closed)
+      if (booking.stripePaymentIntentId) {
+        try {
+          await stripe.refunds.create({ payment_intent: booking.stripePaymentIntentId })
+        } catch {
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: "Le remboursement a échoué. L'annulation n'a pas été effectuée. Veuillez réessayer.",
+          })
+        }
+      }
+
+      const finalStatus = booking.stripePaymentIntentId ? 'refunded' : 'cancelled'
       const [updated] = await ctx.db
         .update(bookings)
-        .set({ status: 'cancelled', cancelledAt: new Date(), cancelledBy: ctx.userId, updatedAt: new Date() })
+        .set({ status: finalStatus, cancelledAt: new Date(), cancelledBy: ctx.userId, updatedAt: new Date() })
         .where(and(eq(bookings.id, input.id), eq(bookings.status, 'confirmed')))
         .returning()
 
       if (!updated) {
         throw new TRPCError({ code: 'CONFLICT', message: 'Le statut de la réservation a changé entre-temps' })
-      }
-
-      // Full refund since host cancelled
-      if (booking.stripePaymentIntentId) {
-        try {
-          await stripe.refunds.create({ payment_intent: booking.stripePaymentIntentId })
-          await ctx.db.update(bookings).set({ status: 'refunded', updatedAt: new Date() }).where(eq(bookings.id, input.id))
-        } catch (err) {
-          console.error('Stripe refund failed for host-cancelled booking', input.id, err)
-        }
       }
 
       // Notify driver
@@ -394,7 +401,7 @@ export const bookingsRouter = createTRPCRouter({
         title: "Réservation annulée par l'hôte",
         body: `L'hôte a annulé votre réservation confirmée pour "${spot.title}". Vous serez remboursé intégralement.`,
         data: { bookingId: booking.id, spotId: spot.id },
-      }).catch(() => {})
+      }).catch((err) => console.warn('[notify] Notification failed:', err))
 
       return updated
     }),

@@ -2,6 +2,16 @@ import { createSupabaseServerClient } from '../../../../lib/supabase/server'
 import { db, bookings, spots, users } from '@flashpark/db'
 import { eq, and } from 'drizzle-orm'
 
+/** Escape HTML special characters to prevent XSS in receipt template */
+function esc(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 interface RouteParams {
   params: { bookingId: string }
 }
@@ -80,11 +90,11 @@ export async function GET(_request: Request, { params }: RouteParams) {
   <table>
     <tr>
       <td>Place de stationnement</td>
-      <td>${spot?.title ?? 'Inconnue'}</td>
+      <td>${esc(spot?.title ?? 'Inconnue')}</td>
     </tr>
     <tr>
       <td>Adresse</td>
-      <td>${spot?.address ?? '\u2014'}</td>
+      <td>${esc(spot?.address ?? '\u2014')}</td>
     </tr>
     <tr>
       <td>Date de reservation</td>
@@ -100,13 +110,13 @@ export async function GET(_request: Request, { params }: RouteParams) {
     </tr>
     <tr>
       <td>Statut</td>
-      <td>${booking.status}</td>
+      <td>${esc(booking.status)}</td>
     </tr>
     <tr>
       <td>Conducteur</td>
-      <td>${dbUser.fullName}</td>
+      <td>${esc(dbUser.fullName ?? '')}</td>
     </tr>
-    ${booking.stripePaymentIntentId ? `<tr><td>Reference paiement</td><td>${booking.stripePaymentIntentId}</td></tr>` : ''}
+    ${booking.stripePaymentIntentId ? `<tr><td>Reference paiement</td><td>${esc(booking.stripePaymentIntentId)}</td></tr>` : ''}
     <tr>
       <td>Sous-total (hote)</td>
       <td>${hostPayout.toFixed(2)} \u20ac</td>

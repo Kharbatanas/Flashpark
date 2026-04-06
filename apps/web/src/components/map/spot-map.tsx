@@ -177,7 +177,7 @@ export function SpotMap({ initialSpots }: SpotMapProps) {
           return [...prev, ...unique]
         })
       }
-    } catch { /* silent */ }
+    } catch (err) { console.warn('[SpotMap] Failed to fetch spots:', err) }
   }
 
   useEffect(() => {
@@ -210,7 +210,7 @@ export function SpotMap({ initialSpots }: SpotMapProps) {
           fetchSpotsNear(lat, lng)
         }
       })
-      .catch(() => {})
+      .catch((err: unknown) => console.warn('[SpotMap] Geolocation fetch failed:', err))
   }, [])
 
   useEffect(() => {
@@ -280,7 +280,7 @@ export function SpotMap({ initialSpots }: SpotMapProps) {
           setViewport({ longitude: lng, latitude: lat, zoom: 14 })
           mapRef.current?.flyTo({ center: [lng, lat], zoom: 14, duration: 1200 })
         }
-      } catch {}
+      } catch (err) { console.warn('[SpotMap] Suggestion select failed:', err) }
       setShowSuggestions(false)
     },
     [searchValue, suggestions]

@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { createSupabaseServerClient } from '../../lib/supabase/server'
 import { Sidebar } from '../../components/sidebar'
+import { UserActions } from './user-actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -80,6 +81,7 @@ export default async function UsersAdminPage({ searchParams }: { searchParams: {
                   <th className="px-5 py-3 text-left">Rôle</th>
                   <th className="px-5 py-3 text-left">Vérifié</th>
                   <th className="px-5 py-3 text-left">Inscrit le</th>
+                  <th className="px-5 py-3 text-left">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -107,11 +109,14 @@ export default async function UsersAdminPage({ searchParams }: { searchParams: {
                     <td className="px-5 py-3.5 text-gray-400">
                       {new Date(user.created_at).toLocaleDateString('fr-FR')}
                     </td>
+                    <td className="px-5 py-3.5">
+                      <UserActions userId={user.id} currentRole={user.role} isVerified={user.is_verified} />
+                    </td>
                   </tr>
                 ))}
                 {!users?.length && (
                   <tr>
-                    <td colSpan={5} className="px-5 py-12 text-center text-sm text-gray-400">
+                    <td colSpan={6} className="px-5 py-12 text-center text-sm text-gray-400">
                       Aucun utilisateur
                     </td>
                   </tr>

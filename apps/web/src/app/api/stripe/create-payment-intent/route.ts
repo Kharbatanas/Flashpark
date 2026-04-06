@@ -3,6 +3,7 @@ import Stripe from 'stripe'
 import { createSupabaseServerClient } from '../../../../lib/supabase/server'
 import { db, bookings, users } from '@flashpark/db'
 import { eq } from 'drizzle-orm'
+import { rateLimit, getClientIp } from '../../../../lib/rate-limit'
 
 if (!process.env.STRIPE_SECRET_KEY) {
   throw new Error('STRIPE_SECRET_KEY environment variable is not set')
@@ -13,6 +14,13 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
 })
 
 export async function POST(request: Request) {
+  // Rate limit: 10 payment intents per minute per IP
+  const ip = getClientIp(request)
+  const rl = rateLimit(`payment:${ip}`, { limit: 10, windowSec: 60 })
+  if (!rl.allowed) {
+    return NextResponse.json({ error: 'Trop de requetes' }, { status: 429, headers: rl.headers })
+  }
+
   const supabase = createSupabaseServerClient()
   const {
     data: { user },
@@ -77,10 +85,9 @@ export async function POST(request: Request) {
       .where(eq(bookings.id, bookingId))
 
     return NextResponse.json({ clientSecret: paymentIntent.client_secret })
-  } catch (err) {
-    console.error('Stripe error:', err)
+  } catch {
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Erreur Stripe' },
+      { error: 'Erreur lors de la creation du paiement' },
       { status: 500 }
     )
   }

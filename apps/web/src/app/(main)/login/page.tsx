@@ -51,6 +51,11 @@ export default function LoginPage() {
     setSuccessMessage(null)
 
     if (mode === 'register') {
+      if (password.length < 12) {
+        setError('Le mot de passe doit contenir au moins 12 caractères')
+        setLoading(false)
+        return
+      }
       const { error } = await supabase.auth.signUp({
         email,
         password,
@@ -306,8 +311,11 @@ export default function LoginPage() {
                                 onChange={(e) => setPassword(e.target.value)}
                                 placeholder="••••••••"
                                 className="mt-1.5"
-                                minLength={6}
+                                minLength={12}
                               />
+                              {mode === 'register' && (
+                                <p className="text-xs text-gray-400 mt-1">12 caractères minimum</p>
+                              )}
                             </div>
                             <motion.div
                               whileHover={{ scale: 1.02 }}
