@@ -11,12 +11,26 @@ const SOURCE_COLORS: Record<string, string> = {
   indigo: 'bg-amber-100 text-amber-700',
   google_maps: 'bg-emerald-100 text-emerald-700',
   onepark: 'bg-rose-100 text-rose-700',
+  osm: 'bg-teal-100 text-teal-700',
+  effia: 'bg-orange-100 text-orange-700',
+  qpark: 'bg-cyan-100 text-cyan-700',
+  interparking: 'bg-sky-100 text-sky-700',
+  apcoa: 'bg-lime-100 text-lime-700',
+  vinci: 'bg-violet-100 text-violet-700',
+  saemes: 'bg-indigo-100 text-indigo-700',
+  saba: 'bg-fuchsia-100 text-fuchsia-700',
+  empark: 'bg-pink-100 text-pink-700',
+  parclick: 'bg-red-100 text-red-700',
+  other: 'bg-gray-100 text-gray-600',
   unknown: 'bg-gray-100 text-gray-600',
 }
 
 const SOURCE_LABELS: Record<string, string> = {
   zenpark: 'Zenpark', yespark: 'Yespark', indigo: 'Indigo',
-  google_maps: 'Google Maps', onepark: 'Onepark',
+  google_maps: 'Google Maps', onepark: 'Onepark', osm: 'OpenStreetMap',
+  effia: 'Effia', qpark: 'Q-Park', interparking: 'Interparking',
+  apcoa: 'APCOA', vinci: 'Vinci Park', saemes: 'SAEMES/SEMIACS',
+  saba: 'SABA', empark: 'Empark', parclick: 'Parclick', other: 'Autre',
 }
 
 const COUNTRY_FLAGS: Record<string, string> = {

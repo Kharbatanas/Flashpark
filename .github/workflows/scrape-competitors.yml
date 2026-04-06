@@ -21,7 +21,7 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Run scraper
+      - name: Run scraper (real data — OSM + Apify)
         env:
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
