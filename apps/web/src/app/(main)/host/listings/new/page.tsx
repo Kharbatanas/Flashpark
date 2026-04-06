@@ -24,6 +24,7 @@ interface FormData {
   pricePerDay: string
   instantBook: boolean
   hasSmartGate: boolean
+  maxVehicleHeight: string
 }
 
 const TOTAL_STEPS = 6
@@ -203,6 +204,22 @@ function Step3({
             />
           </button>
           <span className="text-sm text-gray-700">Ma place est équipée d&apos;un Smart Gate</span>
+        </div>
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-gray-700">
+            Hauteur maximale (m) — optionnel
+          </label>
+          <input
+            type="number"
+            min="1"
+            max="5"
+            step="0.1"
+            value={data.maxVehicleHeight}
+            onChange={(e) => onChange({ maxVehicleHeight: e.target.value })}
+            placeholder="2.0"
+            className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-[#0540FF] focus:outline-none focus:ring-1 focus:ring-[#0540FF]"
+          />
+          <p className="mt-1 text-xs text-gray-400">Laissez vide si aucune restriction de hauteur</p>
         </div>
       </div>
     </div>
@@ -422,6 +439,7 @@ function Step6({ data }: { data: FormData }) {
           { label: 'Photos', value: data.photos.length > 0 ? `${data.photos.length} photo(s)` : 'Aucune' },
           { label: 'Prix/heure', value: data.pricePerHour ? `${Number(data.pricePerHour).toFixed(2).replace('.', ',')} €` : '—' },
           { label: 'Prix/jour', value: data.pricePerDay ? `${Number(data.pricePerDay).toFixed(2).replace('.', ',')} €` : '—' },
+          { label: 'Hauteur max', value: data.maxVehicleHeight ? `${Number(data.maxVehicleHeight).toFixed(1)} m` : '—' },
           { label: 'Smart Gate', value: data.hasSmartGate ? 'Oui' : 'Non' },
           { label: 'Réservation instantanée', value: data.instantBook ? 'Oui' : 'Non' },
         ].map(({ label, value }) => (
@@ -455,6 +473,7 @@ const INITIAL_DATA: FormData = {
   pricePerDay: '',
   instantBook: true,
   hasSmartGate: false,
+  maxVehicleHeight: '',
 }
 
 function validateStep(step: number, data: FormData): string | null {
@@ -521,6 +540,7 @@ export default function NewListingPage() {
         pricePerDay: data.pricePerDay ? Number(data.pricePerDay) : undefined,
         instantBook: data.instantBook,
         hasSmartGate: data.hasSmartGate,
+        maxVehicleHeight: data.maxVehicleHeight ? Number(data.maxVehicleHeight) : undefined,
       })
       router.push('/host/listings')
     } catch (err) {

@@ -34,7 +34,9 @@ export default function HostListingsPage() {
   const { isHost, isLoading: hostLoading } = useRequireHost()
   const { data: listings, isLoading, refetch } = api.spots.myListings.useQuery(undefined, { enabled: isHost })
   const updateSpot = api.spots.update.useMutation({ onSuccess: () => refetch() })
+  const deleteSpot = api.spots.delete.useMutation({ onSuccess: () => refetch() })
   const [togglingId, setTogglingId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   async function handleToggle(id: string, currentStatus: string) {
@@ -49,6 +51,19 @@ export default function HostListingsPage() {
       setError(err instanceof Error ? err.message : 'Erreur')
     } finally {
       setTogglingId(null)
+    }
+  }
+
+  async function handleDelete(id: string, title: string) {
+    if (!window.confirm(`Supprimer "${title}" ? Cette action est irréversible.`)) return
+    setDeletingId(id)
+    setError(null)
+    try {
+      await deleteSpot.mutateAsync({ id })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur lors de la suppression')
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -167,6 +182,13 @@ export default function HostListingsPage() {
                           >
                             Modifier
                           </Link>
+                          <button
+                            onClick={() => handleDelete(spot.id, spot.title)}
+                            disabled={deletingId === spot.id}
+                            className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
+                          >
+                            {deletingId === spot.id ? '...' : 'Supprimer'}
+                          </button>
                           {canToggle && (
                             <Switch
                               checked={spot.status === 'active'}

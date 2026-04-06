@@ -18,6 +18,8 @@ import {
   XCircle,
   AlertCircle,
   Zap,
+  Navigation,
+  Info,
 } from 'lucide-react'
 
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
@@ -43,6 +45,9 @@ interface BookingContentProps {
     address: string
     pricePerHour: string
     hasSmartGate: boolean
+    latitude: string
+    longitude: string
+    parkingInstructions: string | null
   }
   startDate: string
   endDate: string
@@ -142,18 +147,41 @@ export function BookingContent({
           <FadeIn delay={0.45} direction="up">
             <div className="rounded-xl border border-gray-100 bg-white shadow-sm">
               <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-4">
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Parking</p>
                   <h2 className="mt-1 text-lg font-semibold leading-snug text-gray-900">{spot.title}</h2>
                   <p className="mt-0.5 flex items-center gap-1 text-sm text-gray-500">
                     <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
                     {spot.address}
                   </p>
+                  <a
+                    href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${spot.latitude},${spot.longitude}`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-[#0540FF] px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-[#0435D2] transition-colors"
+                  >
+                    <Navigation className="h-3 w-3" />
+                    Naviguer
+                  </a>
                 </div>
                 <span className={`mt-0.5 flex-shrink-0 rounded-full border px-3 py-1 text-xs font-semibold ${statusCfg.className}`}>
                   {statusCfg.label}
                 </span>
               </div>
+
+              {/* Parking instructions */}
+              {spot.parkingInstructions && (
+                <>
+                  <Separator />
+                  <div className="flex gap-3 px-6 py-4">
+                    <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-[#0540FF]" />
+                    <div>
+                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-widest text-gray-400">Instructions d&apos;accès</p>
+                      <p className="text-sm leading-relaxed text-gray-700 whitespace-pre-line">{spot.parkingInstructions}</p>
+                    </div>
+                  </div>
+                </>
+              )}
 
               <Separator />
 

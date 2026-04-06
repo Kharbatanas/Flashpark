@@ -6,6 +6,7 @@ import { BookingWidget } from '../../../../components/booking-widget'
 import { ReviewsSection } from '../../../../components/reviews-section'
 import { api } from '../../../../lib/trpc/client'
 import { FadeIn, StaggerContainer, StaggerItem, PageTransition, motion, AnimatePresence } from '../../../../components/motion'
+import { useRouter } from 'next/navigation'
 import {
   ArrowLeft,
   Star,
@@ -23,6 +24,7 @@ import {
   Grid2X2,
   X,
   ChevronRight,
+  MessageCircle,
 } from 'lucide-react'
 
 /* ─── constants ──────────────────────────────────────────────── */
@@ -406,11 +408,24 @@ export function SpotContent({ spot }: { spot: SpotData }) {
   const photos = spot.photos ?? []
   const rating = spot.rating ? Number(spot.rating) : null
   const pricePerHour = Number(spot.pricePerHour)
+  const pricePerDay = spot.pricePerDay ? Number(spot.pricePerDay) : null
+  const router = useRouter()
 
   const { data: myBooking } = api.bookings.myBookingForSpot.useQuery(
     { spotId: spot.id },
     { retry: false }
   )
+
+  const [showContactTooltip, setShowContactTooltip] = useState(false)
+
+  function handleContact() {
+    if (myBooking) {
+      router.push(`/booking/${myBooking.id}#messages`)
+    } else {
+      setShowContactTooltip(true)
+      setTimeout(() => setShowContactTooltip(false), 3000)
+    }
+  }
 
   // Scroll to the inline booking widget on desktop when the sticky CTA is tapped
   const bookingRef = useRef<HTMLDivElement>(null)
@@ -514,9 +529,27 @@ export function SpotContent({ spot }: { spot: SpotData }) {
                       </p>
                     </div>
                   </div>
-                  <button className="w-full rounded-xl border border-gray-200 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100">
-                    Contacter
-                  </button>
+                  <div className="relative">
+                    <button
+                      onClick={handleContact}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100"
+                    >
+                      <MessageCircle className="h-4 w-4" />
+                      Contacter l&apos;hôte
+                    </button>
+                    <AnimatePresence>
+                      {showContactTooltip && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: 4 }}
+                          className="absolute left-1/2 top-full z-10 mt-2 w-56 -translate-x-1/2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800 shadow-md"
+                        >
+                          Réservez d&apos;abord pour contacter l&apos;hôte
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 </div>
               </FadeIn>
 
@@ -643,6 +676,11 @@ export function SpotContent({ spot }: { spot: SpotData }) {
                     {pricePerHour.toFixed(2).replace('.', ',')} €
                   </span>
                   <span className="text-gray-500"> / heure</span>
+                  {pricePerDay !== null && (
+                    <span className="ml-3 text-base font-medium text-gray-500">
+                      · {pricePerDay.toFixed(2).replace('.', ',')} € / jour
+                    </span>
+                  )}
                   {rating !== null && (
                     <div className="mt-1 flex items-center gap-1.5 text-sm text-gray-500">
                       <Star className="h-3.5 w-3.5 fill-current text-[#0540FF]" />

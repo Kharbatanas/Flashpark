@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 
 export default function LoginPage() {
-  const [mode, setMode] = useState<'login' | 'register'>('login')
+  const [mode, setMode] = useState<'login' | 'register' | 'forgot'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -72,6 +72,24 @@ export default function LoginPage() {
       } else {
         router.push('/dashboard')
       }
+    }
+  }
+
+  async function handleForgotPassword(e: React.FormEvent) {
+    e.preventDefault()
+    if (!email) return
+    setLoading(true)
+    setError(null)
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    })
+
+    setLoading(false)
+    if (error) {
+      setError(error.message)
+    } else {
+      setSuccessMessage('Un email de réinitialisation a été envoyé à ' + email)
     }
   }
 
@@ -160,32 +178,34 @@ export default function LoginPage() {
                     >
                       <StaggerContainer>
                         {/* Tab toggle */}
-                        <StaggerItem>
-                          <div className="mb-6 flex rounded-xl bg-gray-100 p-1">
-                            <button
-                              type="button"
-                              onClick={() => { setMode('login'); setError(null); setSuccessMessage(null) }}
-                              className={`flex-1 rounded-lg py-2 text-sm font-semibold transition-all ${
-                                mode === 'login'
-                                  ? 'bg-white text-[#1A1A2E] shadow-sm'
-                                  : 'text-gray-500 hover:text-gray-700'
-                              }`}
-                            >
-                              Connexion
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => { setMode('register'); setError(null); setSuccessMessage(null) }}
-                              className={`flex-1 rounded-lg py-2 text-sm font-semibold transition-all ${
-                                mode === 'register'
-                                  ? 'bg-white text-[#1A1A2E] shadow-sm'
-                                  : 'text-gray-500 hover:text-gray-700'
-                              }`}
-                            >
-                              Inscription
-                            </button>
-                          </div>
-                        </StaggerItem>
+                        {mode !== 'forgot' && (
+                          <StaggerItem>
+                            <div className="mb-6 flex rounded-xl bg-gray-100 p-1">
+                              <button
+                                type="button"
+                                onClick={() => { setMode('login'); setError(null); setSuccessMessage(null) }}
+                                className={`flex-1 rounded-lg py-2 text-sm font-semibold transition-all ${
+                                  mode === 'login'
+                                    ? 'bg-white text-[#1A1A2E] shadow-sm'
+                                    : 'text-gray-500 hover:text-gray-700'
+                                }`}
+                              >
+                                Connexion
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => { setMode('register'); setError(null); setSuccessMessage(null) }}
+                                className={`flex-1 rounded-lg py-2 text-sm font-semibold transition-all ${
+                                  mode === 'register'
+                                    ? 'bg-white text-[#1A1A2E] shadow-sm'
+                                    : 'text-gray-500 hover:text-gray-700'
+                                }`}
+                              >
+                                Inscription
+                              </button>
+                            </div>
+                          </StaggerItem>
+                        )}
 
                         {/* Success message */}
                         {successMessage && (
@@ -200,7 +220,53 @@ export default function LoginPage() {
                           </StaggerItem>
                         )}
 
-                        {/* Email + Password form */}
+                        {/* Forgot password form */}
+                        {mode === 'forgot' ? (
+                          <StaggerItem>
+                            <div className="mb-4 text-center">
+                              <h2 className="text-lg font-bold text-[#1A1A2E]">Mot de passe oublié ?</h2>
+                              <p className="mt-1 text-sm text-gray-500">
+                                Entrez votre email et nous vous enverrons un lien de réinitialisation.
+                              </p>
+                            </div>
+                            <form onSubmit={handleForgotPassword} className="space-y-4">
+                              <div>
+                                <Label htmlFor="email-forgot" className="mb-1.5 text-sm font-medium text-gray-700">
+                                  Adresse email
+                                </Label>
+                                <Input
+                                  id="email-forgot"
+                                  type="email"
+                                  required
+                                  value={email}
+                                  onChange={(e) => setEmail(e.target.value)}
+                                  placeholder="vous@exemple.com"
+                                  className="mt-1.5"
+                                />
+                              </div>
+                              <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                                <Button
+                                  type="submit"
+                                  disabled={loading || !email}
+                                  loading={loading}
+                                  className="w-full rounded-xl py-3 text-sm font-semibold"
+                                >
+                                  Envoyer le lien
+                                </Button>
+                              </motion.div>
+                              <div className="text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => { setMode('login'); setError(null); setSuccessMessage(null) }}
+                                  className="text-sm text-[#0540FF] hover:underline"
+                                >
+                                  Retour à la connexion
+                                </button>
+                              </div>
+                            </form>
+                          </StaggerItem>
+                        ) : (
+                        /* Email + Password form */
                         <StaggerItem>
                           <form onSubmit={handleSubmit} className="space-y-4">
                             <div>
@@ -218,9 +284,20 @@ export default function LoginPage() {
                               />
                             </div>
                             <div>
-                              <Label htmlFor="password" className="mb-1.5 text-sm font-medium text-gray-700">
-                                Mot de passe
-                              </Label>
+                              <div className="flex items-center justify-between mb-1.5">
+                                <Label htmlFor="password" className="text-sm font-medium text-gray-700">
+                                  Mot de passe
+                                </Label>
+                                {mode === 'login' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => { setMode('forgot'); setError(null); setSuccessMessage(null) }}
+                                    className="text-xs text-[#0540FF] hover:underline"
+                                  >
+                                    Mot de passe oublié ?
+                                  </button>
+                                )}
+                              </div>
                               <Input
                                 id="password"
                                 type="password"
@@ -247,9 +324,10 @@ export default function LoginPage() {
                             </motion.div>
                           </form>
                         </StaggerItem>
+                        )}
 
                         {/* Divider */}
-                        <StaggerItem>
+                        {mode !== 'forgot' && <StaggerItem>
                           <div className="relative my-4">
                             <div className="absolute inset-0 flex items-center">
                               <Separator className="w-full" />
@@ -258,10 +336,10 @@ export default function LoginPage() {
                               <span className="bg-white px-3 text-xs text-gray-400">ou</span>
                             </div>
                           </div>
-                        </StaggerItem>
+                        </StaggerItem>}
 
                         {/* Google OAuth */}
-                        <StaggerItem>
+                        {mode !== 'forgot' && <StaggerItem>
                           <motion.div
                             whileHover={{ scale: 1.02 }}
                             whileTap={{ scale: 0.98 }}
@@ -285,10 +363,10 @@ export default function LoginPage() {
                               Continuer avec Google
                             </Button>
                           </motion.div>
-                        </StaggerItem>
+                        </StaggerItem>}
 
                         {/* Magic link */}
-                        <StaggerItem>
+                        {mode !== 'forgot' && <StaggerItem>
                           <div className="text-center">
                             <button
                               type="button"
@@ -299,7 +377,7 @@ export default function LoginPage() {
                               {magicLinkLoading ? 'Envoi en cours...' : 'Recevoir un lien magique par email'}
                             </button>
                           </div>
-                        </StaggerItem>
+                        </StaggerItem>}
 
                         <StaggerItem>
                           <p className="mt-6 text-center text-xs text-gray-400">

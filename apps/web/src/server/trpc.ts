@@ -1,11 +1,12 @@
 import { createTRPCContext } from '@flashpark/api'
 import { createSupabaseServerClient } from '../lib/supabase/server'
-import { createServerClient } from '@supabase/ssr'
+import { createServerClient, type User } from '@supabase/ssr'
 import { db, users } from '@flashpark/db'
 import { eq } from 'drizzle-orm'
 
 export async function createContext(opts?: { req?: Request }) {
   let supabaseUserId: string | null = null
+  let supabaseUser: User | null = null
 
   // For tRPC API route calls from the browser — read Bearer token
   const authHeader = opts?.req?.headers?.get?.('authorization') ?? null
@@ -17,24 +18,53 @@ export async function createContext(opts?: { req?: Request }) {
       { cookies: { getAll: () => [], setAll: () => {} } }
     )
     const { data } = await supabase.auth.getUser(token)
-    supabaseUserId = data.user?.id ?? null
+    supabaseUser = data.user ?? null
+    supabaseUserId = supabaseUser?.id ?? null
   }
 
   // Fallback to cookie session (SSR / Server Components)
   if (!supabaseUserId) {
     const supabase = createSupabaseServerClient()
     const { data } = await supabase.auth.getUser()
-    supabaseUserId = data.user?.id ?? null
+    supabaseUser = data.user ?? null
+    supabaseUserId = supabaseUser?.id ?? null
   }
 
   // Look up the real DB user by supabase_id to get the correct id + role
   let dbUserId: string | null = null
   let userRole: string | null = null
 
-  if (supabaseUserId) {
-    const dbUser = await db.query.users.findFirst({
+  if (supabaseUserId && supabaseUser) {
+    let dbUser = await db.query.users.findFirst({
       where: eq(users.supabaseId, supabaseUserId),
     })
+
+    // Auto-create DB record for email/password signups that bypassed /auth/callback
+    if (!dbUser) {
+      try {
+        const [created] = await db
+          .insert(users)
+          .values({
+            supabaseId: supabaseUserId,
+            email: supabaseUser.email!,
+            fullName:
+              supabaseUser.user_metadata?.full_name ??
+              supabaseUser.user_metadata?.name ??
+              supabaseUser.email?.split('@')[0] ??
+              'Utilisateur',
+            avatarUrl: supabaseUser.user_metadata?.avatar_url ?? null,
+            role: 'driver',
+          })
+          .returning()
+        dbUser = created
+      } catch {
+        // Race condition — another request created the record; re-fetch
+        dbUser = await db.query.users.findFirst({
+          where: eq(users.supabaseId, supabaseUserId),
+        })
+      }
+    }
+
     dbUserId = dbUser?.id ?? null
     userRole = dbUser?.role ?? null
   }

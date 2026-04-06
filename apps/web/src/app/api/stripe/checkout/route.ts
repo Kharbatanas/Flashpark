@@ -43,6 +43,14 @@ export async function POST(request: Request) {
   })
   if (!spot) return NextResponse.json({ error: 'Place non disponible' }, { status: 404 })
 
+  const host = await db.query.users.findFirst({ where: eq(users.id, spot.hostId) })
+  if (!host?.stripeAccountId) {
+    return NextResponse.json(
+      { error: "L'hôte n'a pas encore configuré ses paiements" },
+      { status: 400 }
+    )
+  }
+
   const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60)
   const pricePerHour = parseFloat(spot.pricePerHour)
   const totalPrice = Math.round(hours * pricePerHour * 100) / 100
@@ -97,6 +105,11 @@ export async function POST(request: Request) {
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
     payment_method_types: ['card'],
+    payment_intent_data: {
+      transfer_data: {
+        destination: host.stripeAccountId,
+      },
+    },
     line_items: [
       {
         price_data: {

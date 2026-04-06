@@ -1,8 +1,13 @@
 import { z } from 'zod'
-import { eq } from 'drizzle-orm'
+import { eq, and, inArray } from 'drizzle-orm'
 import { TRPCError } from '@trpc/server'
+import Stripe from 'stripe'
 import { createTRPCRouter, protectedProcedure } from '../trpc'
-import { users, verificationDocuments } from '@flashpark/db'
+import { users, verificationDocuments, bookings } from '@flashpark/db'
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+  apiVersion: '2024-12-18.acacia',
+})
 
 export const usersRouter = createTRPCRouter({
   me: protectedProcedure.query(async ({ ctx }) => {
@@ -30,6 +35,29 @@ export const usersRouter = createTRPCRouter({
       return updated
     }),
 
+  ensureStripeCustomer: protectedProcedure.mutation(async ({ ctx }) => {
+    const user = await ctx.db.query.users.findFirst({
+      where: eq(users.id, ctx.userId),
+    })
+    if (!user) throw new TRPCError({ code: 'NOT_FOUND', message: 'Utilisateur introuvable' })
+
+    if (user.stripeCustomerId) return { stripeCustomerId: user.stripeCustomerId }
+
+    const customer = await stripe.customers.create({
+      email: user.email,
+      name: user.fullName ?? undefined,
+      metadata: { userId: user.id },
+    })
+
+    const [updated] = await ctx.db
+      .update(users)
+      .set({ stripeCustomerId: customer.id, updatedAt: new Date() })
+      .where(eq(users.id, ctx.userId))
+      .returning()
+
+    return { stripeCustomerId: updated.stripeCustomerId }
+  }),
+
   becomeHost: protectedProcedure.mutation(async ({ ctx }) => {
     const user = await ctx.db.query.users.findFirst({
       where: eq(users.id, ctx.userId),
@@ -56,5 +84,25 @@ export const usersRouter = createTRPCRouter({
       .where(eq(users.id, ctx.userId))
       .returning()
     return updated
+  }),
+
+  deleteAccount: protectedProcedure.mutation(async ({ ctx }) => {
+    // Cancel all pending/confirmed bookings first (bookings.driverId has onDelete: restrict)
+    await ctx.db
+      .update(bookings)
+      .set({ status: 'cancelled', cancelledAt: new Date(), cancelledBy: ctx.userId, updatedAt: new Date() })
+      .where(
+        and(
+          eq(bookings.driverId, ctx.userId),
+          inArray(bookings.status, ['pending', 'confirmed'])
+        )
+      )
+
+    // Delete user record — DB cascade handles related records
+    await ctx.db.delete(users).where(eq(users.id, ctx.userId))
+
+    // Note: the caller must also delete the Supabase Auth user via the admin API
+    // (supabaseAdmin.auth.admin.deleteUser(supabaseId)) — cannot be done from tRPC layer
+    return { success: true }
   }),
 })

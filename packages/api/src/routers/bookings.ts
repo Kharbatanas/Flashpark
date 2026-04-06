@@ -1,8 +1,20 @@
 import { z } from 'zod'
 import { eq, and, or, not, gt, lt, gte, lte, sql } from 'drizzle-orm'
 import { TRPCError } from '@trpc/server'
+import Stripe from 'stripe'
 import { createTRPCRouter, publicProcedure, protectedProcedure, hostProcedure } from '../trpc'
 import { bookings, spots, vehicles, availability } from '@flashpark/db'
+import { createNotification } from '../lib/notify'
+
+function generateQrCode(startTime: Date): string {
+  const uid = crypto.randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase()
+  const date = startTime.toISOString().slice(2, 10).replace(/-/g, '')
+  return `FP-${uid}-${date}`
+}
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+  apiVersion: '2024-12-18.acacia',
+})
 
 export const bookingsRouter = createTRPCRouter({
   // Create a booking (returns clientSecret for Stripe)
@@ -66,6 +78,11 @@ export const bookingsRouter = createTRPCRouter({
       const platformFee = Math.round(totalPrice * 0.2 * 100) / 100
       const hostPayout = Math.round((totalPrice - platformFee) * 100) / 100
 
+      // Instant book: skip pending, confirm immediately and generate QR
+      const isInstantBook = spot.instantBook === true
+      const initialStatus = isInstantBook ? 'confirmed' : 'pending'
+      const qrCode = isInstantBook ? generateQrCode(startTime) : null
+
       // TRANSACTION: conflict check + insert (atomic — prevents race condition)
       const [booking] = await ctx.db.transaction(async (tx) => {
         // Check host blocked this period (strict boundary: touching edges are fine)
@@ -81,7 +98,7 @@ export const bookingsRouter = createTRPCRouter({
           ),
         })
         if (blockedSlot) {
-          throw new TRPCError({ code: 'CONFLICT', message: 'Ce créneau est indisponible (bloqué par l\'hôte)' })
+          throw new TRPCError({ code: 'CONFLICT', message: "Ce créneau est indisponible (bloqué par l'hôte)" })
         }
 
         // Check booking conflicts (strict boundary: adjacent bookings are allowed)
@@ -113,10 +130,22 @@ export const bookingsRouter = createTRPCRouter({
             totalPrice: String(totalPrice),
             platformFee: String(platformFee),
             hostPayout: String(hostPayout),
-            status: 'pending',
+            status: initialStatus,
+            qrCode,
           })
           .returning()
       })
+
+      // Notify host of new booking (fire-and-forget — non-critical)
+      createNotification(ctx.db, {
+        userId: spot.hostId,
+        type: 'booking_new',
+        title: 'Nouvelle réservation',
+        body: isInstantBook
+          ? `Réservation confirmée automatiquement pour "${spot.title}"`
+          : `Nouvelle demande de réservation pour "${spot.title}"`,
+        data: { bookingId: booking.id, spotId },
+      }).catch(() => {})
 
       return { booking, totalPrice, platformFee }
     }),
@@ -143,7 +172,7 @@ export const bookingsRouter = createTRPCRouter({
       })
     }),
 
-  // Cancel a booking
+  // Cancel a booking (with time-based cancellation policy and Stripe refund)
   cancel: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
@@ -151,16 +180,36 @@ export const bookingsRouter = createTRPCRouter({
         where: and(eq(bookings.id, input.id), eq(bookings.driverId, ctx.userId)),
       })
       if (!booking) throw new TRPCError({ code: 'NOT_FOUND', message: 'Réservation introuvable' })
-      if (booking.status === 'cancelled') {
+      if (booking.status === 'cancelled' || booking.status === 'refunded') {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cette réservation est déjà annulée' })
       }
       if (booking.status === 'active' || booking.status === 'completed') {
         throw new TRPCError({ code: 'BAD_REQUEST', message: "Impossible d'annuler une réservation active ou terminée" })
       }
 
+      const now = new Date()
+      const hoursUntilStart = (booking.startTime.getTime() - now.getTime()) / (1000 * 60 * 60)
+
+      // Cancellation policy (only applies to confirmed + paid bookings)
+      // pending bookings: full refund (not yet charged)
+      // confirmed, > 24h before start: full refund
+      // confirmed, < 24h and > 2h: 50% refund
+      // confirmed, < 2h: no refund
+      let refundAmountCents: number | null = null
+      if (booking.status === 'confirmed' && booking.stripePaymentIntentId) {
+        const totalCents = Math.round(parseFloat(booking.totalPrice) * 100)
+        if (hoursUntilStart > 24) {
+          refundAmountCents = totalCents // full refund
+        } else if (hoursUntilStart > 2) {
+          refundAmountCents = Math.round(totalCents * 0.5) // 50% refund
+        } else {
+          refundAmountCents = 0 // no refund
+        }
+      }
+
       const [updated] = await ctx.db
         .update(bookings)
-        .set({ status: 'cancelled', cancelledAt: new Date(), cancelledBy: ctx.userId, updatedAt: new Date() })
+        .set({ status: 'cancelled', cancelledAt: now, cancelledBy: ctx.userId, updatedAt: now })
         .where(and(
           eq(bookings.id, input.id),
           eq(bookings.driverId, ctx.userId),
@@ -172,7 +221,38 @@ export const bookingsRouter = createTRPCRouter({
         throw new TRPCError({ code: 'CONFLICT', message: 'Le statut de la réservation a changé entre-temps' })
       }
 
-      return updated
+      // Issue Stripe refund if applicable
+      if (refundAmountCents !== null && refundAmountCents > 0 && booking.stripePaymentIntentId) {
+        try {
+          await stripe.refunds.create({
+            payment_intent: booking.stripePaymentIntentId,
+            amount: refundAmountCents,
+          })
+          await ctx.db
+            .update(bookings)
+            .set({ status: 'refunded', updatedAt: new Date() })
+            .where(eq(bookings.id, input.id))
+          return { ...updated, status: 'refunded' as const, refundedAmount: refundAmountCents / 100 }
+        } catch (err) {
+          // Refund failed — booking is still cancelled, log for manual review
+          console.error('Stripe refund failed for booking', input.id, err)
+        }
+      }
+
+      // Notify host of driver cancellation
+      const cancelledSpot = await ctx.db.query.spots.findFirst({ where: eq(spots.id, booking.spotId) })
+      if (cancelledSpot) {
+        createNotification(ctx.db, {
+          userId: cancelledSpot.hostId,
+          type: 'booking_cancelled',
+          title: 'Réservation annulée',
+          body: `Le conducteur a annulé sa réservation pour "${cancelledSpot.title}"`,
+          data: { bookingId: booking.id, spotId: cancelledSpot.id },
+        }).catch(() => {})
+      }
+
+      const refundedAmount = refundAmountCents !== null ? refundAmountCents / 100 : null
+      return { ...updated, refundedAmount }
     }),
 
   // Host confirms a pending booking
@@ -194,9 +274,11 @@ export const bookingsRouter = createTRPCRouter({
         throw new TRPCError({ code: 'BAD_REQUEST', message: "Cette réservation n'est pas en attente" })
       }
 
+      const qrCode = generateQrCode(new Date(booking.startTime))
+
       const [updated] = await ctx.db
         .update(bookings)
-        .set({ status: 'confirmed', updatedAt: new Date() })
+        .set({ status: 'confirmed', qrCode, updatedAt: new Date() })
         .where(and(
           eq(bookings.id, input.id),
           eq(bookings.status, 'pending')
@@ -206,6 +288,15 @@ export const bookingsRouter = createTRPCRouter({
       if (!updated) {
         throw new TRPCError({ code: 'CONFLICT', message: 'Le statut de la réservation a changé entre-temps' })
       }
+
+      // Notify driver of confirmation
+      createNotification(ctx.db, {
+        userId: booking.driverId,
+        type: 'booking_confirmed',
+        title: 'Réservation confirmée',
+        body: `Votre réservation pour "${spot.title}" a été confirmée`,
+        data: { bookingId: booking.id, spotId: spot.id, qrCode },
+      }).catch(() => {})
 
       return updated
     }),
@@ -241,6 +332,69 @@ export const bookingsRouter = createTRPCRouter({
       if (!updated) {
         throw new TRPCError({ code: 'CONFLICT', message: 'Le statut de la réservation a changé entre-temps' })
       }
+
+      // Notify driver of rejection
+      createNotification(ctx.db, {
+        userId: booking.driverId,
+        type: 'booking_rejected',
+        title: 'Réservation refusée',
+        body: `Votre demande de réservation pour "${spot.title}" a été refusée par l'hôte`,
+        data: { bookingId: booking.id, spotId: spot.id },
+      }).catch(() => {})
+
+      return updated
+    }),
+
+  // Host cancels a confirmed booking (before start time)
+  hostCancel: hostProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const booking = await ctx.db.query.bookings.findFirst({
+        where: eq(bookings.id, input.id),
+      })
+      if (!booking) throw new TRPCError({ code: 'NOT_FOUND', message: 'Réservation introuvable' })
+
+      const spot = await ctx.db.query.spots.findFirst({
+        where: and(eq(spots.id, booking.spotId), eq(spots.hostId, ctx.userId)),
+      })
+      if (!spot) throw new TRPCError({ code: 'FORBIDDEN', message: "Vous n'êtes pas le propriétaire de cette place" })
+
+      if (booking.status !== 'confirmed') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: "Seules les réservations confirmées peuvent être annulées par l'hôte" })
+      }
+
+      if (new Date(booking.startTime) <= new Date()) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: "Impossible d'annuler une réservation déjà commencée" })
+      }
+
+      const [updated] = await ctx.db
+        .update(bookings)
+        .set({ status: 'cancelled', cancelledAt: new Date(), cancelledBy: ctx.userId, updatedAt: new Date() })
+        .where(and(eq(bookings.id, input.id), eq(bookings.status, 'confirmed')))
+        .returning()
+
+      if (!updated) {
+        throw new TRPCError({ code: 'CONFLICT', message: 'Le statut de la réservation a changé entre-temps' })
+      }
+
+      // Full refund since host cancelled
+      if (booking.stripePaymentIntentId) {
+        try {
+          await stripe.refunds.create({ payment_intent: booking.stripePaymentIntentId })
+          await ctx.db.update(bookings).set({ status: 'refunded', updatedAt: new Date() }).where(eq(bookings.id, input.id))
+        } catch (err) {
+          console.error('Stripe refund failed for host-cancelled booking', input.id, err)
+        }
+      }
+
+      // Notify driver
+      createNotification(ctx.db, {
+        userId: booking.driverId,
+        type: 'booking_host_cancelled',
+        title: "Réservation annulée par l'hôte",
+        body: `L'hôte a annulé votre réservation confirmée pour "${spot.title}". Vous serez remboursé intégralement.`,
+        data: { bookingId: booking.id, spotId: spot.id },
+      }).catch(() => {})
 
       return updated
     }),

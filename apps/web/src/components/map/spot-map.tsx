@@ -145,6 +145,7 @@ export function SpotMap({ initialSpots }: SpotMapProps) {
   const [filterType, setFilterType] = useState<string>('all')
   const [filterMaxPrice, setFilterMaxPrice] = useState<number>(20)
   const [showFilters, setShowFilters] = useState(false)
+  const [mobileView, setMobileView] = useState<'list' | 'map'>('list')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const searchContainerRef = useRef<HTMLDivElement>(null)
 
@@ -315,7 +316,7 @@ export function SpotMap({ initialSpots }: SpotMapProps) {
   return (
     <div className="flex h-[calc(100vh-72px)] w-full">
       {/* ═══ LEFT PANEL: Search + List ═══ */}
-      <div className="w-full lg:w-[55%] xl:w-[50%] flex flex-col border-r border-gray-100">
+      <div className={`w-full lg:w-[55%] xl:w-[50%] flex flex-col border-r border-gray-100 ${mobileView === 'map' ? 'hidden lg:flex' : 'flex'}`}>
         {/* Search bar */}
         <div ref={searchContainerRef} className="relative border-b border-gray-100 px-6 py-4">
           <form onSubmit={handleSearchSubmit} className="flex items-center gap-2">
@@ -447,8 +448,32 @@ export function SpotMap({ initialSpots }: SpotMapProps) {
         </div>
       </div>
 
+      {/* ═══ Mobile toggle: Carte / Liste ═══ */}
+      <div className="lg:hidden fixed bottom-20 left-1/2 z-50 -translate-x-1/2">
+        <div className="flex overflow-hidden rounded-full border border-gray-200 bg-white shadow-lg">
+          <button
+            onClick={() => setMobileView('list')}
+            className={`flex items-center gap-1.5 px-5 py-2.5 text-sm font-semibold transition-colors ${
+              mobileView === 'list' ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            <MapPin className="h-4 w-4" />
+            Liste
+          </button>
+          <button
+            onClick={() => setMobileView('map')}
+            className={`flex items-center gap-1.5 px-5 py-2.5 text-sm font-semibold transition-colors ${
+              mobileView === 'map' ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            <ChevronDown className="h-4 w-4 rotate-[-90deg]" />
+            Carte
+          </button>
+        </div>
+      </div>
+
       {/* ═══ RIGHT PANEL: Map ═══ */}
-      <div className="hidden lg:block flex-1 relative">
+      <div className={`flex-1 relative ${mobileView === 'map' ? 'block' : 'hidden lg:block'}`}>
         <Map
           ref={mapRef}
           mapboxAccessToken={MAPBOX_TOKEN}

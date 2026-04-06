@@ -145,4 +145,16 @@ export const spotsRouter = createTRPCRouter({
       orderBy: (spots, { desc }) => [desc(spots.createdAt)],
     })
   }),
+
+  // Delete a spot listing (host only, must own the spot)
+  delete: hostProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const [deleted] = await ctx.db
+        .delete(spots)
+        .where(and(eq(spots.id, input.id), eq(spots.hostId, ctx.userId)))
+        .returning()
+      if (!deleted) throw new TRPCError({ code: 'NOT_FOUND', message: 'Place introuvable ou non autorisée' })
+      return deleted
+    }),
 })

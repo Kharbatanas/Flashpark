@@ -82,6 +82,9 @@ export default async function BookingConfirmationPage({ params }: Props) {
         address: spot.address,
         pricePerHour: spot.pricePerHour,
         hasSmartGate: spot.hasSmartGate,
+        latitude: spot.latitude,
+        longitude: spot.longitude,
+        parkingInstructions: spot.parkingInstructions,
       }}
       startDate={startDate.toISOString()}
       endDate={endDate.toISOString()}

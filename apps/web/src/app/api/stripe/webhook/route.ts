@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
-import { db, bookings } from '@flashpark/db'
+import { db, bookings, users } from '@flashpark/db'
 import { eq } from 'drizzle-orm'
 
 export const runtime = 'nodejs'
@@ -70,6 +70,45 @@ export async function POST(request: Request) {
         .update(bookings)
         .set({ status: 'cancelled', cancelledAt: new Date(), updatedAt: new Date() })
         .where(eq(bookings.id, bookingId))
+    }
+
+    // Abandoned session cleanup — user opened checkout but never paid
+    if (event.type === 'checkout.session.expired') {
+      const session = event.data.object as Stripe.Checkout.Session
+      const bookingId = session.metadata?.bookingId
+
+      if (!bookingId) {
+        console.error('checkout.session.expired: missing bookingId in metadata', session.id)
+        return NextResponse.json({ received: true })
+      }
+
+      await db
+        .update(bookings)
+        .set({ status: 'cancelled', cancelledAt: new Date(), updatedAt: new Date() })
+        .where(eq(bookings.id, bookingId))
+    }
+
+    if (event.type === 'charge.refunded') {
+      const charge = event.data.object as Stripe.Charge
+      const paymentIntentId = typeof charge.payment_intent === 'string' ? charge.payment_intent : null
+
+      if (paymentIntentId) {
+        await db
+          .update(bookings)
+          .set({ status: 'refunded', updatedAt: new Date() })
+          .where(eq(bookings.stripePaymentIntentId, paymentIntentId))
+      }
+    }
+
+    if (event.type === 'account.updated') {
+      const account = event.data.object as Stripe.Account
+      // Mark host as verified if Stripe charges_enabled (fully onboarded)
+      if (account.charges_enabled) {
+        await db
+          .update(users)
+          .set({ updatedAt: new Date() })
+          .where(eq(users.stripeAccountId, account.id))
+      }
     }
   } catch (err) {
     console.error('Webhook handler error:', err)
