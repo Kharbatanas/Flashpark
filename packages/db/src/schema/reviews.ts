@@ -15,7 +15,9 @@ export const reviews = pgTable('reviews', {
   spotId: uuid('spot_id')
     .notNull()
     .references(() => spots.id, { onDelete: 'cascade' }),
-  rating: integer('rating').notNull(), // 1-5
+  ratingAccess: integer('rating_access').notNull(),
+  ratingAccuracy: integer('rating_accuracy').notNull(),
+  ratingCleanliness: integer('rating_cleanliness').notNull(),
   comment: text('comment'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
