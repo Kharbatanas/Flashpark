@@ -174,17 +174,17 @@ export default function HostContent({ isHost, stats, recentBookings, spotMap }: 
 
   return (
     <PageTransition>
-      <div className="min-h-screen bg-gray-50 px-4 py-8">
+      <div className="min-h-screen bg-gray-50 px-4 py-6 pb-24 md:py-8 md:pb-8 md:px-6">
         <div className="mx-auto max-w-5xl">
 
           {/* ── Header ────────────────────────────────────────── */}
           <FadeIn>
-            <div className="mb-8 flex items-center justify-between">
+            <div className="mb-6 md:mb-8 flex items-center justify-between">
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Tableau de bord hôte</h1>
+                <h1 className="text-xl md:text-2xl font-bold text-gray-900">Tableau de bord hôte</h1>
                 <p className="mt-1 text-sm text-gray-500">Gérez vos annonces et vos réservations</p>
               </div>
-              <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+              <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} className="hidden md:block">
                 <Button asChild className="rounded-full bg-[#0540FF] font-semibold hover:bg-[#0435D2]">
                   <Link href="/host/listings/new">
                     <Plus className="mr-1.5 h-4 w-4" />
@@ -196,16 +196,16 @@ export default function HostContent({ isHost, stats, recentBookings, spotMap }: 
           </FadeIn>
 
           {/* ── Stats grid ────────────────────────────────────── */}
-          <StaggerContainer className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <StaggerContainer className="mb-6 md:mb-8 grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
             {stats.map(({ label, value, icon }) => {
               const cfg = STAT_ICON_MAP[icon] ?? STAT_ICON_MAP.total
               return (
                 <StaggerItem key={label}>
-                  <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
-                    <div className={`mb-4 inline-flex h-10 w-10 items-center justify-center rounded-xl ${cfg.iconBg} ${cfg.iconColor}`}>
+                  <div className="rounded-xl border border-gray-100 bg-white p-4 md:p-5 shadow-sm">
+                    <div className={`mb-3 md:mb-4 inline-flex h-9 w-9 md:h-10 md:w-10 items-center justify-center rounded-xl ${cfg.iconBg} ${cfg.iconColor}`}>
                       {cfg.icon}
                     </div>
-                    <p className="text-2xl font-bold text-gray-900">{value}</p>
+                    <p className="text-xl md:text-2xl font-bold text-gray-900">{value}</p>
                     <p className="mt-1 text-xs text-gray-500">{label}</p>
                   </div>
                 </StaggerItem>
@@ -215,7 +215,7 @@ export default function HostContent({ isHost, stats, recentBookings, spotMap }: 
 
           {/* ── Quick links ───────────────────────────────────── */}
           <FadeIn delay={0.1}>
-            <div className="mb-8 flex flex-wrap gap-2">
+            <div className="mb-6 md:mb-8 grid grid-cols-2 md:flex md:flex-wrap gap-2">
               {[
                 { href: '/host/listings', label: 'Mes annonces' },
                 { href: '/host/planning',  label: 'Planning' },
@@ -225,7 +225,7 @@ export default function HostContent({ isHost, stats, recentBookings, spotMap }: 
                 <Link
                   key={href}
                   href={href}
-                  className="flex items-center gap-1 rounded-full border border-gray-200 bg-white px-4 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:border-gray-400 hover:text-gray-900"
+                  className="flex items-center justify-center md:justify-start gap-1 min-h-[44px] rounded-full border border-gray-200 bg-white px-4 py-2 md:py-1.5 text-sm font-medium text-gray-700 transition-colors hover:border-gray-400 hover:text-gray-900"
                 >
                   {label}
                   <ChevronRight className="h-3.5 w-3.5 text-gray-400" />
@@ -248,16 +248,21 @@ export default function HostContent({ isHost, stats, recentBookings, spotMap }: 
                   {pendingBookings.map((b) => (
                     <div
                       key={b.id}
-                      className="flex items-center justify-between gap-4 rounded-xl border border-amber-100 bg-white p-4 shadow-sm"
+                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 rounded-xl border border-amber-100 bg-white p-4 shadow-sm"
                     >
-                      <div className="min-w-0">
-                        <p className="truncate font-semibold text-gray-900">{spotMap[b.spotId] ?? 'Parking'}</p>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between sm:justify-start gap-2">
+                          <p className="truncate font-semibold text-gray-900">{spotMap[b.spotId] ?? 'Parking'}</p>
+                          <p className="text-sm font-bold text-gray-900 sm:hidden">
+                            {Number(b.hostPayout).toFixed(2).replace('.', ',')} €
+                          </p>
+                        </div>
                         <p className="mt-0.5 text-xs text-gray-500">
                           {formatDateTime(b.startTime)} → {formatDateTime(b.endTime)}
                         </p>
                       </div>
                       <div className="flex flex-shrink-0 items-center gap-3">
-                        <p className="text-sm font-bold text-gray-900">
+                        <p className="hidden sm:block text-sm font-bold text-gray-900">
                           {Number(b.hostPayout).toFixed(2).replace('.', ',')} €
                         </p>
                         <BookingActions bookingId={b.id} status={b.status} />

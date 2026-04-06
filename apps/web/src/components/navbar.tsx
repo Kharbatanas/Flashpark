@@ -19,7 +19,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuGroup,
 } from '@/components/ui/dropdown-menu'
-import { Search, Menu, Bell, Globe, Heart, User as UserIcon, LayoutDashboard, PlusCircle, LogOut, Home, Calendar } from 'lucide-react'
+import { Search, Menu, Bell, Globe, Heart, User as UserIcon, LayoutDashboard, PlusCircle, LogOut, Home, Calendar, ChevronRight, X, MapPin, ListChecks } from 'lucide-react'
 
 function NotificationBell() {
   const { data } = api.notifications.unreadCount.useQuery(undefined, {
@@ -46,6 +46,10 @@ export function Navbar() {
   const router = useRouter()
   const pathname = usePathname()
   const isHome = pathname === '/'
+
+  // Fetch DB user role (only when logged in)
+  const { data: dbUser } = api.users.me.useQuery(undefined, { enabled: !!user })
+  const isHost = dbUser?.role === 'host' || dbUser?.role === 'both' || dbUser?.role === 'admin'
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient()
@@ -193,8 +197,12 @@ export function Navbar() {
                       { href: '/profile', label: 'Mon profil', icon: UserIcon },
                       { href: '/dashboard', label: 'Mes reservations', icon: Calendar },
                       { href: '/wishlists', label: 'Mes favoris', icon: Heart },
-                      { href: '/host', label: 'Tableau de bord hote', icon: LayoutDashboard },
-                      { href: '/host/listings/new', label: 'Creer une annonce', icon: PlusCircle },
+                      ...(isHost ? [
+                        { href: '/host', label: 'Tableau de bord hote', icon: LayoutDashboard },
+                        { href: '/host/listings/new', label: 'Creer une annonce', icon: PlusCircle },
+                      ] : [
+                        { href: '/host', label: 'Devenir hote', icon: Home },
+                      ]),
                     ].map(({ href, label, icon: Icon }) => (
                       <DropdownMenuItem key={href} asChild>
                         <Link href={href} className="flex items-center gap-3 w-full cursor-pointer px-3 py-2.5">
@@ -267,72 +275,153 @@ export function Navbar() {
         </AnimatePresence>
       </motion.header>
 
-      {/* Mobile menu overlay */}
+      {/* Mobile menu overlay — modernized */}
       <AnimatePresence>
         {mobileMenuOpen && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[60] bg-black/40 md:hidden"
+            exit={{ opacity: 0, transition: { duration: 0.15 } }}
+            className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm md:hidden"
             onClick={() => setMobileMenuOpen(false)}
           >
             <motion.div
               initial={{ x: '100%' }}
               animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="absolute right-0 top-0 h-full w-72 bg-white shadow-2xl p-6"
+              exit={{ x: '100%', transition: { duration: 0.2 } }}
+              transition={{ type: 'spring', damping: 28, stiffness: 280 }}
+              className="absolute right-0 top-0 h-full w-80 bg-white shadow-2xl flex flex-col"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between mb-8">
-                <span className="text-lg font-bold text-gray-900">Menu</span>
-                <button onClick={() => setMobileMenuOpen(false)} className="p-2 rounded-full hover:bg-gray-100">
-                  <svg className="h-5 w-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
+              {/* Header */}
+              <div className="flex-shrink-0 bg-gradient-to-b from-gray-50 to-white px-6 pt-5 pb-4">
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-lg font-bold text-gray-900">Menu</span>
+                  <motion.button
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
+                  >
+                    <X className="h-4.5 w-4.5 text-gray-600" strokeWidth={2} />
+                  </motion.button>
+                </div>
+                {user && (
+                  <div className="flex items-center gap-3 rounded-2xl bg-white border border-gray-100 p-3 shadow-sm">
+                    <Avatar className="h-10 w-10">
+                      <AvatarImage src={avatarUrl} alt="Avatar" className="object-cover" />
+                      <AvatarFallback className="bg-[#0540FF] text-sm font-bold text-white">{initials}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-gray-400">Connecte en tant que</p>
+                      <p className="text-sm font-semibold text-gray-900 truncate">{user.user_metadata?.full_name || user.email}</p>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <nav className="space-y-1">
-                {[
-                  { href: '/map', label: 'Explorer la carte', icon: Search },
-                  { href: '/host', label: 'Louer ma place', icon: Home },
-                  ...(user ? [
-                    { href: '/dashboard', label: 'Mes reservations', icon: Calendar },
-                    { href: '/wishlists', label: 'Mes favoris', icon: Heart },
-                    { href: '/profile', label: 'Mon profil', icon: UserIcon },
-                  ] : []),
-                ].map(({ href, label, icon: Icon }) => (
-                  <Link
-                    key={href}
-                    href={href}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-                  >
-                    <Icon className="h-5 w-5 text-gray-400" strokeWidth={1.8} />
-                    {label}
-                  </Link>
-                ))}
-              </nav>
+              {/* Navigation */}
+              <div className="flex-1 overflow-y-auto px-4 py-4">
+                <p className="px-3 mb-2 text-[10px] font-bold uppercase tracking-[0.15em] text-gray-300">Navigation</p>
+                <nav className="space-y-0.5">
+                  {[
+                    { href: '/map', label: 'Explorer la carte', icon: MapPin },
+                    { href: '/host', label: 'Louer ma place', icon: Home },
+                  ].map(({ href, label, icon: Icon }, i) => {
+                    const active = pathname === href
+                    return (
+                      <motion.div key={href} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.05 * i }}>
+                        <Link href={href} onClick={() => setMobileMenuOpen(false)}
+                          className={cn(
+                            'flex items-center gap-3 rounded-xl px-3 py-3.5 text-sm font-medium transition-colors',
+                            active ? 'bg-[#0540FF]/5 text-[#0540FF]' : 'text-gray-700 hover:bg-gray-50'
+                          )}>
+                          <Icon className={cn('h-5 w-5', active ? 'text-[#0540FF]' : 'text-gray-400')} strokeWidth={1.8} />
+                          <span className="flex-1">{label}</span>
+                          <ChevronRight className="h-4 w-4 text-gray-300" />
+                        </Link>
+                      </motion.div>
+                    )
+                  })}
+                </nav>
 
-              <div className="mt-8 pt-6 border-t border-gray-100">
+                {user && (
+                  <>
+                    <p className="px-3 mt-6 mb-2 text-[10px] font-bold uppercase tracking-[0.15em] text-gray-300">Mon compte</p>
+                    <nav className="space-y-0.5">
+                      {[
+                        { href: '/dashboard', label: 'Mes reservations', icon: Calendar },
+                        { href: '/wishlists', label: 'Mes favoris', icon: Heart },
+                        { href: '/profile', label: 'Mon profil', icon: UserIcon },
+                      ].map(({ href, label, icon: Icon }, i) => {
+                        const active = pathname === href || pathname.startsWith(href + '/')
+                        return (
+                          <motion.div key={href} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.05 * (i + 2) }}>
+                            <Link href={href} onClick={() => setMobileMenuOpen(false)}
+                              className={cn(
+                                'flex items-center gap-3 rounded-xl px-3 py-3.5 text-sm font-medium transition-colors',
+                                active ? 'bg-[#0540FF]/5 text-[#0540FF]' : 'text-gray-700 hover:bg-gray-50'
+                              )}>
+                              <Icon className={cn('h-5 w-5', active ? 'text-[#0540FF]' : 'text-gray-400')} strokeWidth={1.8} />
+                              <span className="flex-1">{label}</span>
+                              <ChevronRight className="h-4 w-4 text-gray-300" />
+                            </Link>
+                          </motion.div>
+                        )
+                      })}
+                    </nav>
+                  </>
+                )}
+
+                {user && isHost && (
+                  <>
+                    <p className="px-3 mt-6 mb-2 text-[10px] font-bold uppercase tracking-[0.15em] text-gray-300">Hote</p>
+                    <nav className="space-y-0.5">
+                      {[
+                        { href: '/host', label: 'Tableau de bord', icon: LayoutDashboard },
+                        { href: '/host/listings', label: 'Mes annonces', icon: ListChecks },
+                        { href: '/host/planning', label: 'Planning', icon: Calendar },
+                      ].map(({ href, label, icon: Icon }, i) => {
+                        const active = pathname === href
+                        return (
+                          <motion.div key={`host-${href}`} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.05 * (i + 5) }}>
+                            <Link href={href} onClick={() => setMobileMenuOpen(false)}
+                              className={cn(
+                                'flex items-center gap-3 rounded-xl px-3 py-3.5 text-sm font-medium transition-colors',
+                                active ? 'bg-[#0540FF]/5 text-[#0540FF]' : 'text-gray-700 hover:bg-gray-50'
+                              )}>
+                              <Icon className={cn('h-5 w-5', active ? 'text-[#0540FF]' : 'text-gray-400')} strokeWidth={1.8} />
+                              <span className="flex-1">{label}</span>
+                              <ChevronRight className="h-4 w-4 text-gray-300" />
+                            </Link>
+                          </motion.div>
+                        )
+                      })}
+                    </nav>
+                  </>
+                )}
+              </div>
+
+              {/* Bottom */}
+              <div className="flex-shrink-0 border-t border-gray-100 px-6 py-4">
                 {user ? (
-                  <button
-                    onClick={() => { handleSignOut(); setMobileMenuOpen(false) }}
-                    className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-red-500 hover:bg-red-50 transition-colors w-full"
-                  >
-                    <LogOut className="h-5 w-5" strokeWidth={1.8} />
-                    Se deconnecter
-                  </button>
+                  <>
+                    <button
+                      onClick={() => { handleSignOut(); setMobileMenuOpen(false) }}
+                      className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium text-red-500 hover:bg-red-50 transition-colors"
+                    >
+                      <LogOut className="h-5 w-5" strokeWidth={1.8} />
+                      Se deconnecter
+                    </button>
+                    <p className="mt-3 text-center text-[10px] text-gray-300">v1.0 · Nice, France</p>
+                  </>
                 ) : (
                   <div className="space-y-3">
                     <Link href="/login" onClick={() => setMobileMenuOpen(false)}
-                      className="block w-full text-center rounded-xl bg-[#0540FF] px-4 py-3 text-sm font-semibold text-white hover:bg-[#0435D2] transition-colors">
+                      className="block w-full text-center rounded-xl bg-[#0540FF] px-4 py-3.5 text-sm font-semibold text-white hover:bg-[#0435D2] transition-colors">
                       S&apos;inscrire
                     </Link>
                     <Link href="/login" onClick={() => setMobileMenuOpen(false)}
-                      className="block w-full text-center rounded-xl border border-gray-200 px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
+                      className="block w-full text-center rounded-xl border border-gray-200 px-4 py-3.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
                       Connexion
                     </Link>
                   </div>

@@ -112,12 +112,12 @@ export default function DashboardContent({ userBookings, spotMap }: DashboardCon
 
   return (
     <PageTransition>
-      <div className="min-h-screen bg-gray-50 px-4 py-8">
+      <div className="min-h-screen bg-gray-50 px-4 py-6 pb-20 md:py-8 md:pb-8">
         <div className="mx-auto max-w-3xl">
 
           {/* ── Header ──────────────────────────────────────── */}
           <FadeIn>
-            <div className="mb-6">
+            <div className="mb-4 md:mb-6">
               <h1 className="text-2xl font-bold text-gray-900">Mes réservations</h1>
               <p className="mt-1 text-sm text-gray-500">
                 {userBookings.length} réservation{userBookings.length !== 1 ? 's' : ''} au total
@@ -127,14 +127,14 @@ export default function DashboardContent({ userBookings, spotMap }: DashboardCon
 
           {/* ── Tab pills ───────────────────────────────────── */}
           <FadeIn delay={0.05}>
-            <div className="mb-6 flex gap-2">
+            <div className="mb-4 md:mb-6 flex gap-2 overflow-x-auto scrollbar-hide snap-x snap-mandatory pb-0.5">
               {tabs.map(({ key, label }) => (
                 <button
                   key={key}
                   onClick={() => setActiveTab(key)}
-                  className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${
+                  className={`flex-shrink-0 snap-start rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
                     activeTab === key
-                      ? 'bg-gray-900 text-white'
+                      ? 'bg-[#0540FF] text-white'
                       : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
                   }`}
                 >
@@ -161,9 +161,9 @@ export default function DashboardContent({ userBookings, spotMap }: DashboardCon
                   <StaggerItem key={booking.id}>
                     <motion.div whileHover={{ y: -2 }} transition={{ duration: 0.15 }}>
                       <Link href={`/booking/${booking.id}`} className="block">
-                        <div className="flex gap-0 overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm transition-shadow hover:shadow-md">
-                          {/* Colored left accent */}
-                          <div className={`w-1 flex-shrink-0 ${
+                        <div className="flex flex-col sm:flex-row gap-0 overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm transition-shadow hover:shadow-md">
+                          {/* Colored accent — top strip mobile, left bar desktop */}
+                          <div className={`h-1 sm:h-auto sm:w-1 flex-shrink-0 ${
                             booking.status === 'active' ? 'bg-emerald-400' :
                             booking.status === 'confirmed' ? 'bg-[#0540FF]' :
                             booking.status === 'pending' ? 'bg-amber-400' :
@@ -172,7 +172,7 @@ export default function DashboardContent({ userBookings, spotMap }: DashboardCon
                           }`} />
 
                           {/* Placeholder photo */}
-                          <div className="hidden w-[110px] flex-shrink-0 sm:block">
+                          <div className="hidden sm:block w-[110px] flex-shrink-0">
                             <div className="flex h-full items-center justify-center bg-gray-50">
                               <ParkingCircle className="h-10 w-10 text-gray-300" strokeWidth={1.25} />
                             </div>
@@ -214,7 +214,7 @@ export default function DashboardContent({ userBookings, spotMap }: DashboardCon
                                 {isCompleted && (
                                   <Link
                                     href={`/booking/${booking.id}#review`}
-                                    className="flex items-center gap-1 text-xs font-semibold text-[#0540FF] hover:underline"
+                                    className="flex items-center gap-1 min-h-[44px] text-xs font-semibold text-[#0540FF] hover:underline"
                                   >
                                     <Star className="h-3 w-3" />
                                     Laisser un avis
