@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { motion, useScroll, useTransform, useInView } from 'framer-motion'
+import { motion, useScroll, useTransform, useInView, AnimatePresence } from 'framer-motion'
 import { Navbar } from '../components/navbar'
 import { TRPCProvider } from '../lib/trpc/client'
 import { Search, ArrowRight, Star, Shield, QrCode, Zap, Car, Warehouse, Building2, ParkingCircle, ArrowDown } from 'lucide-react'
@@ -17,6 +17,168 @@ const BG = '#F9FAFB'
 const BORDER = '#E5E7EB'
 const DANGER = '#EF4444'
 const SUCCESS = '#10B981'
+
+/* ───── Floating Particles (lightweight canvas) ───── */
+function Particles() {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    let animId: number
+    let w = 0, h = 0
+
+    interface Dot { x: number; y: number; vx: number; vy: number; r: number; o: number }
+    const dots: Dot[] = []
+    const COUNT = 60
+    const LINK_DIST = 120
+
+    function resize() {
+      w = canvas!.width = canvas!.offsetWidth * devicePixelRatio
+      h = canvas!.height = canvas!.offsetHeight * devicePixelRatio
+      ctx!.scale(devicePixelRatio, devicePixelRatio)
+    }
+
+    function init() {
+      resize()
+      dots.length = 0
+      const cw = canvas!.offsetWidth, ch = canvas!.offsetHeight
+      for (let i = 0; i < COUNT; i++) {
+        dots.push({
+          x: Math.random() * cw,
+          y: Math.random() * ch,
+          vx: (Math.random() - 0.5) * 0.4,
+          vy: (Math.random() - 0.5) * 0.4,
+          r: Math.random() * 1.5 + 0.5,
+          o: Math.random() * 0.5 + 0.1,
+        })
+      }
+    }
+
+    function draw() {
+      const cw = canvas!.offsetWidth, ch = canvas!.offsetHeight
+      ctx!.clearRect(0, 0, cw, ch)
+
+      // Move & draw dots
+      for (const d of dots) {
+        d.x += d.vx; d.y += d.vy
+        if (d.x < 0 || d.x > cw) d.vx *= -1
+        if (d.y < 0 || d.y > ch) d.vy *= -1
+        ctx!.beginPath()
+        ctx!.arc(d.x, d.y, d.r, 0, Math.PI * 2)
+        ctx!.fillStyle = `rgba(5, 64, 255, ${d.o})`
+        ctx!.fill()
+      }
+
+      // Draw links
+      for (let i = 0; i < dots.length; i++) {
+        for (let j = i + 1; j < dots.length; j++) {
+          const dx = dots[i].x - dots[j].x
+          const dy = dots[i].y - dots[j].y
+          const dist = Math.sqrt(dx * dx + dy * dy)
+          if (dist < LINK_DIST) {
+            ctx!.beginPath()
+            ctx!.moveTo(dots[i].x, dots[i].y)
+            ctx!.lineTo(dots[j].x, dots[j].y)
+            ctx!.strokeStyle = `rgba(5, 64, 255, ${0.08 * (1 - dist / LINK_DIST)})`
+            ctx!.lineWidth = 0.5
+            ctx!.stroke()
+          }
+        }
+      }
+
+      animId = requestAnimationFrame(draw)
+    }
+
+    init()
+    draw()
+    window.addEventListener('resize', init)
+    return () => { cancelAnimationFrame(animId); window.removeEventListener('resize', init) }
+  }, [])
+
+  return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none" style={{ opacity: 0.6 }} />
+}
+
+/* ───── Typewriter effect ───── */
+function TypeWriter({ text, delay = 0, speed = 40, className = '' }: { text: string; delay?: number; speed?: number; className?: string }) {
+  const [displayed, setDisplayed] = useState('')
+  const [started, setStarted] = useState(false)
+
+  useEffect(() => {
+    const timeout = setTimeout(() => setStarted(true), delay)
+    return () => clearTimeout(timeout)
+  }, [delay])
+
+  useEffect(() => {
+    if (!started) return
+    if (displayed.length >= text.length) return
+    const timeout = setTimeout(() => {
+      setDisplayed(text.slice(0, displayed.length + 1))
+    }, speed)
+    return () => clearTimeout(timeout)
+  }, [started, displayed, text, speed])
+
+  return (
+    <span className={className}>
+      {displayed}
+      {displayed.length < text.length && started && (
+        <motion.span
+          animate={{ opacity: [1, 0] }}
+          transition={{ duration: 0.5, repeat: Infinity, repeatType: 'reverse' }}
+          className="inline-block w-[3px] h-[1em] bg-[#0540FF] ml-0.5 align-middle rounded-full"
+        />
+      )}
+    </span>
+  )
+}
+
+/* ───── Morphing rotating text ───── */
+const MORPH_WORDS = [
+  { text: '40% moins cher.', gradient: 'from-[#60A5FA] to-[#0540FF]' },
+  { text: '500+ places dispo.', gradient: 'from-[#34D399] to-[#059669]' },
+  { text: 'Reserve en 60s.', gradient: 'from-[#FBBF24] to-[#F59E0B]' },
+  { text: 'Acces QR code.', gradient: 'from-[#A78BFA] to-[#7C3AED]' },
+]
+
+function MorphText({ delay = 0 }: { delay?: number }) {
+  const [index, setIndex] = useState(0)
+  const [started, setStarted] = useState(false)
+
+  useEffect(() => {
+    const timeout = setTimeout(() => setStarted(true), delay)
+    return () => clearTimeout(timeout)
+  }, [delay])
+
+  useEffect(() => {
+    if (!started) return
+    const interval = setInterval(() => {
+      setIndex(prev => (prev + 1) % MORPH_WORDS.length)
+    }, 2800)
+    return () => clearInterval(interval)
+  }, [started])
+
+  const current = MORPH_WORDS[index]
+
+  return (
+    <span className="relative inline-block min-w-[280px]">
+      <AnimatePresence mode="wait">
+        <motion.span
+          key={current.text}
+          initial={{ opacity: 0, y: 20, filter: 'blur(8px)' }}
+          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+          exit={{ opacity: 0, y: -20, filter: 'blur(8px)' }}
+          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+          className={`bg-gradient-to-r ${current.gradient} bg-clip-text text-transparent`}
+        >
+          {current.text}
+        </motion.span>
+      </AnimatePresence>
+    </span>
+  )
+}
 
 /* ───── Reveal on scroll ───── */
 function Reveal({ children, className = '', delay = 0 }: { children: React.ReactNode; className?: string; delay?: number }) {
@@ -121,67 +283,74 @@ export default function HomePage() {
 
       {/* ─── HERO ─── */}
       <section ref={heroRef} className="relative -mt-[72px] min-h-[92vh] overflow-hidden bg-gradient-to-b from-[#0A1628] via-[#0D1F3C] to-[#111827]">
+        {/* Floating particles */}
+        <Particles />
+
         {/* Subtle grid pattern */}
         <div className="absolute inset-0 opacity-[0.03]"
           style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '40px 40px' }} />
 
-        {/* Glow */}
-        <div className="absolute left-1/2 top-1/3 -translate-x-1/2 h-[50vh] w-[60vw] bg-[radial-gradient(ellipse_50%_50%_at_50%_50%,rgba(5,64,255,0.08),transparent)]" />
+        {/* Glow — pulsing */}
+        <motion.div
+          animate={{ scale: [1, 1.15, 1], opacity: [0.08, 0.14, 0.08] }}
+          transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+          className="absolute left-1/2 top-1/3 -translate-x-1/2 h-[50vh] w-[60vw] bg-[radial-gradient(ellipse_50%_50%_at_50%_50%,rgba(5,64,255,0.12),transparent)]" />
 
         <motion.div style={{ y: heroY, opacity: heroOpacity }}
           className="relative z-10 flex min-h-[92vh] flex-col items-center justify-center px-6 pt-20">
 
-          {/* Badge */}
+          {/* Badge — staggered entry */}
           <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
+            initial={{ opacity: 0, scale: 0.8, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.2, type: 'spring', stiffness: 200 }}
             className="mb-8 flex items-center gap-2.5 rounded-full border border-white/10 bg-white/5 px-5 py-2.5 backdrop-blur-sm">
-            <div className="h-2 w-2 rounded-full bg-[#0540FF] animate-pulse" />
+            <motion.div
+              animate={{ scale: [1, 1.4, 1], boxShadow: ['0 0 0 0 rgba(5,64,255,0.4)', '0 0 0 8px rgba(5,64,255,0)', '0 0 0 0 rgba(5,64,255,0.4)'] }}
+              transition={{ duration: 2, repeat: Infinity }}
+              className="h-2 w-2 rounded-full bg-[#0540FF]" />
             <span className="text-sm text-white/60 font-medium">Lancement a Nice — Ete 2026</span>
           </motion.div>
 
-          {/* Headline */}
-          <motion.h1
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
-            className="max-w-4xl text-center text-[clamp(2.5rem,6vw,4.5rem)] font-black leading-[1.05] tracking-[-0.03em] text-white">
-            Le parking entre voisins.
+          {/* Headline — typewriter + morphing */}
+          <h1 className="max-w-4xl text-center text-[clamp(2.5rem,6vw,4.5rem)] font-black leading-[1.05] tracking-[-0.03em] text-white">
+            <TypeWriter text="Le parking entre voisins." delay={400} speed={50} />
             <br />
-            <span className="bg-gradient-to-r from-[#60A5FA] to-[#0540FF] bg-clip-text text-transparent">
-              40% moins cher.
-            </span>
-          </motion.h1>
+            <MorphText delay={2200} />
+          </h1>
 
-          {/* Sub */}
+          {/* Sub — staggered words */}
           <motion.p
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.5 }}
+            transition={{ duration: 0.5, delay: 0.8 }}
             className="mx-auto mt-6 max-w-lg text-center text-lg leading-relaxed text-white/40">
             Louez la place de parking d&apos;un particulier.
             Reservez en 60 secondes. Entrez avec un QR code.
           </motion.p>
 
-          {/* Search bar */}
+          {/* Search bar — scale-up entrance */}
           <motion.form onSubmit={handleSearch}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.7 }}
+            initial={{ opacity: 0, y: 30, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.7, delay: 1.0, type: 'spring', stiffness: 120 }}
             className="mx-auto mt-10 w-full max-w-xl">
-            <div className="flex items-center rounded-full bg-white shadow-2xl shadow-black/20 ring-1 ring-white/10">
+            <motion.div
+              whileHover={{ boxShadow: '0 25px 60px -12px rgba(5, 64, 255, 0.15)' }}
+              className="flex items-center rounded-full bg-white shadow-2xl shadow-black/20 ring-1 ring-white/10 transition-shadow">
               <div className="flex flex-1 items-center gap-3 pl-6 pr-2 py-2">
                 <Search className="h-5 w-5 text-gray-400 shrink-0" strokeWidth={2} />
                 <input type="text" placeholder="Ou voulez-vous vous garer ?"
                   className="flex-1 bg-transparent text-[15px] text-gray-900 placeholder-gray-400 focus:outline-none"
                   value={q} onChange={(e) => setQ(e.target.value)} />
               </div>
-              <button type="submit"
+              <motion.button type="submit"
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
                 className="m-1.5 rounded-full bg-[#0540FF] px-7 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#0435D2]">
                 Rechercher
-              </button>
-            </div>
+              </motion.button>
+            </motion.div>
           </motion.form>
 
           {/* Cities */}
@@ -202,15 +371,22 @@ export default function HomePage() {
             ))}
           </motion.div>
 
-          {/* Scroll hint */}
+          {/* Scroll hint — pulse ring */}
           <motion.div
             initial={{ opacity: 0 }}
-            animate={{ opacity: 0.4 }}
-            transition={{ delay: 1.2 }}
-            className="absolute bottom-8 left-1/2 -translate-x-1/2">
-            <motion.div animate={{ y: [0, 6, 0] }} transition={{ duration: 2, repeat: Infinity }}>
-              <ArrowDown className="h-5 w-5 text-white/30" />
-            </motion.div>
+            animate={{ opacity: 1 }}
+            transition={{ delay: 2.5 }}
+            className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2">
+            <span className="text-[10px] uppercase tracking-[0.2em] text-white/20 font-medium">Scroll</span>
+            <div className="relative">
+              <motion.div
+                animate={{ scale: [1, 1.8], opacity: [0.3, 0] }}
+                transition={{ duration: 2, repeat: Infinity }}
+                className="absolute inset-0 rounded-full border border-white/20" />
+              <motion.div animate={{ y: [0, 6, 0] }} transition={{ duration: 2, repeat: Infinity }}>
+                <ArrowDown className="h-5 w-5 text-white/30" />
+              </motion.div>
+            </div>
           </motion.div>
         </motion.div>
       </section>
