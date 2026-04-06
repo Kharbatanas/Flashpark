@@ -109,17 +109,20 @@ export default function EditListingPage() {
       try {
         const supabase = createSupabaseBrowserClient()
         const newUrls: string[] = []
+        const MAX_SIZE = 5 * 1024 * 1024
+        const skipped: string[] = []
 
         for (const file of toUpload) {
-          if (file.size > 5 * 1024 * 1024) continue
+          if (file.size > MAX_SIZE) { skipped.push(file.name); continue }
           const ext = file.name.split('.').pop()
           const path = `spots/${id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
-          const { error: uploadErr } = await supabase.storage.from('photos').upload(path, file)
+          const { error: uploadErr } = await supabase.storage.from('spot-photos').upload(path, file)
           if (uploadErr) continue
-          const { data: { publicUrl } } = supabase.storage.from('photos').getPublicUrl(path)
+          const { data: { publicUrl } } = supabase.storage.from('spot-photos').getPublicUrl(path)
           newUrls.push(publicUrl)
         }
 
+        if (skipped.length) alert(`Fichiers trop volumineux (max 5 Mo) : ${skipped.join(', ')}`)
         update({ photos: [...form.photos, ...newUrls] })
       } catch {
         setError('Erreur lors de l\'upload')

@@ -38,6 +38,10 @@ export default function AvailabilityPage() {
 
   function handleAdd() {
     if (!spotId || !startTime || !endTime) return
+    if (new Date(startTime) >= new Date(endTime)) {
+      alert('La date de fin doit etre apres la date de debut')
+      return
+    }
     addSlot.mutate({
       spotId,
       startTime: new Date(startTime),
@@ -107,6 +111,7 @@ export default function AvailabilityPage() {
                       <Input
                         type="datetime-local"
                         value={startTime}
+                        min={new Date().toISOString().slice(0, 16)}
                         onChange={(e) => setStartTime(e.target.value)}
                       />
                     </div>
@@ -115,6 +120,7 @@ export default function AvailabilityPage() {
                       <Input
                         type="datetime-local"
                         value={endTime}
+                        min={new Date().toISOString().slice(0, 16)}
                         onChange={(e) => setEndTime(e.target.value)}
                       />
                     </div>

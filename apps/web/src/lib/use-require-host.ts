@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { api } from './trpc/client'
 
@@ -13,9 +14,11 @@ export function useRequireHost() {
   const { data: me, isLoading } = api.users.me.useQuery()
   const isHost = me?.role === 'host' || me?.role === 'both' || me?.role === 'admin'
 
-  if (!isLoading && me && !isHost) {
-    router.replace('/host/onboarding')
-  }
+  useEffect(() => {
+    if (!isLoading && me && !isHost) {
+      router.replace('/host/onboarding')
+    }
+  }, [isLoading, me, isHost, router])
 
   return { isHost, isLoading }
 }

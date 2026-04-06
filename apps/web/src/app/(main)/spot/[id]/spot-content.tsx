@@ -4,6 +4,7 @@ import { useState, useRef } from 'react'
 import Link from 'next/link'
 import { BookingWidget } from '../../../../components/booking-widget'
 import { ReviewsSection } from '../../../../components/reviews-section'
+import { api } from '../../../../lib/trpc/client'
 import { FadeIn, StaggerContainer, StaggerItem, PageTransition, motion, AnimatePresence } from '../../../../components/motion'
 import {
   ArrowLeft,
@@ -406,6 +407,11 @@ export function SpotContent({ spot }: { spot: SpotData }) {
   const rating = spot.rating ? Number(spot.rating) : null
   const pricePerHour = Number(spot.pricePerHour)
 
+  const { data: myBooking } = api.bookings.myBookingForSpot.useQuery(
+    { spotId: spot.id },
+    { retry: false }
+  )
+
   // Scroll to the inline booking widget on desktop when the sticky CTA is tapped
   const bookingRef = useRef<HTMLDivElement>(null)
 
@@ -622,7 +628,7 @@ export function SpotContent({ spot }: { spot: SpotData }) {
 
               {/* Reviews */}
               <FadeIn>
-                <ReviewsSection spotId={spot.id} />
+                <ReviewsSection spotId={spot.id} bookingId={myBooking?.id} />
               </FadeIn>
 
             </div>

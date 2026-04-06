@@ -11,6 +11,7 @@ import {
 } from '../../../components/motion'
 import { Button } from '@/components/ui/button'
 import { Calendar, MapPin, Clock, Star, ParkingCircle } from 'lucide-react'
+import { api } from '../../../lib/trpc/client'
 
 // ── Status config ────────────────────────────────────────────
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
@@ -64,17 +65,25 @@ interface DashboardContentProps {
   spotMap: Record<string, SpotInfo>
 }
 
-function CancelButton({ bookingId }: { bookingId: string }) {
+function CancelButton({ bookingId, onCancelled }: { bookingId: string; onCancelled?: () => void }) {
+  const cancelMutation = api.bookings.cancel.useMutation({
+    onSuccess: () => onCancelled?.(),
+  })
+
+  function handleClick() {
+    if (!confirm('Annuler cette réservation ?')) return
+    cancelMutation.mutate({ id: bookingId })
+  }
+
   return (
-    <form action={`/api/bookings/${bookingId}/cancel`} method="POST">
-      <button
-        type="submit"
-        className="text-xs font-medium text-red-500 hover:text-red-700"
-        onClick={(e) => { if (!confirm('Annuler cette réservation ?')) e.preventDefault() }}
-      >
-        Annuler
-      </button>
-    </form>
+    <button
+      type="button"
+      onClick={handleClick}
+      disabled={cancelMutation.isPending}
+      className="text-xs font-medium text-red-500 hover:text-red-700 disabled:opacity-50"
+    >
+      {cancelMutation.isPending ? 'Annulation...' : 'Annuler'}
+    </button>
   )
 }
 

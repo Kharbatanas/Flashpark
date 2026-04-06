@@ -236,12 +236,12 @@ function Step4Photos({
       }
       const ext = file.name.split('.').pop()
       const path = `spots/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
-      const { error } = await supabase.storage.from('spot-fotos').upload(path, file, { upsert: false })
+      const { error } = await supabase.storage.from('spot-photos').upload(path, file, { upsert: false })
       if (error) {
         setUploadError(`Erreur upload : ${error.message}`)
         continue
       }
-      const { data: urlData } = supabase.storage.from('spot-fotos').getPublicUrl(path)
+      const { data: urlData } = supabase.storage.from('spot-photos').getPublicUrl(path)
       newUrls.push(urlData.publicUrl)
     }
 

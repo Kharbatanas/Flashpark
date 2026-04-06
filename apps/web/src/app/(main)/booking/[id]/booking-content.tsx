@@ -15,6 +15,8 @@ import {
   ListChecks,
   Map,
   CheckCircle2,
+  XCircle,
+  AlertCircle,
   Zap,
 } from 'lucide-react'
 
@@ -73,26 +75,67 @@ export function BookingContent({
       <div className="min-h-screen bg-gray-50 px-4 py-12">
         <div className="mx-auto max-w-lg space-y-4">
 
-          {/* ── Success header ─────────────────────────────── */}
+          {/* ── Status header ──────────────────────────────── */}
           <div className="mb-6 text-center">
-            <motion.div
-              initial={{ scale: 0, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: 'spring', stiffness: 220, damping: 14, delay: 0.15 }}
-              className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100"
-            >
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ type: 'spring', stiffness: 260, damping: 16, delay: 0.35 }}
-              >
-                <CheckCircle2 className="h-10 w-10 text-emerald-500" strokeWidth={1.75} />
-              </motion.div>
-            </motion.div>
-            <FadeIn delay={0.4}>
-              <h1 className="text-2xl font-bold tracking-tight text-gray-900">Réservation confirmée !</h1>
-              <p className="mt-1 text-sm text-gray-500">Votre place de parking est réservée.</p>
-            </FadeIn>
+            {booking.status === 'confirmed' || booking.status === 'active' ? (
+              <>
+                <motion.div
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: 'spring', stiffness: 220, damping: 14, delay: 0.15 }}
+                  className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100"
+                >
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ type: 'spring', stiffness: 260, damping: 16, delay: 0.35 }}
+                  >
+                    <CheckCircle2 className="h-10 w-10 text-emerald-500" strokeWidth={1.75} />
+                  </motion.div>
+                </motion.div>
+                <FadeIn delay={0.4}>
+                  <h1 className="text-2xl font-bold tracking-tight text-gray-900">Réservation confirmée !</h1>
+                  <p className="mt-1 text-sm text-gray-500">Votre place de parking est réservée.</p>
+                </FadeIn>
+              </>
+            ) : booking.status === 'pending' ? (
+              <>
+                <motion.div
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: 'spring', stiffness: 220, damping: 14, delay: 0.15 }}
+                  className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-amber-100"
+                >
+                  <AlertCircle className="h-10 w-10 text-amber-500" strokeWidth={1.75} />
+                </motion.div>
+                <FadeIn delay={0.4}>
+                  <h1 className="text-2xl font-bold tracking-tight text-gray-900">En attente de paiement</h1>
+                  <p className="mt-1 text-sm text-gray-500">Votre réservation est en cours de traitement.</p>
+                </FadeIn>
+              </>
+            ) : booking.status === 'cancelled' || booking.status === 'refunded' ? (
+              <>
+                <motion.div
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: 'spring', stiffness: 220, damping: 14, delay: 0.15 }}
+                  className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-red-100"
+                >
+                  <XCircle className="h-10 w-10 text-red-500" strokeWidth={1.75} />
+                </motion.div>
+                <FadeIn delay={0.4}>
+                  <h1 className="text-2xl font-bold tracking-tight text-gray-900">
+                    {booking.status === 'refunded' ? 'Réservation remboursée' : 'Réservation annulée'}
+                  </h1>
+                  <p className="mt-1 text-sm text-gray-500">Cette réservation n&apos;est plus active.</p>
+                </FadeIn>
+              </>
+            ) : (
+              <FadeIn delay={0.4}>
+                <h1 className="text-2xl font-bold tracking-tight text-gray-900">Réservation terminée</h1>
+                <p className="mt-1 text-sm text-gray-500">Merci d&apos;avoir utilisé Flashpark.</p>
+              </FadeIn>
+            )}
           </div>
 
           {/* ── Spot details card ───────────────────────────── */}

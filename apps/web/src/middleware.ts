@@ -40,6 +40,8 @@ export async function middleware(request: NextRequest) {
 
   if (isProtected(pathname) && !user) {
     const loginUrl = new URL('/login', request.url)
+    // NOTE: pathname is from the request URL (trusted), but the login page must
+    // validate the redirect param before using it to avoid open redirect.
     loginUrl.searchParams.set('redirect', pathname)
     return NextResponse.redirect(loginUrl)
   }

@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createSupabaseServerClient } from '../../../lib/supabase/server'
 import { db, bookings, spots, users } from '@flashpark/db'
-import { eq } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import DashboardContent from './dashboard-content'
 
 export const dynamic = 'force-dynamic'
@@ -23,13 +23,13 @@ export default async function DashboardPage() {
     orderBy: (b, { desc }) => [desc(b.createdAt)],
   })
 
-  // Fetch spot titles for each booking
-  const spotIds = [...new Set(userBookings.map((b) => b.spotId))]
+  // Fetch spot titles for each booking — single batch query
+  const spotIds = Array.from(new Set(userBookings.map((b) => b.spotId)))
   const spotMap: Record<string, { title: string; address: string }> = {}
   if (spotIds.length > 0) {
-    for (const id of spotIds) {
-      const s = await db.query.spots.findFirst({ where: eq(spots.id, id) })
-      if (s) spotMap[id] = { title: s.title, address: s.address }
+    const spotsList = await db.query.spots.findMany({ where: inArray(spots.id, spotIds) })
+    for (const s of spotsList) {
+      spotMap[s.id] = { title: s.title, address: s.address }
     }
   }
 

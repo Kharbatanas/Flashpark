@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { eq, and, desc } from 'drizzle-orm'
+import { eq, and, desc, inArray } from 'drizzle-orm'
 import { TRPCError } from '@trpc/server'
 import { createTRPCRouter, publicProcedure, protectedProcedure } from '../trpc'
 import { reviews, bookings, users } from '@flashpark/db'
@@ -15,13 +15,14 @@ export const reviewsRouter = createTRPCRouter({
         limit: input.limit,
       })
 
-      // Attach reviewer names
-      const userIds = [...new Set(rows.map((r) => r.reviewerId))]
-      const userMap = new Map<string, string>()
-      for (const uid of userIds) {
-        const u = await ctx.db.query.users.findFirst({ where: eq(users.id, uid) })
-        if (u) userMap.set(uid, u.fullName ?? u.email)
-      }
+      // Attach reviewer names — single batch query
+      const userIds = Array.from(new Set(rows.map((r) => r.reviewerId)))
+      const reviewerUsers = userIds.length > 0
+        ? await ctx.db.select({ id: users.id, fullName: users.fullName, email: users.email })
+            .from(users)
+            .where(inArray(users.id, userIds))
+        : []
+      const userMap = new Map(reviewerUsers.map((u) => [u.id, u.fullName ?? u.email]))
 
       return rows.map((r) => ({
         ...r,

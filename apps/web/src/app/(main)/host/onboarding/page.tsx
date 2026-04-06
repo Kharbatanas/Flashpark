@@ -226,23 +226,33 @@ export default function HostOnboardingPage() {
     setUploading: (v: boolean) => void,
     setDoc: (d: UploadedFile) => void
   ) {
+    const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+    const MAX_SIZE = 5 * 1024 * 1024 // 5MB
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      setError('Type de fichier non supporte. Utilisez JPG, PNG, WebP ou PDF.')
+      return
+    }
+    if (file.size > MAX_SIZE) {
+      setError('Fichier trop volumineux. Taille maximale : 5 Mo.')
+      return
+    }
+
     setUploading(true)
     setError(null)
     try {
       const supabase = createSupabaseBrowserClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      const userId = user?.id ?? 'unknown'
       const ext = file.name.split('.').pop()
-      const path = `verification/${Date.now()}-${type}.${ext}`
+      const filePath = `verification/${userId}/${Date.now()}-${type}.${ext}`
       const { error: uploadError } = await supabase.storage
         .from('documents')
-        .upload(path, file)
+        .upload(filePath, file)
       if (uploadError) throw new Error(uploadError.message)
 
-      const { data: { publicUrl } } = supabase.storage
-        .from('documents')
-        .getPublicUrl(path)
-
-      await submitDoc.mutateAsync({ type, fileUrl: publicUrl })
-      setDoc({ name: file.name, size: file.size, url: publicUrl })
+      // Store just the storage path — admin uses createSignedUrl() to view docs
+      await submitDoc.mutateAsync({ type, fileUrl: filePath })
+      setDoc({ name: file.name, size: file.size, url: filePath })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur lors du chargement du fichier')
     } finally {
@@ -277,9 +287,13 @@ export default function HostOnboardingPage() {
     setError(null)
     try {
       await becomeHost.mutateAsync()
-      if (phone.trim()) {
-        await updateProfile.mutateAsync({ phoneNumber: phone.trim() })
-      }
+      await updateProfile.mutateAsync({
+        ...(phone.trim() ? { phoneNumber: phone.trim() } : {}),
+        ...(firstName.trim() || lastName.trim()
+          ? { fullName: `${firstName.trim()} ${lastName.trim()}`.trim() }
+          : {}),
+        // TODO: persist dateOfBirth and iban once columns are added to the users schema
+      })
       setDone(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Une erreur est survenue')
@@ -698,7 +712,7 @@ export default function HostOnboardingPage() {
                 </div>
                 <span className="text-sm text-gray-700">
                   J&apos;accepte les{' '}
-                  <a href="/legal/cgh" target="_blank" className="text-[#0540FF] underline">
+                  <a href="/terms" target="_blank" className="text-[#0540FF] underline">
                     conditions generales d&apos;hebergement
                   </a>{' '}
                   de Flashpark.

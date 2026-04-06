@@ -28,7 +28,7 @@ function NotificationBell() {
   const count = data?.count ?? 0
 
   return (
-    <Link href="/notifications" className="relative p-2.5 rounded-full hover:bg-gray-100 transition-colors">
+    <Link href="/notifications" aria-label="Notifications" className="relative p-2.5 rounded-full hover:bg-gray-100 transition-colors">
       <Bell className="h-5 w-5 text-gray-600" strokeWidth={1.8} />
       {count > 0 && (
         <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#FF385C] text-[10px] font-bold text-white ring-2 ring-white">
@@ -86,6 +86,7 @@ export function Navbar() {
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.4, ease: [0.25, 0.4, 0.25, 1] }}
+        aria-label="Navigation principale"
         className={cn(
           'sticky top-0 z-50 w-full transition-all duration-300',
           transparent
@@ -238,7 +239,7 @@ export function Navbar() {
                 </Button>
                 <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
                   <Button asChild className="rounded-full bg-[#0540FF] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#0435D2] shadow-sm">
-                    <Link href="/login">S&apos;inscrire</Link>
+                    <Link href="/login?tab=register">S&apos;inscrire</Link>
                   </Button>
                 </motion.div>
               </div>
@@ -246,6 +247,8 @@ export function Navbar() {
 
             {/* Mobile hamburger */}
             <button
+              aria-label="Ouvrir le menu"
+              aria-expanded={mobileMenuOpen}
               className={cn("md:hidden p-2 rounded-full", transparent ? "hover:bg-white/10" : "hover:bg-gray-100")}
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             >

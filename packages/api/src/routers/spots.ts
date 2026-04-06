@@ -70,7 +70,7 @@ export const spotsRouter = createTRPCRouter({
         amenities: z.array(z.string()).default([]),
         parkingInstructions: z.string().max(500).optional(),
         instantBook: z.boolean().default(true),
-        photos: z.array(z.string().url()).default([]),
+        photos: z.array(z.string().url().refine(url => url.startsWith('https://'), { message: 'URL must use HTTPS' })).default([]),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -102,12 +102,19 @@ export const spotsRouter = createTRPCRouter({
         pricePerDay: z.number().positive().optional(),
         status: z.enum(['active', 'inactive']).optional(),
         amenities: z.array(z.string()).optional(),
-        photos: z.array(z.string().url()).optional(),
+        photos: z.array(z.string().url().refine(url => url.startsWith('https://'), { message: 'URL must use HTTPS' })).optional(),
         parkingInstructions: z.string().max(500).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       const { id, pricePerHour, pricePerDay, ...rest } = input
+
+      if (input.status === 'active') {
+        const current = await ctx.db.query.spots.findFirst({ where: and(eq(spots.id, input.id), eq(spots.hostId, ctx.userId)) })
+        if (current?.status === 'pending_review') {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Cette annonce est en cours de vérification' })
+        }
+      }
 
       // Only include fields that were actually provided (not undefined)
       const setValues: Record<string, unknown> = { updatedAt: new Date() }

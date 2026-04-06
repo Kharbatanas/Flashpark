@@ -47,6 +47,11 @@ export default async function BookingConfirmationPage({ params }: Props) {
 
   if (!spot) notFound()
 
+  // Authorization: only the driver or the host of the spot may view this booking
+  const isDriver = dbUser?.id === booking.driverId
+  const isHost = dbUser?.id === spot.hostId
+  if (!isDriver && !isHost) notFound()
+
   const startDate = new Date(booking.startTime)
   const endDate = new Date(booking.endTime)
   const hours = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60)

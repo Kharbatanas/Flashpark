@@ -38,21 +38,33 @@ export default function VerificationPage() {
 
       setUploading(type)
       try {
+        const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+        const MAX_SIZE = 5 * 1024 * 1024 // 5MB
+        if (!ALLOWED_TYPES.includes(file.type)) {
+          alert('Type de fichier non supporte. Utilisez JPG, PNG, WebP ou PDF.')
+          return
+        }
+        if (file.size > MAX_SIZE) {
+          alert('Fichier trop volumineux. Taille maximale : 5 Mo.')
+          return
+        }
+
         const supabase = createSupabaseBrowserClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        const userId = user?.id ?? 'unknown'
         const ext = file.name.split('.').pop()
-        const path = `verification/${Date.now()}-${type}.${ext}`
+        const filePath = `verification/${userId}/${Date.now()}-${type}.${ext}`
 
         const { error: uploadError } = await supabase.storage
           .from('documents')
-          .upload(path, file)
+          .upload(filePath, file)
 
         if (uploadError) throw uploadError
 
-        const { data: { publicUrl } } = supabase.storage.from('documents').getPublicUrl(path)
-
+        // Store just the storage path — admin uses createSignedUrl() to view docs
         await submitDoc.mutateAsync({
           type: type as typeof DOC_TYPES[number]['value'],
-          fileUrl: publicUrl,
+          fileUrl: filePath,
         })
       } catch (err) {
         console.error('Upload failed:', err)

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { eq, and, gte, lte, or } from 'drizzle-orm'
+import { eq, and, gte, lte, or, lt, gt } from 'drizzle-orm'
 import { TRPCError } from '@trpc/server'
 import { createTRPCRouter, protectedProcedure, hostProcedure } from '../trpc'
 import { availability, spots } from '@flashpark/db'
@@ -43,6 +43,16 @@ export const availabilityRouter = createTRPCRouter({
 
       if (input.startTime >= input.endTime) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: "L'heure de début doit être avant l'heure de fin" })
+      }
+
+      const overlapping = await ctx.db.select().from(availability)
+        .where(and(
+          eq(availability.spotId, input.spotId),
+          lt(availability.startTime, input.endTime),
+          gt(availability.endTime, input.startTime),
+        ))
+      if (overlapping.length > 0) {
+        throw new TRPCError({ code: 'CONFLICT', message: 'Ce créneau chevauche un créneau existant' })
       }
 
       const [slot] = await ctx.db

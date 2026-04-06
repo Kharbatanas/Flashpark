@@ -6,7 +6,8 @@ import { eq } from 'drizzle-orm'
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
-  const next = searchParams.get('next') ?? '/map'
+  const rawNext = searchParams.get('next') ?? '/map'
+  const next = rawNext.startsWith('/') && !rawNext.startsWith('//') ? rawNext : '/map'
 
   if (!code) {
     return NextResponse.redirect(`${origin}/login?error=no_code`)
@@ -45,7 +46,7 @@ export async function GET(request: Request) {
     }
   } catch (err) {
     console.error('Failed to upsert user in DB:', err)
-    // Non-fatal: user is authed but DB sync failed
+    return NextResponse.redirect(`${origin}/login?error=db_sync_failed`)
   }
 
   return NextResponse.redirect(`${origin}${next}`)

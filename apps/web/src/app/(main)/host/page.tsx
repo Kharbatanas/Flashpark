@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createSupabaseServerClient } from '../../../lib/supabase/server'
 import { db, bookings, spots, users } from '@flashpark/db'
-import { eq } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import HostContent from './host-content'
 
 export const dynamic = 'force-dynamic'
@@ -42,18 +42,14 @@ export default async function HostDashboardPage() {
   let totalCount = 0
 
   if (hostSpotIds.length > 0) {
-    for (const spotId of hostSpotIds) {
-      const spotBookings = await db.query.bookings.findMany({
-        where: eq(bookings.spotId, spotId),
-        orderBy: (b, { desc }) => [desc(b.createdAt)],
-      })
-      recentBookings.push(...spotBookings)
-      totalCount += spotBookings.length
-      pendingCount += spotBookings.filter((b) => b.status === 'pending').length
-      totalEarnings += spotBookings
-        .filter((b) => b.status !== 'cancelled' && b.status !== 'refunded')
-        .reduce((acc, b) => acc + Number(b.hostPayout), 0)
-    }
+    const allSpotBookings = await db.select().from(bookings)
+      .where(inArray(bookings.spotId, hostSpotIds))
+    recentBookings.push(...allSpotBookings)
+    totalCount = allSpotBookings.length
+    pendingCount = allSpotBookings.filter((b) => b.status === 'pending').length
+    totalEarnings = allSpotBookings
+      .filter((b) => b.status !== 'cancelled' && b.status !== 'refunded')
+      .reduce((acc, b) => acc + Number(b.hostPayout), 0)
     recentBookings.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     recentBookings = recentBookings.slice(0, 10)
   }

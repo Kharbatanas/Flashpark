@@ -17,7 +17,7 @@ export const verificationRouter = createTRPCRouter({
   submit: protectedProcedure
     .input(z.object({
       type: z.enum(['id_card', 'passport', 'drivers_license', 'proof_of_address', 'property_proof']),
-      fileUrl: z.string().url(),
+      fileUrl: z.string().url().refine(url => url.startsWith('https://'), { message: 'URL must use HTTPS' }),
     }))
     .mutation(async ({ ctx, input }) => {
       const [doc] = await ctx.db

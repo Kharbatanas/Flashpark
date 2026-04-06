@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createSupabaseServerClient } from '../../../../lib/supabase/server'
 import { db, bookings, spots, users } from '@flashpark/db'
-import { eq } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import EarningsContent from './earnings-content'
 
 export const dynamic = 'force-dynamic'
@@ -23,12 +23,15 @@ export default async function EarningsPage() {
   const dbUser = await db.query.users.findFirst({ where: eq(users.supabaseId, user.id) })
   if (!dbUser) redirect('/login?redirect=/host/earnings')
 
+  const isHost = dbUser.role === 'host' || dbUser.role === 'both' || dbUser.role === 'admin'
+  if (!isHost) redirect('/host/onboarding')
+
   const hostSpots = await db.query.spots.findMany({
     where: eq(spots.hostId, dbUser.id),
   })
 
   const hostSpotIds = hostSpots.map((s) => s.id)
-  let allBookings: Array<{
+  const allBookings: Array<{
     id: string
     spotId: string
     startTime: Date
@@ -36,14 +39,9 @@ export default async function EarningsPage() {
     platformFee: string
     hostPayout: string
     status: string
-  }> = []
-
-  for (const spotId of hostSpotIds) {
-    const sb = await db.query.bookings.findMany({
-      where: eq(bookings.spotId, spotId),
-    })
-    allBookings.push(...sb)
-  }
+  }> = hostSpotIds.length > 0
+    ? await db.select().from(bookings).where(inArray(bookings.spotId, hostSpotIds))
+    : []
 
   const paidBookings = allBookings.filter(
     (b) => b.status !== 'cancelled' && b.status !== 'refunded' && b.status !== 'pending'

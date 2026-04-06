@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { eq, and, or, not, gte, lte, sql } from 'drizzle-orm'
+import { eq, and, or, not, gt, lt, gte, lte, sql } from 'drizzle-orm'
 import { TRPCError } from '@trpc/server'
 import { createTRPCRouter, publicProcedure, protectedProcedure, hostProcedure } from '../trpc'
 import { bookings, spots, vehicles, availability } from '@flashpark/db'
@@ -26,11 +26,22 @@ export const bookingsRouter = createTRPCRouter({
         throw new TRPCError({ code: 'BAD_REQUEST', message: "L'heure de début doit être dans le futur" })
       }
 
+      // Validate duration
+      const hours = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60)
+      if (hours > 24) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'La durée maximale de réservation est de 24 heures' })
+      }
+
       // Check spot exists and is active (outside transaction — read-only)
       const spot = await ctx.db.query.spots.findFirst({
         where: and(eq(spots.id, spotId), eq(spots.status, 'active')),
       })
       if (!spot) throw new TRPCError({ code: 'NOT_FOUND', message: 'Place non disponible' })
+
+      // Prevent self-booking
+      if (spot.hostId === ctx.userId) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Vous ne pouvez pas réserver votre propre place' })
+      }
 
       // Verify vehicle (outside transaction — read-only)
       if (vehicleId) {
@@ -50,7 +61,6 @@ export const bookingsRouter = createTRPCRouter({
       }
 
       // Calculate pricing
-      const hours = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60)
       const pricePerHour = parseFloat(spot.pricePerHour)
       const totalPrice = Math.round(hours * pricePerHour * 100) / 100
       const platformFee = Math.round(totalPrice * 0.2 * 100) / 100
@@ -58,14 +68,14 @@ export const bookingsRouter = createTRPCRouter({
 
       // TRANSACTION: conflict check + insert (atomic — prevents race condition)
       const [booking] = await ctx.db.transaction(async (tx) => {
-        // Check host blocked this period
+        // Check host blocked this period (strict boundary: touching edges are fine)
         const blockedSlot = await tx.query.availability.findFirst({
           where: and(
             eq(availability.spotId, spotId),
             eq(availability.isAvailable, false),
             or(
-              and(gte(availability.startTime, startTime), lte(availability.startTime, endTime)),
-              and(gte(availability.endTime, startTime), lte(availability.endTime, endTime)),
+              and(gt(availability.startTime, startTime), lt(availability.startTime, endTime)),
+              and(gt(availability.endTime, startTime), lt(availability.endTime, endTime)),
               and(lte(availability.startTime, startTime), gte(availability.endTime, endTime))
             )
           ),
@@ -74,15 +84,15 @@ export const bookingsRouter = createTRPCRouter({
           throw new TRPCError({ code: 'CONFLICT', message: 'Ce créneau est indisponible (bloqué par l\'hôte)' })
         }
 
-        // Check booking conflicts (within transaction = serialized)
+        // Check booking conflicts (strict boundary: adjacent bookings are allowed)
         const conflicts = await tx.query.bookings.findFirst({
           where: and(
             eq(bookings.spotId, spotId),
             not(eq(bookings.status, 'cancelled')),
             not(eq(bookings.status, 'refunded')),
             or(
-              and(gte(bookings.startTime, startTime), lte(bookings.startTime, endTime)),
-              and(gte(bookings.endTime, startTime), lte(bookings.endTime, endTime)),
+              and(gt(bookings.startTime, startTime), lt(bookings.startTime, endTime)),
+              and(gt(bookings.endTime, startTime), lt(bookings.endTime, endTime)),
               and(lte(bookings.startTime, startTime), gte(bookings.endTime, endTime))
             )
           ),
@@ -118,6 +128,20 @@ export const bookingsRouter = createTRPCRouter({
       orderBy: (bookings, { desc }) => [desc(bookings.createdAt)],
     })
   }),
+
+  // Most recent completed booking for current user on a given spot
+  myBookingForSpot: protectedProcedure
+    .input(z.object({ spotId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      return ctx.db.query.bookings.findFirst({
+        where: and(
+          eq(bookings.driverId, ctx.userId),
+          eq(bookings.spotId, input.spotId),
+          eq(bookings.status, 'completed')
+        ),
+        orderBy: (bookings, { desc }) => [desc(bookings.createdAt)],
+      })
+    }),
 
   // Cancel a booking
   cancel: protectedProcedure
@@ -251,28 +275,28 @@ export const bookingsRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const { spotId, startTime, endTime } = input
 
-      // Check booking conflicts
+      // Check booking conflicts (strict boundary)
       const conflict = await ctx.db.query.bookings.findFirst({
         where: and(
           eq(bookings.spotId, spotId),
           not(eq(bookings.status, 'cancelled')),
           not(eq(bookings.status, 'refunded')),
           or(
-            and(gte(bookings.startTime, startTime), lte(bookings.startTime, endTime)),
-            and(gte(bookings.endTime, startTime), lte(bookings.endTime, endTime)),
+            and(gt(bookings.startTime, startTime), lt(bookings.startTime, endTime)),
+            and(gt(bookings.endTime, startTime), lt(bookings.endTime, endTime)),
             and(lte(bookings.startTime, startTime), gte(bookings.endTime, endTime))
           )
         ),
       })
 
-      // Check blocked availability
+      // Check blocked availability (strict boundary)
       const blocked = await ctx.db.query.availability.findFirst({
         where: and(
           eq(availability.spotId, spotId),
           eq(availability.isAvailable, false),
           or(
-            and(gte(availability.startTime, startTime), lte(availability.startTime, endTime)),
-            and(gte(availability.endTime, startTime), lte(availability.endTime, endTime)),
+            and(gt(availability.startTime, startTime), lt(availability.startTime, endTime)),
+            and(gt(availability.endTime, startTime), lt(availability.endTime, endTime)),
             and(lte(availability.startTime, startTime), gte(availability.endTime, endTime))
           )
         ),
@@ -285,7 +309,7 @@ export const bookingsRouter = createTRPCRouter({
     }),
 
   // Verify a booking by QR code or booking ID (for hosts)
-  verifyCode: publicProcedure
+  verifyCode: protectedProcedure
     .input(z.object({ code: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
       const { code } = input

@@ -1,7 +1,8 @@
 import Link from 'next/link'
 
 export const metadata = {
-  title: 'Conditions d\'utilisation — Flashpark',
+  title: "Conditions d'utilisation — Flashpark",
+  description: "Conditions generales d'utilisation de Flashpark.",
 }
 
 export default function TermsPage() {

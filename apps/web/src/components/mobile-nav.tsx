@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { Search, Heart, ParkingCircle, Calendar, User } from 'lucide-react'
+import { Search, LayoutDashboard, ParkingCircle, Calendar, User } from 'lucide-react'
 import { createSupabaseBrowserClient } from '../lib/supabase/client'
 import { cn } from '@/lib/utils'
 
@@ -17,11 +17,11 @@ interface Tab {
 }
 
 const TABS: Tab[] = [
-  { label: 'Explorer',      icon: Search,        href: '/map',       authRequired: false },
-  { label: 'Favoris',       icon: Heart,         href: '/map',       authRequired: false },
-  { label: 'Reserver',      icon: ParkingCircle, href: '/map',       authRequired: false, center: true },
-  { label: 'Reservations',  icon: Calendar,      href: '/dashboard', authRequired: true },
-  { label: 'Profil',        icon: User,          href: '/profile',   authRequired: true },
+  { label: 'Explorer',      icon: Search,          href: '/map',       authRequired: false },
+  { label: 'Tableau',       icon: LayoutDashboard, href: '/dashboard', authRequired: true },
+  { label: 'Reserver',      icon: ParkingCircle,   href: '/map',       authRequired: false, center: true },
+  { label: 'Reservations',  icon: Calendar,        href: '/dashboard', authRequired: true },
+  { label: 'Profil',        icon: User,            href: '/profile',   authRequired: true },
 ]
 
 export function MobileNav() {
@@ -39,6 +39,7 @@ export function MobileNav() {
 
   return (
     <nav
+      aria-label="Navigation mobile"
       className="md:hidden fixed bottom-0 left-0 right-0 z-50 h-16 bg-white/90 backdrop-blur-xl border-t border-gray-100"
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
@@ -61,7 +62,7 @@ export function MobileNav() {
 function RegularTab({ tab, href, isActive }: { tab: Tab; href: string; isActive: boolean }) {
   const Icon = tab.icon
   return (
-    <Link href={href} className="flex-1">
+    <Link href={href} className="flex-1" aria-current={isActive ? 'page' : undefined}>
       <motion.div whileTap={{ scale: 0.9 }} className="flex flex-col items-center justify-center gap-0.5 py-1">
         <Icon
           className={cn('h-5 w-5 transition-colors', isActive ? 'text-[#0540FF]' : 'text-gray-400')}

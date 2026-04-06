@@ -2,6 +2,7 @@ import Link from 'next/link'
 
 export const metadata = {
   title: 'Contact — Flashpark',
+  description: "Contactez l'equipe Flashpark pour toute question ou suggestion.",
 }
 
 export default function ContactPage() {

@@ -1,13 +1,44 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { Loader2 } from 'lucide-react'
+import { createSupabaseBrowserClient } from '../../../lib/supabase/client'
 import { api } from '../../../lib/trpc/client'
 import { PageTransition, FadeIn, StaggerContainer, StaggerItem } from '../../../components/motion'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
 export default function NotificationsPage() {
+  const router = useRouter()
+  const [authChecked, setAuthChecked] = useState(false)
+  const [authed, setAuthed] = useState(false)
+
+  useEffect(() => {
+    const supabase = createSupabaseBrowserClient()
+    supabase.auth.getUser().then(({ data }) => {
+      if (!data.user) {
+        router.push('/login?redirect=/notifications')
+      } else {
+        setAuthed(true)
+        setAuthChecked(true)
+      }
+    })
+  }, [router])
+
+  if (!authChecked) {
+    return (
+      <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-[#0540FF]" />
+      </div>
+    )
+  }
+  if (!authed) return null
+  return <NotificationsContent />
+}
+
+function NotificationsContent() {
   const { data: notifs, refetch } = api.notifications.list.useQuery()
   const markAllRead = api.notifications.markAllRead.useMutation({ onSuccess: () => refetch() })
 

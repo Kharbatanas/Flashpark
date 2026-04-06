@@ -2,6 +2,7 @@ import Link from 'next/link'
 
 export const metadata = {
   title: 'A propos — Flashpark',
+  description: 'Decouvrez Flashpark, la plateforme de parking partage entre particuliers.',
 }
 
 export default function AboutPage() {

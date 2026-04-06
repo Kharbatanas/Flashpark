@@ -46,8 +46,8 @@ function roundToNext30(date: Date): Date {
 
 export function BookingWidget({ spot }: BookingWidgetProps) {
   const router = useRouter()
-  const now = new Date()
-  const defaultStart = roundToNext30(now)
+  const initNow = new Date()
+  const defaultStart = roundToNext30(initNow)
   const defaultEnd = new Date(defaultStart.getTime() + 2 * 60 * 60 * 1000)
 
   const [startTime, setStartTime] = useState(formatDateTime(defaultStart))
@@ -66,7 +66,7 @@ export function BookingWidget({ spot }: BookingWidgetProps) {
   // Check slot availability in real-time
   const start = new Date(startTime)
   const end = new Date(endTime)
-  const slotValid = start < end && start > now
+  const slotValid = start < end && start > initNow
 
   const { data: slotCheck } = api.bookings.checkSlot.useQuery(
     { spotId: spot.id, startTime: start, endTime: end },
@@ -88,11 +88,10 @@ export function BookingWidget({ spot }: BookingWidgetProps) {
   const platformFee = Math.round(total * 0.2 * 100) / 100
 
   const slotTaken = slotCheck && !slotCheck.available
-  const isValid = hours > 0 && hours <= 24 && start > now && !slotTaken
-
-  const createBooking = api.bookings.create.useMutation()
+  const isValid = hours > 0 && hours <= 24 && start > initNow && !slotTaken
 
   async function handleReserve() {
+    const now = new Date()
     setError(null)
     const supabase = createSupabaseBrowserClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -109,12 +108,16 @@ export function BookingWidget({ spot }: BookingWidgetProps) {
       return // show vehicle selector, user clicks again to confirm
     }
 
-    if (!isValid) {
+    const currentStart = new Date(startTime)
+    const currentEnd = new Date(endTime)
+    const currentHours = (currentEnd.getTime() - currentStart.getTime()) / (1000 * 60 * 60)
+
+    if (currentStart >= currentEnd || currentStart <= now) {
       setError('Les dates sélectionnées sont invalides.')
       return
     }
 
-    if (hours > 24) {
+    if (currentHours > 24) {
       setError('La durée maximale est de 24 heures. Pour plus, utilisez le tarif journalier.')
       return
     }
@@ -122,36 +125,31 @@ export function BookingWidget({ spot }: BookingWidgetProps) {
     setLoading(true)
 
     try {
-      const result = await createBooking.mutateAsync({
-        spotId: spot.id,
-        startTime: start,
-        endTime: end,
-        vehicleId: selectedVehicleId ?? undefined,
+      const res = await fetch('/api/stripe/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          spotId: spot.id,
+          startTime: currentStart.toISOString(),
+          endTime: currentEnd.toISOString(),
+          vehicleId: selectedVehicleId ?? undefined,
+        }),
       })
 
-      // TODO: Enable Stripe payment when keys are configured
-      // For now, skip payment and go directly to confirmation
-      const stripeConfigured = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY &&
-        !process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY.startsWith('pk_test_...')
+      const data = await res.json()
 
-      if (stripeConfigured) {
-        const res = await fetch('/api/stripe/create-payment-intent', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ bookingId: result.booking.id }),
-        })
-
-        if (!res.ok) {
-          const data = await res.json()
-          throw new Error(data.error ?? 'Erreur de paiement')
-        }
+      if (!res.ok) {
+        throw new Error(data.error ?? 'Erreur lors de la réservation')
       }
 
-      router.push(`/booking/${result.booking.id}`)
+      if (data.url) {
+        window.location.href = data.url
+      } else {
+        router.push(`/booking/${data.bookingId}`)
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Une erreur est survenue'
       setError(msg)
-    } finally {
       setLoading(false)
     }
   }
@@ -181,7 +179,7 @@ export function BookingWidget({ spot }: BookingWidgetProps) {
                 type="datetime-local"
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
-                min={formatDateTime(now)}
+                min={formatDateTime(initNow)}
               />
             </div>
             <div>

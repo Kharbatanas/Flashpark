@@ -159,15 +159,23 @@ export default function HostListingsPage() {
                           </div>
                         </div>
 
-                        {/* Toggle */}
-                        {canToggle && (
-                          <Switch
-                            checked={spot.status === 'active'}
-                            disabled={togglingId === spot.id}
-                            onCheckedChange={() => handleToggle(spot.id, spot.status)}
-                            title={spot.status === 'active' ? 'Désactiver' : 'Activer'}
-                          />
-                        )}
+                        {/* Actions */}
+                        <div className="flex items-center gap-2">
+                          <Link
+                            href={`/host/listings/${spot.id}/edit`}
+                            className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                          >
+                            Modifier
+                          </Link>
+                          {canToggle && (
+                            <Switch
+                              checked={spot.status === 'active'}
+                              disabled={togglingId === spot.id}
+                              onCheckedChange={() => handleToggle(spot.id, spot.status)}
+                              title={spot.status === 'active' ? 'Désactiver' : 'Activer'}
+                            />
+                          )}
+                        </div>
                       </Card>
                     </motion.div>
                   </StaggerItem>

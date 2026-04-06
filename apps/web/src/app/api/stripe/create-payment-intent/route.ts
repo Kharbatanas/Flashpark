@@ -4,7 +4,11 @@ import { createSupabaseServerClient } from '../../../../lib/supabase/server'
 import { db, bookings, users } from '@flashpark/db'
 import { eq } from 'drizzle-orm'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? 'sk_test_placeholder', {
+if (!process.env.STRIPE_SECRET_KEY) {
+  throw new Error('STRIPE_SECRET_KEY environment variable is not set')
+}
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   apiVersion: '2024-12-18.acacia',
 })
 

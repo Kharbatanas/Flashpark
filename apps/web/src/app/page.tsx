@@ -230,10 +230,10 @@ function Simulator() {
   const [days, setDays] = useState(5)
   const net = Math.round(price * hours * days * 4.33 * 0.8)
   return (
-    <div className="relative w-full max-w-sm overflow-hidden rounded-3xl bg-white border border-gray-200 shadow-lg p-8">
-      <div className="absolute -right-20 -top-20 h-40 w-40 rounded-full bg-[#0540FF]/5 blur-[80px]" />
+    <div className="relative w-full max-w-sm overflow-hidden rounded-3xl bg-white/[0.06] backdrop-blur-sm border border-white/10 shadow-2xl p-8">
+      <div className="absolute -right-20 -top-20 h-40 w-40 rounded-full bg-[#0540FF]/10 blur-[80px]" />
       <p className="text-xs font-bold uppercase tracking-[0.15em] text-[#0540FF]">Simulateur de revenus</p>
-      <p className="mt-1 text-sm text-gray-400">Estimez vos gains mensuels</p>
+      <p className="mt-1 text-sm text-white/40">Estimez vos gains mensuels</p>
       <div className="mt-6 space-y-5">
         {[
           { l: 'Prix / heure', v: `${price} €`, val: price, set: setPrice, min: 1, max: 10, step: 0.5 },
@@ -242,8 +242,8 @@ function Simulator() {
         ].map(({ l, v, val, set, min, max, step }) => (
           <div key={l}>
             <div className="flex justify-between text-sm">
-              <span className="text-gray-500">{l}</span>
-              <span className="font-semibold text-gray-900">{v}</span>
+              <span className="text-white/50">{l}</span>
+              <span className="font-semibold text-white">{v}</span>
             </div>
             <input type="range" min={min} max={max} step={step} value={val}
               onChange={(e) => set(Number(e.target.value))}
@@ -251,10 +251,162 @@ function Simulator() {
           </div>
         ))}
       </div>
-      <div className="mt-8 rounded-2xl bg-[#0540FF]/5 ring-1 ring-[#0540FF]/10 p-5 text-center">
-        <p className="text-4xl font-black text-gray-900">{net.toLocaleString('fr-FR')} €</p>
+      <div className="mt-8 rounded-2xl bg-[#0540FF]/10 ring-1 ring-[#0540FF]/20 p-5 text-center">
+        <p className="text-4xl font-black text-white">{net.toLocaleString('fr-FR')} €</p>
         <p className="mt-1 text-sm text-[#0540FF] font-medium">par mois, net</p>
       </div>
+    </div>
+  )
+}
+
+/* ───── Animated road at hero bottom ───── */
+function AnimatedRoad() {
+  return (
+    <div className="absolute bottom-0 left-0 right-0 h-24 overflow-hidden pointer-events-none z-[5]">
+      {/* Road surface */}
+      <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-[#0a1228]/80 to-transparent" />
+
+      {/* Lane markings - infinite scroll */}
+      <div className="absolute bottom-6 left-0 right-0 flex items-center">
+        <motion.div
+          animate={{ x: [0, -200] }}
+          transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
+          className="flex gap-8 whitespace-nowrap"
+          style={{ width: '200%' }}
+        >
+          {Array.from({ length: 30 }).map((_, i) => (
+            <div key={i} className="h-[2px] w-12 bg-white/10 rounded-full shrink-0" />
+          ))}
+        </motion.div>
+      </div>
+
+      {/* Car driving across */}
+      <motion.div
+        animate={{ x: ['-10vw', '110vw'] }}
+        transition={{ duration: 8, repeat: Infinity, ease: 'linear', repeatDelay: 3 }}
+        className="absolute bottom-8"
+      >
+        <svg width="48" height="20" viewBox="0 0 48 20" fill="none">
+          {/* Simple car silhouette */}
+          <path d="M8 14h32c2 0 4-2 4-4v-1c0-1-1-2-2-2h-4l-3-4c-1-1.5-2.5-2-4-2H17c-1.5 0-3 .5-4 2l-3 4H6c-1 0-2 1-2 2v1c0 2 2 4 4 4z" fill="rgba(5,64,255,0.3)" />
+          <circle cx="14" cy="15" r="3" fill="rgba(5,64,255,0.4)" />
+          <circle cx="34" cy="15" r="3" fill="rgba(5,64,255,0.4)" />
+          {/* Headlights glow */}
+          <circle cx="44" cy="10" r="2" fill="rgba(5,64,255,0.6)">
+            <animate attributeName="opacity" values="0.6;1;0.6" dur="1s" repeatCount="indefinite" />
+          </circle>
+        </svg>
+      </motion.div>
+
+      {/* Second car going opposite direction */}
+      <motion.div
+        animate={{ x: ['110vw', '-10vw'] }}
+        transition={{ duration: 10, repeat: Infinity, ease: 'linear', repeatDelay: 5, delay: 4 }}
+        className="absolute bottom-12"
+      >
+        <svg width="36" height="16" viewBox="0 0 36 16" fill="none" style={{ transform: 'scaleX(-1)' }}>
+          <path d="M6 11h24c1.5 0 3-1.5 3-3v-1c0-.7-.7-1.5-1.5-1.5H28l-2.3-3c-.7-1.1-1.8-1.5-3-1.5H13c-1.1 0-2.2.4-3 1.5l-2.3 3H4.5c-.8 0-1.5.8-1.5 1.5v1c0 1.5 1.5 3 3 3z" fill="rgba(255,255,255,0.08)" />
+          <circle cx="10.5" cy="12" r="2.3" fill="rgba(255,255,255,0.12)" />
+          <circle cx="25.5" cy="12" r="2.3" fill="rgba(255,255,255,0.12)" />
+        </svg>
+      </motion.div>
+    </div>
+  )
+}
+
+/* ───── Parking spot animation for How It Works ───── */
+function ParkingAnimation() {
+  return (
+    <div className="relative w-32 h-24 mx-auto mb-8">
+      {/* Parking spot lines */}
+      <div className="absolute inset-0 flex items-end justify-center gap-8">
+        <div className="w-[2px] h-16 bg-white/10 rounded-full" />
+        <div className="w-[2px] h-16 bg-white/10 rounded-full" />
+        <div className="w-[2px] h-16 bg-white/10 rounded-full" />
+      </div>
+      {/* Car sliding in */}
+      <motion.div
+        initial={{ y: -40, opacity: 0 }}
+        whileInView={{ y: 0, opacity: 1 }}
+        viewport={{ once: true }}
+        transition={{ delay: 0.3, duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+        className="absolute left-1/2 -translate-x-1/2 bottom-2"
+      >
+        <svg width="32" height="14" viewBox="0 0 32 14" fill="none">
+          <rect x="4" y="2" width="24" height="8" rx="3" fill="rgba(5,64,255,0.4)" />
+          <circle cx="10" cy="11" r="2" fill="rgba(5,64,255,0.5)" />
+          <circle cx="22" cy="11" r="2" fill="rgba(5,64,255,0.5)" />
+        </svg>
+      </motion.div>
+      {/* "P" sign */}
+      <motion.div
+        initial={{ scale: 0 }}
+        whileInView={{ scale: 1 }}
+        viewport={{ once: true }}
+        transition={{ delay: 0.8, type: 'spring', stiffness: 200 }}
+        className="absolute -top-1 right-2 flex h-7 w-7 items-center justify-center rounded-md bg-[#0540FF]/20 border border-[#0540FF]/30"
+      >
+        <span className="text-xs font-black text-[#0540FF]">P</span>
+      </motion.div>
+    </div>
+  )
+}
+
+/* ───── Bouncing map pin for Stats section ───── */
+function BouncingPin() {
+  return (
+    <motion.div
+      animate={{ y: [0, -8, 0] }}
+      transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+      className="mx-auto mb-8 flex h-12 w-12 items-center justify-center"
+    >
+      <svg width="28" height="36" viewBox="0 0 28 36" fill="none">
+        <path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.3 21.7 0 14 0z" fill="rgba(5,64,255,0.3)" />
+        <circle cx="14" cy="14" r="5" fill="rgba(5,64,255,0.6)" />
+        <motion.circle cx="14" cy="14" r="8" fill="none" stroke="rgba(5,64,255,0.2)" strokeWidth="1.5"
+          initial={{ scale: 1, opacity: 0.5 }}
+          animate={{ scale: [1, 1.8], opacity: [0.5, 0] }}
+          transition={{ duration: 2, repeat: Infinity }}
+        />
+      </svg>
+      {/* Pin shadow */}
+      <motion.div
+        animate={{ scale: [1, 0.6, 1], opacity: [0.3, 0.15, 0.3] }}
+        transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+        className="absolute bottom-0 h-2 w-8 rounded-full bg-[#0540FF]/20 blur-sm"
+      />
+    </motion.div>
+  )
+}
+
+/* ───── Floating car/parking icons for Why Flashpark ───── */
+function FloatingIcons() {
+  const icons = ['🚗', '🅿️', '🚙', '🏎️', '🚘']
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      {icons.map((icon, i) => (
+        <motion.div
+          key={i}
+          animate={{
+            y: [0, -20, 0],
+            x: [0, 10, 0],
+            rotate: [0, 5, -5, 0],
+          }}
+          transition={{
+            duration: 6 + i * 2,
+            repeat: Infinity,
+            delay: i * 1.5,
+            ease: 'easeInOut',
+          }}
+          className="absolute text-2xl opacity-[0.04]"
+          style={{
+            left: `${15 + i * 18}%`,
+            top: `${20 + (i % 3) * 25}%`,
+          }}
+        >
+          {icon}
+        </motion.div>
+      ))}
     </div>
   )
 }
@@ -278,11 +430,11 @@ export default function HomePage() {
 
   return (
     <TRPCProvider>
-    <div className="min-h-screen bg-white" style={{ fontFamily: 'Inter, sans-serif' }}>
+    <div className="min-h-screen" style={{ background: '#050810', fontFamily: 'Inter, sans-serif' }}>
       <Navbar />
 
       {/* ─── HERO ─── */}
-      <section ref={heroRef} className="relative -mt-[72px] min-h-[92vh] overflow-hidden bg-gradient-to-b from-[#0A1628] via-[#0D1F3C] to-[#111827]">
+      <section ref={heroRef} className="relative -mt-[72px] min-h-screen overflow-hidden bg-gradient-to-b from-[#050810] via-[#080e1c] to-[#0a1228]">
         {/* Floating particles */}
         <Particles />
 
@@ -297,7 +449,7 @@ export default function HomePage() {
           className="absolute left-1/2 top-1/3 -translate-x-1/2 h-[50vh] w-[60vw] bg-[radial-gradient(ellipse_50%_50%_at_50%_50%,rgba(5,64,255,0.12),transparent)]" />
 
         <motion.div style={{ y: heroY, opacity: heroOpacity }}
-          className="relative z-10 flex min-h-[92vh] flex-col items-center justify-center px-6 pt-20">
+          className="relative z-10 flex min-h-screen flex-col items-center justify-center px-6 pt-20">
 
           {/* Badge — staggered entry */}
           <motion.div
@@ -341,6 +493,7 @@ export default function HomePage() {
               <div className="flex flex-1 items-center gap-3 pl-6 pr-2 py-2">
                 <Search className="h-5 w-5 text-gray-400 shrink-0" strokeWidth={2} />
                 <input type="text" placeholder="Ou voulez-vous vous garer ?"
+                  aria-label="Rechercher une place de parking"
                   className="flex-1 bg-transparent text-[15px] text-gray-900 placeholder-gray-400 focus:outline-none"
                   value={q} onChange={(e) => setQ(e.target.value)} />
               </div>
@@ -389,10 +542,99 @@ export default function HomePage() {
             </div>
           </motion.div>
         </motion.div>
+
+        <AnimatedRoad />
+      </section>
+
+      {/* ─── PROBLEM / SOLUTION COMPARISON ─── */}
+      <section className="py-28" style={{ background: '#080e1c' }}>
+        <div className="mx-auto max-w-5xl px-6">
+          <Reveal className="text-center mb-16">
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#0540FF] mb-3">Le probleme vs la solution</p>
+            <h2 className="text-3xl md:text-4xl font-black tracking-tight text-white">
+              Fini le stress du stationnement.
+            </h2>
+          </Reveal>
+
+          <div className="grid md:grid-cols-2 gap-6">
+
+            {/* LEFT — Sans Flashpark */}
+            <Reveal delay={0.05}>
+              <div className="relative h-full rounded-2xl overflow-hidden border border-red-500/20 bg-white/[0.02] backdrop-blur-sm p-8">
+                {/* Subtle red glow */}
+                <div className="absolute -top-10 -right-10 h-32 w-32 rounded-full bg-red-500/10 blur-[60px] pointer-events-none" />
+
+                <div className="flex items-center gap-3 mb-8">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-500/10 border border-red-500/20">
+                    <span className="text-red-400 text-sm font-bold">✗</span>
+                  </div>
+                  <p className="text-sm font-bold uppercase tracking-[0.15em] text-red-400">Sans Flashpark</p>
+                </div>
+
+                <ul className="space-y-4">
+                  {[
+                    'Tourner 20 min pour trouver une place',
+                    'Payer 4 €/h en parking public',
+                    'Places toujours prises aux heures de pointe',
+                    'Pas de garantie de disponibilite',
+                  ].map((item, i) => (
+                    <motion.li
+                      key={item}
+                      initial={{ opacity: 0, x: -10 }}
+                      whileInView={{ opacity: 1, x: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ delay: i * 0.08, duration: 0.4 }}
+                      className="flex items-start gap-3">
+                      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-bold">✗</span>
+                      <span className="text-sm text-white/50 leading-relaxed">{item}</span>
+                    </motion.li>
+                  ))}
+                </ul>
+              </div>
+            </Reveal>
+
+            {/* RIGHT — Avec Flashpark */}
+            <Reveal delay={0.15}>
+              <div className="relative h-full rounded-2xl overflow-hidden border border-emerald-500/20 bg-white/[0.03] backdrop-blur-sm p-8">
+                {/* Subtle green glow */}
+                <div className="absolute -top-10 -left-10 h-32 w-32 rounded-full bg-emerald-500/10 blur-[60px] pointer-events-none" />
+                {/* Blue accent glow */}
+                <div className="absolute -bottom-10 -right-10 h-32 w-32 rounded-full bg-[#0540FF]/10 blur-[60px] pointer-events-none" />
+
+                <div className="flex items-center gap-3 mb-8">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                    <span className="text-emerald-400 text-sm font-bold">✓</span>
+                  </div>
+                  <p className="text-sm font-bold uppercase tracking-[0.15em] text-emerald-400">Avec Flashpark</p>
+                </div>
+
+                <ul className="space-y-4">
+                  {[
+                    'Reservez en 60 secondes',
+                    "Jusqu'a -40% vs parking public",
+                    'Place garantie et reservee',
+                    'Acces instantane par QR code',
+                  ].map((item, i) => (
+                    <motion.li
+                      key={item}
+                      initial={{ opacity: 0, x: 10 }}
+                      whileInView={{ opacity: 1, x: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ delay: i * 0.08, duration: 0.4 }}
+                      className="flex items-start gap-3">
+                      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold">✓</span>
+                      <span className="text-sm text-white/70 leading-relaxed">{item}</span>
+                    </motion.li>
+                  ))}
+                </ul>
+              </div>
+            </Reveal>
+          </div>
+        </div>
       </section>
 
       {/* ─── CATEGORY TABS ─── */}
-      <section className="py-12 bg-white border-b border-gray-100">
+      <section className="py-14" style={{ background: '#050810', borderTop: '1px solid rgba(255,255,255,0.06)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
         <div className="mx-auto max-w-6xl px-6">
           <div className="flex justify-center gap-8 md:gap-12 overflow-x-auto scrollbar-hide pb-2">
             {CATEGORIES.map((cat, i) => {
@@ -400,11 +642,11 @@ export default function HomePage() {
               return (
                 <Reveal key={cat.key} delay={i * 0.05}>
                   <Link href={`/map?type=${cat.key}`}
-                    className="group flex flex-col items-center gap-2 min-w-[72px]">
-                    <div className={`flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br ${cat.color} shadow-sm transition-all duration-200 group-hover:shadow-md group-hover:scale-105`}>
+                    className="group flex flex-col items-center gap-2.5 min-w-[72px]">
+                    <div className={`flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br ${cat.color} shadow-sm transition-all duration-200 group-hover:shadow-lg group-hover:shadow-white/5 group-hover:scale-105`}>
                       <Icon className="h-6 w-6 text-white" strokeWidth={1.8} />
                     </div>
-                    <span className="text-xs font-semibold text-gray-600 group-hover:text-gray-900 transition-colors">{cat.label}</span>
+                    <span className="text-xs font-semibold text-white/40 group-hover:text-white/70 transition-colors">{cat.label}</span>
                   </Link>
                 </Reveal>
               )
@@ -414,8 +656,9 @@ export default function HomePage() {
       </section>
 
       {/* ─── STATS BAR ─── */}
-      <section className="py-16 bg-gray-50 border-y border-gray-100">
+      <section className="py-20" style={{ background: '#080e1c' }}>
         <div className="mx-auto max-w-5xl px-6">
+          <BouncingPin />
           <Reveal>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
               {[
@@ -424,11 +667,13 @@ export default function HomePage() {
                 { v: 60, s: 's', l: 'Pour reserver' },
                 { v: 4.8, s: '/5', l: 'Note moyenne', noCount: true },
               ].map(({ v, s, l, prefix, noCount }) => (
-                <div key={l}>
-                  <p className="text-3xl font-black tracking-tight text-gray-900">
-                    {prefix}{noCount ? v : <Counter value={v} />}{s}
+                <div key={l} className="flex flex-col items-center">
+                  <p className="text-4xl font-black tracking-tight text-white">
+                    {prefix}<span className="bg-gradient-to-r from-[#60A5FA] to-[#0540FF] bg-clip-text text-transparent">
+                      {noCount ? v : <Counter value={v} />}{s}
+                    </span>
                   </p>
-                  <p className="mt-1 text-sm text-gray-500">{l}</p>
+                  <p className="mt-2 text-sm text-white/40">{l}</p>
                 </div>
               ))}
             </div>
@@ -437,31 +682,41 @@ export default function HomePage() {
       </section>
 
       {/* ─── HOW IT WORKS ─── */}
-      <section className="py-24 bg-white">
+      <section id="how" className="py-28" style={{ background: '#050810' }}>
         <div className="mx-auto max-w-5xl px-6">
           <Reveal className="text-center mb-16">
-            <p className="text-sm font-semibold uppercase tracking-wider text-[#0540FF]">
+            <ParkingAnimation />
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#0540FF] mb-3">
               Comment ca marche
             </p>
-            <h2 className="mt-3 text-3xl md:text-4xl font-black tracking-tight text-gray-900">
+            <h2 className="text-3xl md:text-4xl font-black tracking-tight text-white">
               3 etapes. C&apos;est tout.
             </h2>
           </Reveal>
 
-          <div className="grid gap-8 md:grid-cols-3">
+          <div className="grid gap-6 md:grid-cols-3">
             {[
               { n: '1', t: 'Cherchez', d: 'Entrez votre destination. Les places disponibles apparaissent en temps reel sur la carte.', icon: Search },
               { n: '2', t: 'Reservez', d: 'Choisissez vos horaires et payez en ligne. Vous recevez un QR code instantanement.', icon: Calendar },
               { n: '3', t: 'Garez-vous', d: "Montrez votre QR code ou utilisez le Smart Gate. C'est aussi simple que ca.", icon: QrCode },
             ].map(({ n, t, d, icon: Icon }, i) => (
               <Reveal key={n} delay={i * 0.1}>
-                <div className="group relative h-full rounded-2xl border border-gray-100 bg-white p-8 transition-all duration-300 hover:shadow-lg hover:border-gray-200">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#0540FF]/5">
-                    <Icon className="h-6 w-6 text-[#0540FF]" strokeWidth={1.8} />
+                <div className="group relative h-full rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-sm p-8 transition-all duration-300 hover:border-white/[0.15] hover:bg-white/[0.05]">
+                  {/* Step number — background */}
+                  <span className="absolute top-5 right-6 text-5xl font-black text-white/[0.04] select-none">{n}</span>
+
+                  {/* Icon with blue gradient */}
+                  <div className="relative flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#0540FF]/20 to-[#0540FF]/5 border border-[#0540FF]/20">
+                    <Icon className="h-5 w-5 text-[#0540FF]" strokeWidth={1.8} />
                   </div>
-                  <h3 className="mt-5 text-lg font-bold text-gray-900">{t}</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-gray-500">{d}</p>
-                  <span className="absolute top-6 right-6 text-4xl font-black text-gray-100">{n}</span>
+
+                  {/* Step indicator */}
+                  <div className="mt-5 flex items-center gap-2">
+                    <span className="text-xs font-bold text-[#0540FF] uppercase tracking-wider">Etape {n}</span>
+                  </div>
+
+                  <h3 className="mt-1.5 text-lg font-bold text-white">{t}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-white/50">{d}</p>
                 </div>
               </Reveal>
             ))}
@@ -469,7 +724,7 @@ export default function HomePage() {
 
           <Reveal delay={0.3} className="mt-14 text-center">
             <Link href="/map"
-              className="group inline-flex h-12 items-center gap-2 rounded-full bg-[#0540FF] px-8 text-sm font-semibold text-white transition-all hover:bg-[#0435D2] hover:shadow-lg">
+              className="group inline-flex h-12 items-center gap-2 rounded-full bg-[#0540FF] px-8 text-sm font-semibold text-white transition-all hover:bg-[#0435D2] hover:shadow-lg hover:shadow-[#0540FF]/20">
               Trouver une place
               <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
             </Link>
@@ -478,13 +733,15 @@ export default function HomePage() {
       </section>
 
       {/* ─── WHY FLASHPARK ─── */}
-      <section className="py-24 bg-gray-50">
+      <section className="relative py-28" style={{ background: '#080e1c' }}>
         <div className="mx-auto max-w-5xl px-6">
+          <FloatingIcons />
           <Reveal className="text-center mb-14">
-            <h2 className="text-3xl md:text-4xl font-black tracking-tight text-gray-900">
-              Pourquoi <span className="text-[#0540FF]">Flashpark</span>
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#0540FF] mb-3">Pourquoi nous</p>
+            <h2 className="text-3xl md:text-4xl font-black tracking-tight text-white">
+              Pourquoi <span className="bg-gradient-to-r from-[#60A5FA] to-[#0540FF] bg-clip-text text-transparent">Flashpark</span>
             </h2>
-            <p className="mt-3 text-gray-500 max-w-lg mx-auto">
+            <p className="mt-3 text-white/40 max-w-lg mx-auto text-sm leading-relaxed">
               Une alternative moins chere, plus flexible et plus humaine au parking traditionnel.
             </p>
           </Reveal>
@@ -497,12 +754,12 @@ export default function HomePage() {
               { icon: Zap, title: 'Reservation instantanee', desc: 'Confirmez en un clic. Votre place est garantie, sans aller-retour avec l\'hote.' },
             ].map(({ icon: Icon, title, desc }, i) => (
               <Reveal key={title} delay={i * 0.07}>
-                <div className="rounded-2xl bg-white border border-gray-100 p-8 transition-all duration-300 hover:shadow-md hover:-translate-y-0.5">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#0540FF]/5">
+                <div className="group relative h-full rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-sm p-8 transition-all duration-300 hover:border-white/[0.14] hover:bg-white/[0.05] hover:-translate-y-0.5">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-[#0540FF]/20 to-[#0540FF]/5 border border-[#0540FF]/20">
                     <Icon className="h-5 w-5 text-[#0540FF]" strokeWidth={1.8} />
                   </div>
-                  <h3 className="mt-5 text-lg font-bold text-gray-900">{title}</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-gray-500">{desc}</p>
+                  <h3 className="mt-5 text-lg font-bold text-white">{title}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-white/50">{desc}</p>
                 </div>
               </Reveal>
             ))}
@@ -511,18 +768,18 @@ export default function HomePage() {
       </section>
 
       {/* ─── BECOME A HOST ─── */}
-      <section className="py-24 bg-white">
+      <section className="py-28" style={{ background: '#050810' }}>
         <div className="mx-auto max-w-6xl px-6">
           <div className="grid gap-16 lg:grid-cols-2 lg:items-center">
             <Reveal>
-              <p className="text-sm font-semibold uppercase tracking-wider text-[#0540FF]">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#0540FF] mb-4">
                 Pour les proprietaires
               </p>
-              <h2 className="mt-4 text-[clamp(2rem,4vw,3rem)] font-black leading-tight tracking-tight text-gray-900">
+              <h2 className="text-[clamp(2rem,4vw,3rem)] font-black leading-tight tracking-tight text-white">
                 Votre place vide<br />
-                <span className="text-[#0540FF]">vous rapporte.</span>
+                <span className="bg-gradient-to-r from-[#60A5FA] to-[#0540FF] bg-clip-text text-transparent">vous rapporte.</span>
               </h2>
-              <p className="mt-5 text-lg leading-relaxed text-gray-500">
+              <p className="mt-5 text-lg leading-relaxed text-white/50">
                 Publiez en 5 minutes. Les conducteurs reservent.
                 Flashpark gere le paiement, les litiges et l&apos;assurance.
               </p>
@@ -535,9 +792,9 @@ export default function HomePage() {
                   'Inscription et publication 100% gratuites',
                 ].map((x, i) => (
                   <Reveal key={x} delay={i * 0.06}>
-                    <li className="flex items-center gap-3 text-sm text-gray-600">
-                      <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-green-50">
-                        <svg className="h-3 w-3 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                    <li className="flex items-center gap-3 text-sm text-white/60">
+                      <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                        <svg className="h-3 w-3 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                         </svg>
                       </div>
@@ -549,41 +806,47 @@ export default function HomePage() {
 
               <div className="mt-10 flex flex-wrap gap-3">
                 <Link href="/host/listings/new"
-                  className="inline-flex h-12 items-center rounded-full bg-[#0540FF] px-7 text-sm font-semibold text-white transition-colors hover:bg-[#0435D2]">
+                  className="inline-flex h-12 items-center rounded-full bg-[#0540FF] px-7 text-sm font-semibold text-white transition-colors hover:bg-[#0435D2] hover:shadow-lg hover:shadow-[#0540FF]/20">
                   Deposer mon annonce
                 </Link>
                 <Link href="/map"
-                  className="inline-flex h-12 items-center rounded-full border border-gray-200 px-7 text-sm font-semibold text-gray-700 transition hover:bg-gray-50">
+                  className="inline-flex h-12 items-center rounded-full border border-white/10 bg-white/[0.04] px-7 text-sm font-semibold text-white/70 transition hover:bg-white/[0.08] hover:text-white hover:border-white/20">
                   Explorer la carte
                 </Link>
               </div>
             </Reveal>
 
-            <Reveal delay={0.15}>
+            <Reveal delay={0.15} className="flex justify-center lg:justify-end">
               <Simulator />
             </Reveal>
           </div>
         </div>
       </section>
 
-      {/* ─── TRUST ─── */}
-      <section className="py-16 bg-gray-50 border-y border-gray-100">
+      {/* ─── TRUST BAR ─── */}
+      <section className="py-20" style={{ background: '#080e1c', borderTop: '1px solid rgba(255,255,255,0.06)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
         <div className="mx-auto max-w-4xl px-6">
           <Reveal>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
               {[
                 { icon: Shield, label: 'Paiement securise', sub: 'Stripe' },
                 { icon: Star, label: 'Hotes verifies', sub: 'ID checks' },
                 { icon: QrCode, label: 'Acces instantane', sub: 'QR Code' },
                 { icon: Zap, label: 'Support reactif', sub: '< 24h' },
-              ].map(({ icon: Icon, label, sub }) => (
-                <div key={label} className="flex flex-col items-center">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#0540FF]/5">
+              ].map(({ icon: Icon, label, sub }, i) => (
+                <motion.div
+                  key={label}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: i * 0.07, duration: 0.5 }}
+                  className="flex flex-col items-center rounded-2xl border border-white/[0.07] bg-white/[0.03] backdrop-blur-sm p-6 transition-all hover:border-white/[0.12] hover:bg-white/[0.05]">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-[#0540FF]/20 to-[#0540FF]/5 border border-[#0540FF]/20">
                     <Icon className="h-5 w-5 text-[#0540FF]" strokeWidth={1.8} />
                   </div>
-                  <p className="mt-3 text-sm font-semibold text-gray-900">{label}</p>
-                  <p className="text-xs text-gray-400">{sub}</p>
-                </div>
+                  <p className="mt-3 text-sm font-semibold text-white">{label}</p>
+                  <p className="text-xs text-white/30 mt-0.5">{sub}</p>
+                </motion.div>
               ))}
             </div>
           </Reveal>
@@ -591,7 +854,7 @@ export default function HomePage() {
       </section>
 
       {/* ─── FOOTER ─── */}
-      <footer className="py-16 bg-white border-t border-gray-100">
+      <footer className="py-16" style={{ background: '#050810', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
         <div className="mx-auto max-w-6xl px-6">
           <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
             <div>
@@ -599,11 +862,11 @@ export default function HomePage() {
                 <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[#0540FF]">
                   <span className="text-sm font-black text-white">P</span>
                 </div>
-                <span className="text-lg font-bold text-gray-900">
+                <span className="text-lg font-bold text-white">
                   flash<span className="text-[#0540FF]">park</span>
                 </span>
               </div>
-              <p className="mt-4 text-sm leading-relaxed text-gray-400">
+              <p className="mt-4 text-sm leading-relaxed text-white/30">
                 La marketplace du parking prive en France. Trouvez, reservez et garez-vous en toute simplicite.
               </p>
             </div>
@@ -613,22 +876,22 @@ export default function HomePage() {
               { t: 'Flashpark', l: [['A propos', '/about'], ['Contact', '/contact'], ['CGU', '/terms']] },
             ].map(({ t, l }) => (
               <div key={t}>
-                <p className="mb-4 text-xs font-bold uppercase tracking-wider text-gray-400">{t}</p>
+                <p className="mb-4 text-xs font-bold uppercase tracking-wider text-white/20">{t}</p>
                 <ul className="space-y-3">
                   {l.map(([label, href]) => (
                     <li key={label}>
-                      <Link href={href} className="text-sm text-gray-500 transition-colors hover:text-gray-900">{label}</Link>
+                      <Link href={href} className="text-sm text-white/40 transition-colors hover:text-white/70">{label}</Link>
                     </li>
                   ))}
                 </ul>
               </div>
             ))}
           </div>
-          <div className="mt-14 flex flex-col items-center justify-between gap-4 pt-8 border-t border-gray-100 sm:flex-row">
-            <p className="text-xs text-gray-400">© 2026 Flashpark SAS · Nice, France</p>
-            <div className="flex gap-6 text-xs text-gray-400">
+          <div className="mt-14 flex flex-col items-center justify-between gap-4 pt-8 sm:flex-row" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+            <p className="text-xs text-white/20">© 2026 Flashpark SAS · Nice, France</p>
+            <div className="flex gap-6 text-xs text-white/20">
               {['Confidentialite', 'CGU', 'Cookies'].map((x) => (
-                <Link key={x} href="/terms" className="transition hover:text-gray-600">{x}</Link>
+                <Link key={x} href="/terms" className="transition hover:text-white/50">{x}</Link>
               ))}
             </div>
           </div>

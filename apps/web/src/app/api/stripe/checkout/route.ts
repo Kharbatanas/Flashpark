@@ -2,9 +2,13 @@ import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { createSupabaseServerClient } from '../../../../lib/supabase/server'
 import { db, bookings, spots, users } from '@flashpark/db'
-import { eq, and, or, gte, lte } from 'drizzle-orm'
+import { eq, and, or, not, gt, lt, lte, gte } from 'drizzle-orm'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? 'sk_test_placeholder', {
+if (!process.env.STRIPE_SECRET_KEY) {
+  throw new Error('STRIPE_SECRET_KEY environment variable is not set')
+}
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   apiVersion: '2024-12-18.acacia',
 })
 
@@ -39,38 +43,54 @@ export async function POST(request: Request) {
   })
   if (!spot) return NextResponse.json({ error: 'Place non disponible' }, { status: 404 })
 
-  // Check conflicts
-  const conflict = await db.query.bookings.findFirst({
-    where: and(
-      eq(bookings.spotId, spotId),
-      or(
-        and(gte(bookings.startTime, start), lte(bookings.startTime, end)),
-        and(gte(bookings.endTime, start), lte(bookings.endTime, end)),
-        and(lte(bookings.startTime, start), gte(bookings.endTime, end))
-      )
-    ),
-  })
-  if (conflict) return NextResponse.json({ error: 'Créneau déjà réservé' }, { status: 409 })
-
   const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60)
   const pricePerHour = parseFloat(spot.pricePerHour)
   const totalPrice = Math.round(hours * pricePerHour * 100) / 100
   const platformFee = Math.round(totalPrice * 0.2 * 100) / 100
   const hostPayout = Math.round((totalPrice - platformFee) * 100) / 100
 
-  const [booking] = await db
-    .insert(bookings)
-    .values({
-      driverId: dbUser.id,
-      spotId,
-      startTime: start,
-      endTime: end,
-      totalPrice: String(totalPrice),
-      platformFee: String(platformFee),
-      hostPayout: String(hostPayout),
-      status: 'pending',
+  // TRANSACTION: conflict check + insert (atomic — prevents race condition)
+  let booking: typeof bookings.$inferSelect
+  try {
+    const [inserted] = await db.transaction(async (tx) => {
+      // Check conflicts (strict boundary: adjacent bookings are allowed)
+      const conflict = await tx.query.bookings.findFirst({
+        where: and(
+          eq(bookings.spotId, spotId),
+          not(eq(bookings.status, 'cancelled')),
+          not(eq(bookings.status, 'refunded')),
+          or(
+            and(gt(bookings.startTime, start), lt(bookings.startTime, end)),
+            and(gt(bookings.endTime, start), lt(bookings.endTime, end)),
+            and(lte(bookings.startTime, start), gte(bookings.endTime, end))
+          )
+        ),
+      })
+      if (conflict) {
+        throw new Error('CONFLICT')
+      }
+
+      return tx
+        .insert(bookings)
+        .values({
+          driverId: dbUser.id,
+          spotId,
+          startTime: start,
+          endTime: end,
+          totalPrice: String(totalPrice),
+          platformFee: String(platformFee),
+          hostPayout: String(hostPayout),
+          status: 'pending',
+        })
+        .returning()
     })
-    .returning()
+    booking = inserted
+  } catch (err) {
+    if (err instanceof Error && err.message === 'CONFLICT') {
+      return NextResponse.json({ error: 'Créneau déjà réservé' }, { status: 409 })
+    }
+    throw err
+  }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
@@ -102,10 +122,13 @@ export async function POST(request: Request) {
     cancel_url: `${appUrl}/spot/${spotId}?cancelled=true`,
   })
 
-  await db
-    .update(bookings)
-    .set({ stripePaymentIntentId: session.id })
-    .where(eq(bookings.id, booking.id))
+  // payment_intent may be null at session creation; webhook will update it on completion
+  if (typeof session.payment_intent === 'string') {
+    await db
+      .update(bookings)
+      .set({ stripePaymentIntentId: session.payment_intent })
+      .where(eq(bookings.id, booking.id))
+  }
 
   return NextResponse.json({ url: session.url, bookingId: booking.id })
 }

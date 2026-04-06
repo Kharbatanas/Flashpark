@@ -1,8 +1,8 @@
 import { z } from 'zod'
 import { eq } from 'drizzle-orm'
 import { TRPCError } from '@trpc/server'
-import { createTRPCRouter, protectedProcedure, publicProcedure } from '../trpc'
-import { users } from '@flashpark/db'
+import { createTRPCRouter, protectedProcedure } from '../trpc'
+import { users, verificationDocuments } from '@flashpark/db'
 
 export const usersRouter = createTRPCRouter({
   me: protectedProcedure.query(async ({ ctx }) => {
@@ -38,6 +38,16 @@ export const usersRouter = createTRPCRouter({
 
     if (user.role === 'host' || user.role === 'both' || user.role === 'admin') {
       return user // already a host
+    }
+
+    const docs = await ctx.db.query.verificationDocuments.findMany({
+      where: eq(verificationDocuments.userId, ctx.userId),
+    })
+
+    const hasSubmitted = docs.some((d) => d.status === 'pending' || d.status === 'approved')
+
+    if (!hasSubmitted) {
+      throw new TRPCError({ code: 'FORBIDDEN', message: 'Vous devez soumettre vos documents de vérification avant de devenir hôte' })
     }
 
     const [updated] = await ctx.db

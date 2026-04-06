@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { eq, and, isNull, desc } from 'drizzle-orm'
+import { eq, and, isNull, desc, count } from 'drizzle-orm'
 import { createTRPCRouter, protectedProcedure } from '../trpc'
 import { notifications } from '@flashpark/db'
 
@@ -21,11 +21,10 @@ export const notificationsRouter = createTRPCRouter({
 
   // Count unread
   unreadCount: protectedProcedure.query(async ({ ctx }) => {
-    const unread = await ctx.db.query.notifications.findMany({
-      where: and(eq(notifications.userId, ctx.userId), isNull(notifications.readAt)),
-      columns: { id: true },
-    })
-    return { count: unread.length }
+    const [result] = await ctx.db.select({ count: count() })
+      .from(notifications)
+      .where(and(eq(notifications.userId, ctx.userId), isNull(notifications.readAt)))
+    return { count: result?.count ?? 0 }
   }),
 
   // Mark all as read
