@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { api } from '../../../../lib/trpc/client'
+import { useRequireHost } from '../../../../lib/use-require-host'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -30,6 +31,7 @@ function formatDT(d: string | Date) {
 }
 
 export default function PlanningPage() {
+  useRequireHost()
   const searchParams = useSearchParams()
   const preselectedSpot = searchParams.get('spot')
 

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { api } from '../../../../lib/trpc/client'
+import { useRequireHost } from '../../../../lib/use-require-host'
 import { PageTransition, FadeIn, StaggerContainer, StaggerItem, motion, AnimatePresence } from '../../../../components/motion'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -30,7 +31,8 @@ const STATUS_LABEL: Record<string, string> = {
 }
 
 export default function HostListingsPage() {
-  const { data: listings, isLoading, refetch } = api.spots.myListings.useQuery()
+  const { isHost, isLoading: hostLoading } = useRequireHost()
+  const { data: listings, isLoading, refetch } = api.spots.myListings.useQuery(undefined, { enabled: isHost })
   const updateSpot = api.spots.update.useMutation({ onSuccess: () => refetch() })
   const [togglingId, setTogglingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -52,12 +54,12 @@ export default function HostListingsPage() {
 
   return (
     <PageTransition>
-      <div className="min-h-screen bg-[#F8FAFC] px-4 py-8">
+      <div className="min-h-screen bg-[#F8FAFC] px-4 py-6 pb-24 md:py-8 md:pb-8">
         <div className="mx-auto max-w-4xl">
           {/* Header */}
-          <FadeIn className="mb-8 flex items-center justify-between">
+          <FadeIn className="mb-6 md:mb-8 flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-[#1A1A2E]">Mes annonces</h1>
+              <h1 className="text-xl md:text-2xl font-bold text-[#1A1A2E]">Mes annonces</h1>
               <p className="mt-1 text-sm text-gray-500">
                 {listings?.length ?? 0} annonce{(listings?.length ?? 0) !== 1 ? 's' : ''}
               </p>
@@ -122,9 +124,9 @@ export default function HostListingsPage() {
                     <motion.div
                       whileHover={{ y: -2, boxShadow: '0 8px 25px -5px rgba(0,0,0,0.08)' }}
                     >
-                      <Card className="flex items-center gap-4 p-5">
-                        {/* Photo placeholder */}
-                        <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center">
+                      <Card className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 p-4 sm:p-5">
+                        {/* Photo */}
+                        <div className="w-full h-32 sm:h-16 sm:w-16 flex-shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center">
                           {spot.photos?.[0] ? (
                             <img src={spot.photos[0]} alt={spot.title} className="h-full w-full object-cover" />
                           ) : (
@@ -174,6 +176,16 @@ export default function HostListingsPage() {
             </StaggerContainer>
           )}
         </div>
+
+        {/* FAB — mobile only */}
+        <Link
+          href="/host/listings/new"
+          className="md:hidden fixed bottom-24 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[#0540FF] text-white shadow-lg shadow-[#0540FF]/30 active:scale-95 transition-transform"
+        >
+          <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+          </svg>
+        </Link>
 
         <AnimatePresence>
           {error && (

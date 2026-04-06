@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { api } from '../../../../../lib/trpc/client'
+import { useRequireHost } from '../../../../../lib/use-require-host'
 import { createSupabaseBrowserClient } from '../../../../../lib/supabase/client'
 import { AddressAutocomplete, type AddressResult } from '../../../../../components/address-autocomplete'
 
@@ -477,6 +478,8 @@ export default function NewListingPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  useRequireHost()
+
   const createSpot = api.spots.create.useMutation()
 
   function update(fields: Partial<FormData>) {
@@ -528,7 +531,7 @@ export default function NewListingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] px-4 py-8">
+    <div className="min-h-screen bg-[#F8FAFC] px-4 py-6 pb-24 md:py-8 md:pb-8">
       <div className="mx-auto max-w-2xl">
         {/* Header */}
         <div className="mb-8">

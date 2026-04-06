@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { api } from '../../../../../../lib/trpc/client'
+import { useRequireHost } from '../../../../../../lib/use-require-host'
 import { createSupabaseBrowserClient } from '../../../../../../lib/supabase/client'
 
 type SpotType = 'outdoor' | 'indoor' | 'garage' | 'covered' | 'underground'
@@ -37,6 +38,7 @@ const TYPE_LABELS: Record<string, string> = {
 }
 
 export default function EditListingPage() {
+  useRequireHost()
   const router = useRouter()
   const params = useParams()
   const id = params.id as string

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { api } from '../../../../lib/trpc/client'
+import { useRequireHost } from '../../../../lib/use-require-host'
 import { PageTransition, FadeIn } from '../../../../components/motion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -17,7 +18,8 @@ function formatDate(d: string | Date) {
 }
 
 export default function AvailabilityPage() {
-  const { data: mySpots, isLoading: spotsLoading } = api.spots.myListings.useQuery()
+  const { isHost } = useRequireHost()
+  const { data: mySpots, isLoading: spotsLoading } = api.spots.myListings.useQuery(undefined, { enabled: isHost })
   const [selectedSpotId, setSelectedSpotId] = useState<string | null>(null)
 
   const spotId = selectedSpotId ?? mySpots?.[0]?.id ?? null
