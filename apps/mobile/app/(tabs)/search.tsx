@@ -1,111 +1,70 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
-  View,
-  Text,
-  TextInput,
   FlatList,
-  TouchableOpacity,
-  StyleSheet,
-  Image,
-  useWindowDimensions,
-  Platform,
-  RefreshControl,
   ScrollView,
-  Keyboard,
+  StyleSheet,
+  TouchableOpacity,
+  View,
 } from 'react-native'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { router } from 'expo-router'
 import {
-  Search,
-  MapPin,
-  Star,
-  Heart,
-  List,
-  Map as MapIcon,
-  X,
-  Zap,
-  ArrowUpDown,
+  Car,
+  CircleParking,
   Clock,
-  BookOpen,
+  Search,
+  SlidersHorizontal,
+  type LucideIcon,
 } from 'lucide-react-native'
-import { SafeMapView, SafeMarker } from '../../components/safe-map'
-import BottomSheet, { BottomSheetFlatList } from '@gorhom/bottom-sheet'
-import { supabase } from '../../lib/supabase'
+import * as Haptics from 'expo-haptics'
+
+import { ScreenContainer } from '../../src/design-system/components/layout'
+import { SpotCard } from '../../src/design-system/components/organisms'
 import {
-  COLORS,
-  TYPE_LABELS,
-  NICE_REGION,
-  PLACEHOLDER_PHOTOS,
-} from '../../lib/constants'
+  BottomSheetModal,
+  CategoryPills,
+  EmptyState,
+  SearchBar,
+  SegmentedControl,
+} from '../../src/design-system/components/molecules'
+import { AppButton, AppText, Chip, SkeletonBox } from '../../src/design-system/components/atoms'
+import { useTheme } from '../../src/design-system/theme/useTheme'
+import { useSearchSpots } from '../../src/api/hooks/useSpots'
+import { useWishlist, useToggleFavorite } from '../../src/api/hooks/useWishlists'
+import { SafeMapView, SafeMarker } from '../../components/safe-map'
+import { NICE_REGION, TYPE_LABELS } from '../../lib/constants'
+import { SpotFilters, SpotType } from '../../src/types/database'
 
-interface Spot {
-  id: string
-  title: string
-  address: string
-  city: string
-  price_per_hour: string
-  type: string
-  rating: string | null
-  review_count: number
-  photos: string[] | null
-  has_smart_gate: boolean
-  latitude?: number
-  longitude?: number
-}
-
-type ViewMode = 'list' | 'map'
-type PriceSort = 'none' | 'asc' | 'desc'
+// ─── Constants ─────────────────────────────────────────────────────────────────
 
 const RECENT_KEY = 'flashpark_recent_searches'
 const MAX_RECENT = 6
 
-const TYPE_FILTER_KEYS = Object.keys(TYPE_LABELS)
+const CATEGORY_DEFS: Array<{ key: string; label: string; icon: LucideIcon }> = [
+  { key: 'outdoor', label: 'Extérieur', icon: Car },
+  { key: 'garage', label: 'Garage', icon: CircleParking },
+  { key: 'covered', label: 'Couvert', icon: CircleParking },
+  { key: 'underground', label: 'Souterrain', icon: CircleParking },
+]
 
-function getSpotPhoto(spot: Spot, index: number = 0): string {
-  if (spot.photos && Array.isArray(spot.photos) && spot.photos.length > 0) {
-    return spot.photos[0]
-  }
-  return PLACEHOLDER_PHOTOS[index % PLACEHOLDER_PHOTOS.length]
-}
+// ─── Skeleton placeholders ─────────────────────────────────────────────────────
 
-function formatPrice(price: string | number): string {
-  return Number(price).toFixed(2).replace('.', ',')
-}
-
-/* ---- Skeleton ---- */
-function SkeletonBox({
-  width,
-  height,
-  borderRadius = 8,
-  style,
-}: {
-  width: number | string
-  height: number
-  borderRadius?: number
-  style?: any
-}) {
-  return (
-    <View
-      style={[
-        { width: width as any, height, borderRadius, backgroundColor: COLORS.gray200 },
-        style,
-      ]}
-    />
-  )
-}
-
-function SearchSkeleton({ screenWidth }: { screenWidth: number }) {
+function SearchSkeleton({ screenWidth }: { screenWidth: number }): React.JSX.Element {
   const cardW = (screenWidth - 16 * 2 - 12) / 2
   const photoH = cardW * 0.75
   return (
-    <View style={{ padding: 16, gap: 16 }}>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+    <View style={skeletonStyles.wrapper}>
+      <View style={skeletonStyles.pillRow}>
+        {[80, 90, 80, 100].map((w, i) => (
+          <SkeletonBox key={i} width={w} height={36} borderRadius={20} />
+        ))}
+      </View>
+      <View style={skeletonStyles.grid}>
         {[0, 1, 2, 3].map((i) => (
           <View key={i} style={{ width: cardW, gap: 8 }}>
             <SkeletonBox width={cardW} height={photoH} borderRadius={12} />
-            <SkeletonBox width={cardW * 0.7} height={13} borderRadius={4} />
-            <SkeletonBox width={cardW * 0.4} height={12} borderRadius={4} />
+            <SkeletonBox width={cardW * 0.7} height={14} borderRadius={4} />
+            <SkeletonBox width={cardW * 0.45} height={12} borderRadius={4} />
           </View>
         ))}
       </View>
@@ -113,1156 +72,436 @@ function SearchSkeleton({ screenWidth }: { screenWidth: number }) {
   )
 }
 
-/* ---- Image with loading state ---- */
-function SpotImage({ uri, style }: { uri: string; style: any }) {
-  const [loaded, setLoaded] = useState(false)
-  const [error, setError] = useState(false)
-  const fallbackUri = PLACEHOLDER_PHOTOS[0]
+const skeletonStyles = StyleSheet.create({
+  wrapper: { padding: 16, gap: 16 },
+  pillRow: { flexDirection: 'row', gap: 8 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
+})
+
+// ─── Recent searches list ──────────────────────────────────────────────────────
+
+function RecentSearches({
+  items,
+  onSelect,
+}: {
+  items: string[]
+  onSelect: (term: string) => void
+}): React.JSX.Element | null {
+  const { colors } = useTheme()
+  if (items.length === 0) return null
 
   return (
-    <View style={style}>
-      {!loaded && (
-        <View
-          style={[
-            StyleSheet.absoluteFill,
-            { backgroundColor: COLORS.gray200, borderRadius: 12 },
-          ]}
-        />
-      )}
-      <Image
-        source={{ uri: error ? fallbackUri : uri }}
-        style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]}
-        resizeMode="cover"
-        onLoad={() => setLoaded(true)}
-        onError={() => {
-          if (!error) setError(true)
-        }}
-      />
+    <View style={recentStyles.container}>
+      <AppText variant="label" color={colors.text} style={recentStyles.title}>
+        Recherches récentes
+      </AppText>
+      {items.map((term) => (
+        <TouchableOpacity
+          key={term}
+          style={recentStyles.row}
+          onPress={() => onSelect(term)}
+          accessibilityLabel={`Rechercher ${term}`}
+        >
+          <Clock size={16} color={colors.textTertiary} strokeWidth={2} />
+          <AppText variant="callout" color={colors.textSecondary}>
+            {term}
+          </AppText>
+        </TouchableOpacity>
+      ))}
     </View>
   )
 }
 
-/* ---- Grid card (same design as Home) ---- */
-function SpotCard({
-  item,
-  index,
-  cardWidth,
-  isFavorite,
-  onToggleFavorite,
+const recentStyles = StyleSheet.create({
+  container: { paddingHorizontal: 16, gap: 4, paddingTop: 8 },
+  title: { marginBottom: 8 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
+})
+
+// ─── Filters sheet content ─────────────────────────────────────────────────────
+
+const TYPE_FILTER_KEYS = Object.keys(TYPE_LABELS) as SpotType[]
+const PRICE_OPTIONS = [
+  { label: 'Tous', min: undefined, max: undefined },
+  { label: '< 2 €/h', min: undefined, max: 2 },
+  { label: '2–5 €/h', min: 2, max: 5 },
+  { label: '> 5 €/h', min: 5, max: undefined },
+]
+
+interface FilterState {
+  type?: SpotType
+  minPrice?: number
+  maxPrice?: number
+  instantBook: boolean
+}
+
+function FiltersContent({
+  filters,
+  onChange,
+  onClose,
 }: {
-  item: Spot
-  index: number
-  cardWidth: number
-  isFavorite: boolean
-  onToggleFavorite: (spotId: string) => void
-}) {
-  const photoHeight = cardWidth * 0.75
+  filters: FilterState
+  onChange: (f: FilterState) => void
+  onClose: () => void
+}): React.JSX.Element {
+  const { colors } = useTheme()
+  const [local, setLocal] = useState<FilterState>(filters)
+
+  const apply = (): void => {
+    onChange(local)
+    onClose()
+  }
+
+  const reset = (): void => {
+    const cleared: FilterState = { instantBook: false }
+    setLocal(cleared)
+    onChange(cleared)
+    onClose()
+  }
 
   return (
-    <TouchableOpacity
-      style={[styles.gridCard, { width: cardWidth }]}
-      onPress={() => router.push(`/spot/${item.id}`)}
-      activeOpacity={0.92}
-    >
-      <View style={[styles.gridPhotoWrap, { height: photoHeight }]}>
-        <SpotImage
-          uri={getSpotPhoto(item, index)}
-          style={[StyleSheet.absoluteFill, { borderRadius: 12 }]}
-        />
-        <TouchableOpacity
-          style={styles.heartBtn}
-          onPress={() => onToggleFavorite(item.id)}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          activeOpacity={0.7}
-        >
-          <Heart
-            color={isFavorite ? COLORS.danger : COLORS.white}
-            fill={isFavorite ? COLORS.danger : 'transparent'}
-            size={18}
-            strokeWidth={2.5}
+    <ScrollView style={filtersStyles.scroll} contentContainerStyle={filtersStyles.content}>
+      <AppText variant="title3" color={colors.text} style={filtersStyles.section}>
+        Type de place
+      </AppText>
+      <View style={filtersStyles.chips}>
+        {TYPE_FILTER_KEYS.map((key) => (
+          <Chip
+            key={key}
+            label={TYPE_LABELS[key]}
+            selected={local.type === key}
+            onPress={() => setLocal((p) => ({ ...p, type: p.type === key ? undefined : key }))}
           />
-        </TouchableOpacity>
-        <View style={styles.priceBadge}>
-          <Text style={styles.priceBadgeText}>
-            {formatPrice(item.price_per_hour)} €
-          </Text>
-          <Text style={styles.priceBadgeUnit}>/h</Text>
-        </View>
+        ))}
       </View>
-      <View style={styles.gridCardInfo}>
-        <Text style={styles.gridCardTitle} numberOfLines={1}>
-          {item.title}
-        </Text>
-        {item.rating ? (
-          <View style={styles.ratingRow}>
-            <Star color={COLORS.warning} fill={COLORS.warning} size={11} />
-            <Text style={styles.ratingText}>
-              {Number(item.rating).toFixed(1)}
-            </Text>
-          </View>
-        ) : (
-          <View style={styles.ratingRow}>
-            <Star color={COLORS.gray300} size={11} />
-            <Text style={styles.newText}>Nouveau</Text>
-          </View>
-        )}
-      </View>
-    </TouchableOpacity>
-  )
-}
 
-/* ---- Map bottom sheet card (horizontal compact) ---- */
-function MapSpotCard({ item }: { item: Spot }) {
-  return (
-    <TouchableOpacity
-      style={styles.mapCard}
-      onPress={() => router.push(`/spot/${item.id}`)}
-      activeOpacity={0.85}
-    >
-      <View style={styles.mapCardPhoto}>
-        <SpotImage
-          uri={getSpotPhoto(item)}
-          style={[StyleSheet.absoluteFill, { borderRadius: 10 }]}
+      <AppText variant="title3" color={colors.text} style={[filtersStyles.section, { marginTop: 20 }]}>
+        Prix par heure
+      </AppText>
+      <View style={filtersStyles.chips}>
+        {PRICE_OPTIONS.map((opt) => (
+          <Chip
+            key={opt.label}
+            label={opt.label}
+            selected={local.minPrice === opt.min && local.maxPrice === opt.max}
+            onPress={() => setLocal((p) => ({ ...p, minPrice: opt.min, maxPrice: opt.max }))}
+          />
+        ))}
+      </View>
+
+      <View style={filtersStyles.instantRow}>
+        <AppText variant="callout" color={colors.text}>
+          Réservation instantanée
+        </AppText>
+        <Chip
+          label={local.instantBook ? 'Activé' : 'Désactivé'}
+          selected={local.instantBook}
+          onPress={() => setLocal((p) => ({ ...p, instantBook: !p.instantBook }))}
         />
       </View>
-      <View style={styles.mapCardInfo}>
-        <Text style={styles.mapCardTitle} numberOfLines={1}>
-          {item.title}
-        </Text>
-        <View style={styles.addressRow}>
-          <MapPin color={COLORS.gray400} size={11} />
-          <Text style={styles.addressText} numberOfLines={1}>
-            {item.address}
-          </Text>
-        </View>
-        <View style={styles.mapCardFooter}>
-          <Text style={styles.mapCardPrice}>
-            {formatPrice(item.price_per_hour)} €
-            <Text style={styles.mapCardPriceUnit}>/h</Text>
-          </Text>
-          {item.rating && (
-            <View style={styles.ratingRow}>
-              <Star color={COLORS.warning} fill={COLORS.warning} size={11} />
-              <Text style={styles.ratingText}>
-                {Number(item.rating).toFixed(1)}
-              </Text>
-            </View>
-          )}
-        </View>
-        {item.has_smart_gate && (
-          <View style={styles.smartGateBadge}>
-            <Zap color={COLORS.primary} size={11} />
-            <Text style={styles.smartGateText}>Smart Gate</Text>
-          </View>
-        )}
+
+      <View style={filtersStyles.actions}>
+        <AppButton title="Réinitialiser" onPress={reset} variant="ghost" size="md" />
+        <AppButton title="Appliquer" onPress={apply} variant="primary" size="md" />
       </View>
-    </TouchableOpacity>
+    </ScrollView>
   )
 }
 
-export default function SearchScreen() {
-  const { width: SCREEN_WIDTH } = useWindowDimensions()
-  const insets = useSafeAreaInsets()
-  const CARD_WIDTH = (SCREEN_WIDTH - 16 * 2 - 12) / 2
+const filtersStyles = StyleSheet.create({
+  scroll: { flex: 1 },
+  content: { padding: 16, paddingBottom: 40 },
+  section: { marginBottom: 12 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  instantRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 20,
+    paddingTop: 16,
+  },
+  actions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 24,
+    justifyContent: 'flex-end',
+  },
+})
+
+// ─── Search screen ─────────────────────────────────────────────────────────────
+
+export default function SearchScreen(): React.JSX.Element {
+  const { colors } = useTheme()
 
   const [query, setQuery] = useState('')
-  const [allSpots, setAllSpots] = useState<Spot[]>([])
-  const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
-  const [viewMode, setViewMode] = useState<ViewMode>('list')
-  const [mapAvailable, setMapAvailable] = useState(true)
-  const [favorites, setFavorites] = useState<Set<string>>(new Set())
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
-
-  // Filters
-  const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set())
-  const [priceSort, setPriceSort] = useState<PriceSort>('none')
-  const [smartGateOnly, setSmartGateOnly] = useState(false)
-  const [instantBookOnly, setInstantBookOnly] = useState(false)
-
-  // Map
-  const [selectedMarker, setSelectedMarker] = useState<Spot | null>(null)
-  const mapRef = useRef<any>(null)
-  const bottomSheetRef = useRef<BottomSheet>(null)
-  const listRef = useRef<FlatList>(null)
-
-  // Recent searches
+  const [viewIndex, setViewIndex] = useState(0) // 0 = list, 1 = map
+  const [filters, setFilters] = useState<FilterState>({ instantBook: false })
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [recentSearches, setRecentSearches] = useState<string[]>([])
-  const inputRef = useRef<TextInput>(null)
+  const [activeCategory, setActiveCategory] = useState<string | undefined>(undefined)
 
-  const fetchFavorites = useCallback(async (userId: string) => {
-    try {
-      const { data } = await supabase
-        .from('wishlists')
-        .select('spot_id')
-        .eq('user_id', userId)
-      if (data) {
-        setFavorites(new Set(data.map((w: { spot_id: string }) => w.spot_id)))
-      }
-    } catch {
-      // ignore
-    }
-  }, [])
-
-  const toggleFavorite = useCallback(async (spotId: string) => {
-    if (!currentUserId) return
-    const isLiked = favorites.has(spotId)
-    setFavorites((prev) => {
-      const next = new Set(prev)
-      if (isLiked) next.delete(spotId)
-      else next.add(spotId)
-      return next
-    })
-    try {
-      if (isLiked) {
-        const { data: existing } = await supabase
-          .from('wishlists')
-          .select('id')
-          .eq('user_id', currentUserId)
-          .eq('spot_id', spotId)
-          .single()
-        if (existing) {
-          await supabase.from('wishlists').delete().eq('id', existing.id)
-        }
-      } else {
-        await supabase.from('wishlists').insert({ user_id: currentUserId, spot_id: spotId })
-      }
-    } catch {
-      setFavorites((prev) => {
-        const next = new Set(prev)
-        if (isLiked) next.add(spotId)
-        else next.delete(spotId)
-        return next
+  // Load recent searches on mount
+  useEffect(() => {
+    AsyncStorage.getItem(RECENT_KEY)
+      .then((raw) => {
+        if (raw) setRecentSearches(JSON.parse(raw))
       })
-    }
-  }, [currentUserId, favorites])
-
-  const fetchSpots = useCallback(async () => {
-    try {
-      const { data } = await supabase
-        .from('spots')
-        .select(
-          'id, title, address, city, price_per_hour, type, rating, review_count, photos, has_smart_gate, latitude, longitude'
-        )
-        .eq('status', 'active')
-        .order('review_count', { ascending: false })
-        .limit(50)
-
-      setAllSpots(data ?? [])
-    } catch {
-      // Silently ignore
-    }
+      .catch(() => {})
   }, [])
 
-  const loadRecentSearches = useCallback(async () => {
-    try {
-      const raw = await AsyncStorage.getItem(RECENT_KEY)
-      if (raw) setRecentSearches(JSON.parse(raw))
-    } catch {
-      // ignore
-    }
-  }, [])
-
-  const saveSearch = useCallback(async (term: string) => {
+  const saveRecent = useCallback(async (term: string): Promise<void> => {
     const trimmed = term.trim()
     if (!trimmed) return
-    try {
-      const raw = await AsyncStorage.getItem(RECENT_KEY)
-      const prev: string[] = raw ? JSON.parse(raw) : []
-      const updated = [trimmed, ...prev.filter((s) => s !== trimmed)].slice(
-        0,
-        MAX_RECENT
-      )
-      await AsyncStorage.setItem(RECENT_KEY, JSON.stringify(updated))
-      setRecentSearches(updated)
-    } catch {
-      // ignore
-    }
-  }, [])
-
-  const removeRecentSearch = useCallback(async (term: string) => {
-    try {
-      const updated = recentSearches.filter((s) => s !== term)
-      await AsyncStorage.setItem(RECENT_KEY, JSON.stringify(updated))
-      setRecentSearches(updated)
-    } catch {
-      // ignore
-    }
+    const updated = [trimmed, ...recentSearches.filter((r) => r !== trimmed)].slice(0, MAX_RECENT)
+    setRecentSearches(updated)
+    await AsyncStorage.setItem(RECENT_KEY, JSON.stringify(updated)).catch(() => {})
   }, [recentSearches])
 
-  useEffect(() => {
-    async function init() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data: dbUser } = await supabase
-          .from('users')
-          .select('id')
-          .eq('supabase_id', user.id)
-          .single()
-        if (dbUser) {
-          setCurrentUserId(dbUser.id)
-          fetchFavorites(dbUser.id)
-        }
-      }
-      await Promise.all([fetchSpots(), loadRecentSearches()])
-      setLoading(false)
+  // Merge category into API filters
+  const apiFilters: SpotFilters = {
+    type: filters.type ?? (activeCategory as SpotType | undefined),
+    minPrice: filters.minPrice,
+    maxPrice: filters.maxPrice,
+    instantBook: filters.instantBook || undefined,
+  }
+
+  const { data: spots = [], isFetching } = useSearchSpots(query, apiFilters)
+  const { data: wishlistIds = [] } = useWishlist()
+  const { mutate: toggleFavorite } = useToggleFavorite()
+
+  const handleQueryChange = (text: string): void => {
+    setQuery(text)
+  }
+
+  const handleBlur = (): void => {
+    if (query.trim().length >= 2) {
+      saveRecent(query.trim())
     }
-    init()
-  }, [fetchSpots, loadRecentSearches, fetchFavorites])
+  }
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true)
-    await fetchSpots()
-    setRefreshing(false)
-  }, [fetchSpots])
-
-  const handleSearchSubmit = useCallback(() => {
-    if (query.trim()) saveSearch(query)
-    Keyboard.dismiss()
-  }, [query, saveSearch])
-
-  const applyRecentSearch = useCallback((term: string) => {
+  const handleSelectRecent = (term: string): void => {
+    Haptics.selectionAsync()
     setQuery(term)
-    Keyboard.dismiss()
-  }, [])
-
-  // Filtered + sorted spots
-  const filteredSpots = (() => {
-    let result = [...allSpots]
-
-    if (query.trim()) {
-      const q = query.toLowerCase()
-      result = result.filter(
-        (s) =>
-          s.title.toLowerCase().includes(q) ||
-          s.address.toLowerCase().includes(q) ||
-          s.city.toLowerCase().includes(q)
-      )
-    }
-
-    if (selectedTypes.size > 0) {
-      result = result.filter((s) => selectedTypes.has(s.type))
-    }
-
-    if (smartGateOnly) {
-      result = result.filter((s) => s.has_smart_gate)
-    }
-
-    if (priceSort === 'asc') {
-      result.sort((a, b) => Number(a.price_per_hour) - Number(b.price_per_hour))
-    } else if (priceSort === 'desc') {
-      result.sort((a, b) => Number(b.price_per_hour) - Number(a.price_per_hour))
-    }
-
-    return result
-  })()
-
-  const toggleType = (type: string) => {
-    setSelectedTypes((prev) => {
-      const next = new Set(prev)
-      if (next.has(type)) next.delete(type)
-      else next.add(type)
-      return next
-    })
   }
 
-  const cyclePriceSort = () => {
-    setPriceSort((prev) => {
-      if (prev === 'none') return 'asc'
-      if (prev === 'asc') return 'desc'
-      return 'none'
-    })
-  }
-
-  const hasActiveFilters =
-    selectedTypes.size > 0 || priceSort !== 'none' || smartGateOnly || instantBookOnly
-
-  const clearFilters = () => {
-    setSelectedTypes(new Set())
-    setPriceSort('none')
-    setSmartGateOnly(false)
-    setInstantBookOnly(false)
-  }
-
-  const priceSortLabel =
-    priceSort === 'asc' ? 'Prix ↑' : priceSort === 'desc' ? 'Prix ↓' : 'Prix'
-
-  const handleMapError = useCallback(() => {
-    setMapAvailable(false)
-    setViewMode('list')
-  }, [])
-
-  // When a marker is tapped in map mode, snap sheet up slightly
-  const handleMarkerPress = useCallback((spot: Spot) => {
-    setSelectedMarker(spot)
-    bottomSheetRef.current?.snapToIndex(1)
-  }, [])
-
-  const showEmpty = !loading && filteredSpots.length === 0
-  const showRecent = query === '' && recentSearches.length > 0
+  const showRecents = query.length === 0 && recentSearches.length > 0
+  const showResults = query.length >= 2
+  const showEmpty = showResults && !isFetching && spots.length === 0
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Search Header */}
-      <View style={styles.header}>
+    <ScreenContainer>
+      {/* Top bar */}
+      <View style={[styles.topBar, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
         <View style={styles.searchRow}>
-          <View style={styles.inputWrap}>
-            <Search color={COLORS.gray400} size={18} strokeWidth={2.5} />
-            <TextInput
-              ref={inputRef}
-              style={styles.input}
-              placeholder="Adresse, quartier, ville..."
-              placeholderTextColor={COLORS.gray400}
+          <View style={styles.searchBarWrap}>
+            <SearchBar
               value={query}
-              onChangeText={setQuery}
-              returnKeyType="search"
-              onSubmitEditing={handleSearchSubmit}
-              autoCapitalize="none"
-              autoCorrect={false}
+              onChangeText={handleQueryChange}
+              onBlur={handleBlur}
+              placeholder="Adresse, quartier, ville…"
             />
-            {query.length > 0 && (
-              <TouchableOpacity
-                onPress={() => setQuery('')}
-                activeOpacity={0.7}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <X color={COLORS.gray400} size={16} />
-              </TouchableOpacity>
-            )}
           </View>
+          <TouchableOpacity
+            style={[styles.filterBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+              setFiltersOpen(true)
+            }}
+            accessibilityLabel="Ouvrir les filtres"
+          >
+            <SlidersHorizontal size={18} color={colors.text} strokeWidth={2} />
+          </TouchableOpacity>
         </View>
 
-        {/* Filter chips */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipList}
-        >
-          {/* Type filter chips */}
-          {TYPE_FILTER_KEYS.map((k) => (
-            <TouchableOpacity
-              key={k}
-              style={[styles.chip, selectedTypes.has(k) && styles.chipActive]}
-              onPress={() => toggleType(k)}
-              activeOpacity={0.7}
-            >
-              <Text
-                style={[
-                  styles.chipText,
-                  selectedTypes.has(k) && styles.chipTextActive,
-                ]}
-              >
-                {TYPE_LABELS[k]}
-              </Text>
-            </TouchableOpacity>
-          ))}
+        <SegmentedControl
+          segments={['Liste', 'Carte']}
+          selectedIndex={viewIndex}
+          onChange={setViewIndex}
+        />
 
-          {/* Price sort chip */}
-          <TouchableOpacity
-            style={[styles.chip, priceSort !== 'none' && styles.chipActive]}
-            onPress={cyclePriceSort}
-            activeOpacity={0.7}
-          >
-            <ArrowUpDown
-              color={priceSort !== 'none' ? COLORS.white : COLORS.gray700}
-              size={13}
-            />
-            <Text
-              style={[
-                styles.chipText,
-                priceSort !== 'none' && styles.chipTextActive,
-              ]}
-            >
-              {priceSortLabel}
-            </Text>
-          </TouchableOpacity>
-
-          {/* Smart Gate chip */}
-          <TouchableOpacity
-            style={[styles.chip, smartGateOnly && styles.chipActive]}
-            onPress={() => setSmartGateOnly(!smartGateOnly)}
-            activeOpacity={0.7}
-          >
-            <Zap
-              color={smartGateOnly ? COLORS.white : COLORS.gray700}
-              size={13}
-            />
-            <Text
-              style={[styles.chipText, smartGateOnly && styles.chipTextActive]}
-            >
-              Smart Gate
-            </Text>
-          </TouchableOpacity>
-
-          {/* Instant book chip */}
-          <TouchableOpacity
-            style={[styles.chip, instantBookOnly && styles.chipActive]}
-            onPress={() => setInstantBookOnly(!instantBookOnly)}
-            activeOpacity={0.7}
-          >
-            <BookOpen
-              color={instantBookOnly ? COLORS.white : COLORS.gray700}
-              size={13}
-            />
-            <Text
-              style={[
-                styles.chipText,
-                instantBookOnly && styles.chipTextActive,
-              ]}
-            >
-              Réservation instant
-            </Text>
-          </TouchableOpacity>
-        </ScrollView>
-
-        {/* Result count + clear */}
-        {!loading && (
-          <View style={styles.resultsBar}>
-            <Text style={styles.resultCount}>
-              {filteredSpots.length} place{filteredSpots.length !== 1 ? 's' : ''}
-            </Text>
-            {hasActiveFilters && (
-              <TouchableOpacity onPress={clearFilters} activeOpacity={0.7}>
-                <Text style={styles.clearText}>Effacer filtres</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
+        <CategoryPills
+          categories={CATEGORY_DEFS}
+          selected={activeCategory ?? ''}
+          onSelect={(key) => setActiveCategory((prev) => (prev === key ? undefined : key))}
+        />
       </View>
 
-      {/* Content area */}
-      {loading ? (
-        <SearchSkeleton screenWidth={SCREEN_WIDTH} />
-      ) : viewMode === 'list' ? (
-        <>
-          {/* Recent searches (shown when input empty and no text) */}
-          {showRecent && (
-            <View style={styles.recentWrap}>
-              <Text style={styles.recentTitle}>Recherches récentes</Text>
-              {recentSearches.map((term) => (
-                <TouchableOpacity
-                  key={term}
-                  style={styles.recentItem}
-                  onPress={() => applyRecentSearch(term)}
-                  activeOpacity={0.7}
-                >
-                  <Clock color={COLORS.gray400} size={15} />
-                  <Text style={styles.recentText}>{term}</Text>
-                  <TouchableOpacity
-                    onPress={() => removeRecentSearch(term)}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    activeOpacity={0.7}
-                  >
-                    <X color={COLORS.gray300} size={14} />
-                  </TouchableOpacity>
-                </TouchableOpacity>
-              ))}
+      {/* Body */}
+      {viewIndex === 0 ? (
+        // ── List view ──
+        <FlatList
+          data={showResults ? spots : []}
+          keyExtractor={(item) => item.id}
+          numColumns={2}
+          columnWrapperStyle={styles.columnWrapper}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          ListHeaderComponent={
+            showRecents ? (
+              <RecentSearches items={recentSearches} onSelect={handleSelectRecent} />
+            ) : null
+          }
+          ListEmptyComponent={
+            showEmpty ? (
+              <EmptyState
+                icon={Search}
+                title="Aucun résultat"
+                subtitle={`Aucune place pour "${query}"`}
+              />
+            ) : isFetching && showResults ? (
+              <SearchSkeleton screenWidth={undefined as unknown as number} />
+            ) : !showResults && !showRecents ? (
+              <EmptyState
+                icon={Search}
+                title="Recherchez une place"
+                subtitle="Saisissez une adresse ou un quartier pour commencer"
+              />
+            ) : null
+          }
+          renderItem={({ item, index }) => (
+            <View style={styles.cardWrapper}>
+              <SpotCard
+                spot={{
+                  id: item.id,
+                  title: item.title,
+                  address: item.address,
+                  pricePerHour: item.price_per_hour,
+                  photos: item.photos ?? [],
+                  rating: item.rating,
+                  reviewCount: item.review_count,
+                  hasSmartGate: item.has_smart_gate,
+                }}
+                onPress={() => router.push(`/spot/${item.id}`)}
+                isFavorite={wishlistIds.includes(item.id)}
+                onToggleFavorite={() => toggleFavorite(item.id)}
+              />
             </View>
           )}
-
-          {showEmpty ? (
-            <View style={styles.centered}>
-              <MapPin color={COLORS.gray300} size={48} />
-              <Text style={styles.emptyTitle}>Aucun résultat</Text>
-              <Text style={styles.emptySubtitle}>
-                Essayez de modifier vos filtres
-              </Text>
-              {hasActiveFilters && (
-                <TouchableOpacity
-                  style={styles.emptyBtn}
-                  onPress={clearFilters}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.emptyBtnText}>Effacer les filtres</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          ) : (
-            <FlatList
-              ref={listRef}
-              data={filteredSpots}
-              keyExtractor={(item) => item.id}
-              numColumns={2}
-              columnWrapperStyle={styles.columnWrapper}
-              contentContainerStyle={styles.listContent}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-              refreshControl={
-                <RefreshControl
-                  refreshing={refreshing}
-                  onRefresh={onRefresh}
-                  tintColor={COLORS.primary}
-                  colors={[COLORS.primary]}
-                />
-              }
-              renderItem={({ item, index }) => (
-                <SpotCard
-                  item={item}
-                  index={index}
-                  cardWidth={CARD_WIDTH}
-                  isFavorite={favorites.has(item.id)}
-                  onToggleFavorite={toggleFavorite}
-                />
-              )}
-            />
-          )}
-        </>
+        />
       ) : (
-        /* Map view with bottom sheet */
+        // ── Map view ──
         <View style={styles.mapContainer}>
           <SafeMapView
-            mapRef={mapRef}
             style={styles.map}
             initialRegion={NICE_REGION}
             showsUserLocation
-            onPress={() => setSelectedMarker(null)}
-            fallback={
-              <View style={styles.map} onLayout={handleMapError} />
-            }
           >
-            {filteredSpots
-              .filter((s) => s.latitude && s.longitude)
-              .map((spot) => (
+            {spots.map((spot) => {
+              const lat = parseFloat(spot.latitude)
+              const lng = parseFloat(spot.longitude)
+              if (isNaN(lat) || isNaN(lng)) return null
+              return (
                 <SafeMarker
                   key={spot.id}
-                  coordinate={{
-                    latitude: Number(spot.latitude),
-                    longitude: Number(spot.longitude),
-                  }}
-                  onPress={() => handleMarkerPress(spot)}
+                  coordinate={{ latitude: lat, longitude: lng }}
+                  onPress={() => router.push(`/spot/${spot.id}`)}
+                  title={spot.title}
                 >
-                  <View
-                    style={[
-                      styles.markerBubble,
-                      selectedMarker?.id === spot.id &&
-                        styles.markerBubbleSelected,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.markerText,
-                        selectedMarker?.id === spot.id &&
-                          styles.markerTextSelected,
-                      ]}
-                    >
-                      {Number(spot.price_per_hour).toFixed(0)}€
-                    </Text>
+                  <View style={[styles.priceMarker, { backgroundColor: colors.primary }]}>
+                    <AppText variant="caption" color={colors.textInverse} style={styles.markerText}>
+                      {parseFloat(spot.price_per_hour).toFixed(0)}€
+                    </AppText>
                   </View>
                 </SafeMarker>
-              ))}
+              )
+            })}
           </SafeMapView>
 
-          {/* Bottom sheet with spot cards */}
-          <BottomSheet
-            ref={bottomSheetRef}
-            snapPoints={['20%', '45%', '85%']}
-            index={1}
-            backgroundStyle={styles.sheetBackground}
-            handleIndicatorStyle={styles.sheetHandle}
-          >
-            <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>
-                {filteredSpots.length} place{filteredSpots.length !== 1 ? 's' : ''}
-              </Text>
+          {showEmpty && (
+            <View style={[styles.mapEmptyBanner, { backgroundColor: colors.surface }]}>
+              <AppText variant="callout" color={colors.textSecondary}>
+                Aucune place pour "{query}"
+              </AppText>
             </View>
-            <BottomSheetFlatList
-              data={filteredSpots}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={styles.sheetList}
-              renderItem={({ item }) => <MapSpotCard item={item} />}
-            />
-          </BottomSheet>
+          )}
         </View>
       )}
 
-      {/* Floating List/Map toggle */}
-      {!loading && (
-        <View
-          style={[
-            styles.toggleWrap,
-            {
-              bottom:
-                viewMode === 'map'
-                  ? insets.bottom + 16
-                  : insets.bottom + 24,
-            },
-          ]}
-          pointerEvents="box-none"
-        >
-          <View style={styles.togglePill}>
-            <TouchableOpacity
-              style={[
-                styles.toggleBtn,
-                viewMode === 'list' && styles.toggleBtnActive,
-              ]}
-              onPress={() => setViewMode('list')}
-              activeOpacity={0.8}
-            >
-              <List
-                color={viewMode === 'list' ? COLORS.white : COLORS.gray700}
-                size={15}
-              />
-              <Text
-                style={[
-                  styles.toggleBtnText,
-                  viewMode === 'list' && styles.toggleBtnTextActive,
-                ]}
-              >
-                Liste
-              </Text>
-            </TouchableOpacity>
-
-            {mapAvailable && (
-              <TouchableOpacity
-                style={[
-                  styles.toggleBtn,
-                  viewMode === 'map' && styles.toggleBtnActive,
-                ]}
-                onPress={() => {
-                  setViewMode('map')
-                  setSelectedMarker(null)
-                  Keyboard.dismiss()
-                }}
-                activeOpacity={0.8}
-              >
-                <MapIcon
-                  color={viewMode === 'map' ? COLORS.white : COLORS.gray700}
-                  size={15}
-                />
-                <Text
-                  style={[
-                    styles.toggleBtnText,
-                    viewMode === 'map' && styles.toggleBtnTextActive,
-                  ]}
-                >
-                  Carte
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-      )}
-    </SafeAreaView>
+      {/* Filters bottom sheet */}
+      <BottomSheetModal
+        isOpen={filtersOpen}
+        onClose={() => setFiltersOpen(false)}
+        snapPoints={['60%', '90%']}
+        title="Filtres"
+      >
+        <FiltersContent
+          filters={filters}
+          onChange={setFilters}
+          onClose={() => setFiltersOpen(false)}
+        />
+      </BottomSheetModal>
+    </ScreenContainer>
   )
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
+  topBar: {
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-
-  // Header
-  header: {
-    backgroundColor: COLORS.white,
-    paddingTop: 10,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray200,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.04,
-        shadowRadius: 4,
-      },
-      android: { elevation: 2 },
-    }),
-  },
-
-  // Search input
   searchRow: {
-    paddingHorizontal: 16,
-    marginBottom: 10,
-  },
-  inputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: COLORS.gray100,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: Platform.OS === 'ios' ? 12 : 8,
   },
-  input: {
+  searchBarWrap: {
     flex: 1,
-    fontSize: 15,
-    color: COLORS.dark,
   },
-
-  // Filter chips
-  chipList: {
-    paddingHorizontal: 16,
-    gap: 8,
-    paddingBottom: 4,
-  },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: COLORS.white,
-    borderRadius: 20,
-    paddingHorizontal: 13,
-    paddingVertical: 7,
+  filterBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: COLORS.gray200,
-  },
-  chipActive: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-  chipText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.gray700,
-  },
-  chipTextActive: {
-    color: COLORS.white,
-  },
-
-  // Result bar
-  resultsBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 8,
-  },
-  resultCount: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.gray500,
-  },
-  clearText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.primary,
-  },
-
-  // Recent searches
-  recentWrap: {
-    backgroundColor: COLORS.white,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray100,
-  },
-  recentTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: COLORS.gray500,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 10,
-  },
-  recentItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 8,
-  },
-  recentText: {
-    flex: 1,
-    fontSize: 15,
-    color: COLORS.dark,
-  },
-
-  // List grid
-  listContent: {
-    padding: 16,
-    paddingBottom: 100,
-  },
-  columnWrapper: {
-    gap: 12,
-    marginBottom: 20,
-  },
-
-  // Grid card
-  gridCard: {
-    // width set dynamically
-  },
-  gridPhotoWrap: {
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: COLORS.gray200,
-    position: 'relative',
-  },
-  heartBtn: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(0,0,0,0.25)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  priceBadge: {
-    position: 'absolute',
-    bottom: 8,
-    left: 8,
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
+  listContent: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 32,
   },
-  priceBadgeText: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: COLORS.white,
+  columnWrapper: {
+    gap: 12,
+    marginBottom: 16,
   },
-  priceBadgeUnit: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.8)',
-  },
-  gridCardInfo: {
-    marginTop: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  gridCardTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.dark,
+  cardWrapper: {
     flex: 1,
-    marginRight: 6,
   },
-  ratingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-  },
-  ratingText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.gray700,
-  },
-  newText: {
-    fontSize: 11,
-    color: COLORS.gray400,
-    fontWeight: '500',
-  },
-
-  // Map
   mapContainer: {
     flex: 1,
+    position: 'relative',
   },
   map: {
     flex: 1,
   },
-  markerBubble: {
-    backgroundColor: COLORS.white,
+  priceMarker: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.15,
-        shadowRadius: 4,
-      },
-      android: { elevation: 4 },
-    }),
-    borderWidth: 1,
-    borderColor: COLORS.gray200,
-  },
-  markerBubbleSelected: {
-    backgroundColor: COLORS.dark,
-    borderColor: COLORS.dark,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
   },
   markerText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: COLORS.dark,
-  },
-  markerTextSelected: {
-    color: COLORS.white,
-  },
-
-  // Bottom sheet
-  sheetBackground: {
-    backgroundColor: COLORS.white,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-  },
-  sheetHandle: {
-    backgroundColor: COLORS.gray300,
-    width: 40,
-  },
-  sheetHeader: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray100,
-  },
-  sheetTitle: {
-    fontSize: 15,
     fontWeight: '700',
-    color: COLORS.dark,
   },
-  sheetList: {
-    padding: 16,
-    gap: 12,
-    paddingBottom: 40,
-  },
-
-  // Map bottom sheet card
-  mapCard: {
-    flexDirection: 'row',
-    backgroundColor: COLORS.white,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: COLORS.gray100,
-    overflow: 'hidden',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06,
-        shadowRadius: 6,
-      },
-      android: { elevation: 2 },
-    }),
-  },
-  mapCardPhoto: {
-    width: 90,
-    height: 90,
-    backgroundColor: COLORS.gray200,
-    position: 'relative',
-  },
-  mapCardInfo: {
-    flex: 1,
-    padding: 10,
-    justifyContent: 'space-between',
-  },
-  mapCardTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: COLORS.dark,
-  },
-  addressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 2,
-  },
-  addressText: {
-    fontSize: 12,
-    color: COLORS.gray500,
-    flex: 1,
-  },
-  mapCardFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 4,
-  },
-  mapCardPrice: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: COLORS.primary,
-  },
-  mapCardPriceUnit: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: COLORS.gray500,
-  },
-  smartGateBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    marginTop: 4,
-    alignSelf: 'flex-start',
-    backgroundColor: COLORS.primaryLight,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  smartGateText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: COLORS.primary,
-  },
-
-  // Empty
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    paddingHorizontal: 32,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: COLORS.dark,
-    marginTop: 4,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    color: COLORS.gray400,
-    textAlign: 'center',
-  },
-  emptyBtn: {
-    marginTop: 12,
-    backgroundColor: COLORS.primary,
-    borderRadius: 12,
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-  },
-  emptyBtnText: {
-    color: COLORS.white,
-    fontWeight: '700',
-    fontSize: 14,
-  },
-
-  // Floating toggle pill
-  toggleWrap: {
+  mapEmptyBanner: {
     position: 'absolute',
-    left: 0,
-    right: 0,
+    bottom: 20,
+    left: 20,
+    right: 20,
+    padding: 14,
+    borderRadius: 12,
     alignItems: 'center',
-    pointerEvents: 'box-none',
-  },
-  togglePill: {
-    flexDirection: 'row',
-    backgroundColor: COLORS.white,
-    borderRadius: 30,
-    padding: 4,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.15,
-        shadowRadius: 12,
-      },
-      android: { elevation: 6 },
-    }),
-  },
-  toggleBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 26,
-  },
-  toggleBtnActive: {
-    backgroundColor: COLORS.dark,
-  },
-  toggleBtnText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: COLORS.gray700,
-  },
-  toggleBtnTextActive: {
-    color: COLORS.white,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
 })

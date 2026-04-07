@@ -1,16 +1,7 @@
 import { useState, useRef } from 'react'
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  StyleSheet,
-  ActivityIndicator,
-  Switch,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
+  ActivityIndicator, Alert, KeyboardAvoidingView, Platform,
+  ScrollView, StyleSheet, Switch, TextInput, TouchableOpacity, View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
@@ -18,106 +9,98 @@ import * as Location from 'expo-location'
 import { Sun, Building2, Home, Umbrella, CircleParking } from 'lucide-react-native'
 import { supabase } from '../../lib/supabase'
 import { MAPBOX_TOKEN } from '../../lib/constants'
-
-// ─── Types ──────────────────────────────────────────────────────────────────
+import { useTheme } from '../../src/design-system/theme/useTheme'
+import { useAuthStore } from '../../src/stores/authStore'
+import { spacing } from '../../src/design-system/tokens/spacing'
+import { radii } from '../../src/design-system/tokens/radii'
+import { AppText } from '../../src/design-system/components/atoms/AppText'
+import { AppInput } from '../../src/design-system/components/atoms/AppInput'
+import { AppButton } from '../../src/design-system/components/atoms/AppButton'
 
 type SpotType = 'outdoor' | 'indoor' | 'garage' | 'covered' | 'underground'
+type SizeCategory = 'compact' | 'standard' | 'large' | 'xl'
+type CancellationPolicy = 'flexible' | 'moderate' | 'strict'
 
 interface FormState {
   type: SpotType | null
-  address: string
-  city: string
-  latitude: string
-  longitude: string
-  title: string
-  description: string
-  amenities: string[]
-  pricePerHour: string
-  pricePerDay: string
-  instantBook: boolean
-  hasSmartGate: boolean
+  address: string; city: string; latitude: string; longitude: string
+  title: string; description: string; amenities: string[]; photos: string[]
+  hasSmartGate: boolean; instantBook: boolean
+  pricePerHour: string; pricePerDay: string
+  widthCm: string; lengthCm: string; maxHeightCm: string
+  sizeCategory: SizeCategory; cancellationPolicy: CancellationPolicy
+  accessInstructions: string; floor: string; spotNumber: string
+  buildingCode: string; ownershipProofUrl: string
 }
 
-const TOTAL_STEPS = 4
-
+const TOTAL_STEPS = 5
 const SPOT_TYPES: { value: SpotType; label: string; Icon: any }[] = [
-  { value: 'outdoor', label: 'Extérieur', Icon: Sun },
-  { value: 'indoor', label: 'Intérieur', Icon: Building2 },
+  { value: 'outdoor', label: 'Exterieur', Icon: Sun },
+  { value: 'indoor', label: 'Interieur', Icon: Building2 },
   { value: 'garage', label: 'Garage', Icon: Home },
   { value: 'covered', label: 'Couvert', Icon: Umbrella },
   { value: 'underground', label: 'Souterrain', Icon: CircleParking },
 ]
-
 const AMENITY_LIST = [
-  { key: 'lighting', label: 'Éclairage' },
-  { key: 'security_camera', label: 'Caméra' },
-  { key: 'covered', label: 'Couvert' },
+  { key: 'lighting', label: 'Eclairage' },
+  { key: 'security_camera', label: 'Camera' },
   { key: 'ev_charging', label: 'Recharge EV' },
-  { key: 'disabled_access', label: 'Accès PMR' },
+  { key: 'disabled_access', label: 'Acces PMR' },
   { key: '24h_access', label: '24h/24' },
 ]
-
-interface MapboxFeature {
-  place_name: string
-  center: [number, number]
-  context?: { id: string; text: string }[]
-  text: string
-}
-
+const SIZE_CATEGORIES: { value: SizeCategory; label: string }[] = [
+  { value: 'compact', label: 'Compact (< 4.5m)' },
+  { value: 'standard', label: 'Standard (4.5-5m)' },
+  { value: 'large', label: 'Grand (5-6m)' },
+  { value: 'xl', label: 'XL (> 6m)' },
+]
+const CANCELLATION_POLICIES: { value: CancellationPolicy; label: string; desc: string }[] = [
+  { value: 'flexible', label: 'Flexible', desc: 'Remboursement 24h avant' },
+  { value: 'moderate', label: 'Moderee', desc: 'Remboursement 5j avant' },
+  { value: 'strict', label: 'Stricte', desc: 'Non remboursable' },
+]
 const INITIAL: FormState = {
-  type: null,
-  address: '',
-  city: '',
-  latitude: '',
-  longitude: '',
-  title: '',
-  description: '',
-  amenities: [],
-  pricePerHour: '',
-  pricePerDay: '',
-  instantBook: true,
-  hasSmartGate: false,
+  type: null, address: '', city: '', latitude: '', longitude: '',
+  title: '', description: '', amenities: [], photos: [],
+  hasSmartGate: false, instantBook: true,
+  pricePerHour: '', pricePerDay: '',
+  widthCm: '', lengthCm: '', maxHeightCm: '',
+  sizeCategory: 'standard', cancellationPolicy: 'flexible',
+  accessInstructions: '', floor: '', spotNumber: '', buildingCode: '', ownershipProofUrl: '',
 }
 
-// ─── Validation ─────────────────────────────────────────────────────────────
-
-function validateStep(step: number, data: FormState): string | null {
-  if (step === 1 && !data.type) return 'Sélectionnez un type de place'
+function validateStep(step: number, d: FormState): string | null {
+  if (step === 1 && !d.type) return 'Selectionnez un type de place'
   if (step === 2) {
-    if (!data.address.trim()) return "L'adresse est requise"
-    if (!data.city.trim()) return 'La ville est requise'
-    if (!data.latitude || !data.longitude) return 'Les coordonnées GPS sont requises'
-    if (isNaN(Number(data.latitude)) || isNaN(Number(data.longitude))) return 'Coordonnées GPS invalides'
+    if (!d.address.trim()) return "L adresse est requise"
+    if (!d.city.trim()) return 'La ville est requise'
+    if (!d.latitude || !d.longitude) return 'Les coordonnees GPS sont requises'
   }
-  if (step === 3 && data.title.trim().length < 5) return 'Le titre doit faire au moins 5 caractères'
-  if (step === 4 && (!data.pricePerHour || Number(data.pricePerHour) <= 0)) return 'Le prix horaire est requis'
+  if (step === 3 && d.title.trim().length < 5) return 'Le titre doit faire au moins 5 caracteres'
+  if (step === 4 && (!d.pricePerHour || Number(d.pricePerHour) <= 0)) return 'Le prix horaire est requis'
   return null
 }
 
-// ─── Step 1: Type ────────────────────────────────────────────────────────────
+interface StepProps { data: FormState; onChange: (f: Partial<FormState>) => void }
 
-function Step1({ data, onChange }: { data: FormState; onChange: (type: SpotType) => void }) {
+function Step1({ data, onChange }: StepProps) {
+  const { colors } = useTheme()
   return (
-    <View>
-      <Text style={s.stepTitle}>Type de place</Text>
-      <Text style={s.stepSub}>Quel type de parking proposez-vous ?</Text>
-      <View style={s.typeGrid}>
+    <View style={ss.stepBody}>
+      <AppText variant="heading2" color={colors.text}>Type de place</AppText>
+      <AppText variant="callout" color={colors.textSecondary}>Quel type de parking proposez-vous ?</AppText>
+      <View style={ss.typeGrid}>
         {SPOT_TYPES.map((t) => {
-          const isActive = data.type === t.value
+          const active = data.type === t.value
           return (
             <TouchableOpacity
               key={t.value}
-              style={[s.typeCard, isActive && s.typeCardActive]}
-              onPress={() => onChange(t.value)}
+              style={[ss.typeCard, { borderColor: active ? colors.primary : colors.border, backgroundColor: active ? colors.primaryMuted : colors.surface }]}
+              onPress={() => onChange({ type: t.value })}
+              accessibilityLabel={t.label}
             >
-              <View style={[s.typeIconWrap, isActive && s.typeIconWrapActive]}>
-                <t.Icon
-                  color={isActive ? '#0540FF' : '#6B7280'}
-                  size={24}
-                  strokeWidth={2}
-                />
-              </View>
-              <Text style={[s.typeLabel, isActive && s.typeLabelActive]}>{t.label}</Text>
+              <t.Icon size={24} color={active ? colors.primary : colors.textSecondary} />
+              <AppText variant="caption1" color={active ? colors.primary : colors.textSecondary}>{t.label}</AppText>
             </TouchableOpacity>
           )
         })}
@@ -126,313 +109,246 @@ function Step1({ data, onChange }: { data: FormState; onChange: (type: SpotType)
   )
 }
 
-// ─── Step 2: Location with Autocomplete ─────────────────────────────────────
+interface MapboxFeature { place_name: string; center: [number, number]; context?: { id: string; text: string }[] }
 
-function Step2({ data, onChange }: { data: FormState; onChange: (f: Partial<FormState>) => void }) {
-  const [query, setQuery] = useState(data.address)
+function Step2({ data, onChange }: StepProps) {
+  const { colors } = useTheme()
   const [suggestions, setSuggestions] = useState<MapboxFeature[]>([])
-  const [loading, setLoading] = useState(false)
+  const [fetching, setFetching] = useState(false)
   const [locating, setLocating] = useState(false)
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const debRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   function fetchSuggestions(text: string) {
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    if (!text.trim() || text.trim().length < 3 || !MAPBOX_TOKEN) {
-      setSuggestions([])
-      return
-    }
-    debounceRef.current = setTimeout(async () => {
-      setLoading(true)
+    if (debRef.current) clearTimeout(debRef.current)
+    if (text.trim().length < 3 || !MAPBOX_TOKEN) { setSuggestions([]); return }
+    debRef.current = setTimeout(async () => {
+      setFetching(true)
       try {
-        const res = await fetch(
-          `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(text)}.json?access_token=${MAPBOX_TOKEN}&country=fr&language=fr&types=address,place&limit=5`
+        const r = await fetch(
+          'https://api.mapbox.com/geocoding/v5/mapbox.places/' + encodeURIComponent(text) + '.json?access_token=' + MAPBOX_TOKEN + '&country=fr&language=fr&types=address,place&limit=5'
         )
-        const json = await res.json()
-        setSuggestions(json.features ?? [])
-      } catch {
-        setSuggestions([])
-      } finally {
-        setLoading(false)
-      }
+        const j = await r.json()
+        setSuggestions(j.features ?? [])
+      } catch { setSuggestions([]) }
+      finally { setFetching(false) }
     }, 300)
   }
 
-  function extractCity(feature: MapboxFeature): string {
-    if (feature.context) {
-      const place = feature.context.find((c) => c.id.startsWith('place'))
-      if (place) return place.text
-    }
-    return feature.text
+  function extractCity(f: MapboxFeature): string {
+    const place = f.context?.find((c) => c.id.startsWith('place'))
+    return place?.text ?? f.place_name.split(',')[0]
   }
 
-  function handleSelect(feature: MapboxFeature) {
-    const city = extractCity(feature)
-    setQuery(feature.place_name)
+  function handleSelect(f: MapboxFeature) {
     setSuggestions([])
-    onChange({
-      address: feature.place_name,
-      city,
-      latitude: String(feature.center[1]),
-      longitude: String(feature.center[0]),
-    })
+    onChange({ address: f.place_name, city: extractCity(f), latitude: String(f.center[1]), longitude: String(f.center[0]) })
   }
 
-  async function handleGeolocate() {
+  async function geolocate() {
     setLocating(true)
     try {
       const { status } = await Location.requestForegroundPermissionsAsync()
-      if (status !== 'granted') {
-        Alert.alert('Permission refusee', 'Activez la localisation dans les reglages.')
-        setLocating(false)
-        return
-      }
+      if (status !== 'granted') { Alert.alert('Permission refusee', 'Activez la localisation.'); return }
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
       const { latitude, longitude } = loc.coords
-
-      // Reverse geocode
-      try {
-        const res = await fetch(
-          `https://api.mapbox.com/geocoding/v5/mapbox.places/${longitude},${latitude}.json?access_token=${MAPBOX_TOKEN}&language=fr&types=address,place&limit=1`
-        )
-        const json = await res.json()
-        const feature: MapboxFeature | undefined = json.features?.[0]
-        if (feature) {
-          handleSelect(feature)
-        } else {
-          onChange({ latitude: String(latitude), longitude: String(longitude) })
-        }
-      } catch {
-        onChange({ latitude: String(latitude), longitude: String(longitude) })
+      if (MAPBOX_TOKEN) {
+        const r = await fetch('https://api.mapbox.com/geocoding/v5/mapbox.places/' + longitude + ',' + latitude + '.json?access_token=' + MAPBOX_TOKEN + '&language=fr&limit=1')
+        const j = await r.json()
+        if (j.features?.[0]) { handleSelect(j.features[0]); return }
       }
-    } catch {
-      Alert.alert('Erreur', 'Impossible de recuperer votre position.')
-    } finally {
-      setLocating(false)
-    }
+      onChange({ latitude: String(latitude), longitude: String(longitude) })
+    } catch { Alert.alert('Erreur', 'Impossible de recuperer votre position.') }
+    finally { setLocating(false) }
   }
 
   return (
-    <View>
-      <Text style={s.stepTitle}>Localisation</Text>
-      <Text style={s.stepSub}>Adresse exacte de votre place</Text>
-
-      <View style={s.fieldGroup}>
-        <Text style={s.label}>Adresse complete *</Text>
+    <View style={ss.stepBody}>
+      <AppText variant="heading2" color={colors.text}>Localisation</AppText>
+      <AppText variant="callout" color={colors.textSecondary}>Adresse exacte de votre place</AppText>
+      <View style={ss.fieldGroup}>
+        <AppText variant="caption1" color={colors.textSecondary}>Adresse complete *</AppText>
         <TextInput
-          style={s.input}
-          value={query}
-          onChangeText={(v) => {
-            setQuery(v)
-            fetchSuggestions(v)
-          }}
+          style={[ss.rawInput, { borderColor: colors.border, backgroundColor: colors.surface, color: colors.text }]}
+          value={data.address}
+          onChangeText={(v) => { onChange({ address: v }); fetchSuggestions(v) }}
           placeholder="Tapez une adresse en France..."
-          placeholderTextColor="#9CA3AF"
+          placeholderTextColor={colors.textTertiary}
         />
-        {loading && (
-          <ActivityIndicator
-            size="small"
-            color="#0540FF"
-            style={{ position: 'absolute', right: 14, top: 38 }}
-          />
-        )}
+        {fetching && <ActivityIndicator size="small" color={colors.primary} style={ss.loadingIndicator} />}
       </View>
-
-      {/* Suggestions list */}
       {suggestions.length > 0 && (
-        <View style={s.suggestionsContainer}>
-          {suggestions.map((feature, i) => (
-            <TouchableOpacity
-              key={`${feature.place_name}-${i}`}
-              style={s.suggestionItem}
-              onPress={() => handleSelect(feature)}
-            >
-              <Text style={s.suggestionIcon}>📍</Text>
-              <Text style={s.suggestionText} numberOfLines={2}>{feature.place_name}</Text>
+        <View style={[ss.suggestions, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          {suggestions.map((f, i) => (
+            <TouchableOpacity key={i} style={[ss.suggestion, { borderBottomColor: colors.borderLight }]} onPress={() => handleSelect(f)}>
+              <AppText variant="callout" color={colors.text} numberOfLines={2}>{f.place_name}</AppText>
             </TouchableOpacity>
           ))}
         </View>
       )}
-
-      {/* City — auto-filled, editable */}
-      <View style={s.fieldGroup}>
-        <Text style={s.label}>Ville *</Text>
-        <TextInput
-          style={[s.input, { backgroundColor: '#F9FAFB' }]}
-          value={data.city}
-          onChangeText={(v) => onChange({ city: v })}
-          placeholder="Remplie automatiquement"
-          placeholderTextColor="#9CA3AF"
-        />
-      </View>
-
-      {/* Geolocate button */}
-      <TouchableOpacity
-        style={s.geolocateBtn}
-        onPress={handleGeolocate}
-        disabled={locating}
-      >
-        {locating ? (
-          <ActivityIndicator size="small" color="#0540FF" />
-        ) : (
-          <Text style={s.geolocateIcon}>📍</Text>
-        )}
-        <Text style={s.geolocateText}>Utiliser ma position</Text>
+      <AppInput label="Ville *" value={data.city} onChangeText={(v) => onChange({ city: v })} placeholder="Remplie automatiquement" />
+      <TouchableOpacity onPress={geolocate} disabled={locating} style={ss.geoBtn}>
+        {locating && <ActivityIndicator size="small" color={colors.primary} />}
+        <AppText variant="callout" color={colors.primary}>Utiliser ma position</AppText>
       </TouchableOpacity>
-
-      {data.latitude && data.longitude && !isNaN(Number(data.latitude)) && (
-        <View style={s.successBadge}>
-          <Text style={s.successText}>
+      {data.latitude !== '' && data.longitude !== '' && (
+        <View style={[ss.successBadge, { backgroundColor: colors.successMuted }]}>
+          <AppText variant="caption1" color={colors.success}>
             Position : {Number(data.latitude).toFixed(4)}, {Number(data.longitude).toFixed(4)}
-          </Text>
+          </AppText>
         </View>
       )}
     </View>
   )
 }
 
-// ─── Step 3: Details ─────────────────────────────────────────────────────────
-
-function Step3({ data, onChange }: { data: FormState; onChange: (f: Partial<FormState>) => void }) {
+function Step3({ data, onChange }: StepProps) {
+  const { colors } = useTheme()
   function toggleAmenity(key: string) {
-    const current = data.amenities
-    onChange({
-      amenities: current.includes(key) ? current.filter((a) => a !== key) : [...current, key],
-    })
+    onChange({ amenities: data.amenities.includes(key) ? data.amenities.filter((a) => a !== key) : [...data.amenities, key] })
   }
-
   return (
-    <View>
-      <Text style={s.stepTitle}>Détails</Text>
-      <Text style={s.stepSub}>Décrivez votre place</Text>
-
-      <View style={s.fieldGroup}>
-        <Text style={s.label}>Titre de l&apos;annonce *</Text>
-        <TextInput
-          style={s.input}
-          value={data.title}
-          onChangeText={(v) => onChange({ title: v })}
-          placeholder="Place de parking sécurisée centre-ville"
-          placeholderTextColor="#9CA3AF"
-          maxLength={100}
-        />
-        <Text style={s.charCount}>{data.title.length}/100</Text>
-      </View>
-
-      <View style={s.fieldGroup}>
-        <Text style={s.label}>Description</Text>
-        <TextInput
-          style={[s.input, s.textarea]}
-          value={data.description}
-          onChangeText={(v) => onChange({ description: v })}
-          placeholder="Décrivez l'emplacement, l'accès..."
-          placeholderTextColor="#9CA3AF"
-          multiline
-          numberOfLines={4}
-          maxLength={500}
-          textAlignVertical="top"
-        />
-        <Text style={s.charCount}>{data.description.length}/500</Text>
-      </View>
-
-      <View style={s.fieldGroup}>
-        <Text style={s.label}>Équipements</Text>
-        <View style={s.amenityGrid}>
+    <View style={ss.stepBody}>
+      <AppText variant="heading2" color={colors.text}>Details</AppText>
+      <AppText variant="callout" color={colors.textSecondary}>Decrivez votre place</AppText>
+      <AppInput label="Titre de l annonce *" value={data.title} onChangeText={(v) => onChange({ title: v })}
+        placeholder="Place securisee centre-ville" maxLength={100} />
+      <AppInput label="Description" value={data.description} onChangeText={(v) => onChange({ description: v })}
+        placeholder="Acces, equipements..." maxLength={500} multiline numberOfLines={4} />
+      <View>
+        <AppText variant="caption1" color={colors.textSecondary} style={{ marginBottom: spacing[2] }}>Equipements</AppText>
+        <View style={ss.chipRow}>
           {AMENITY_LIST.map((a) => {
-            const selected = data.amenities.includes(a.key)
+            const sel = data.amenities.includes(a.key)
             return (
               <TouchableOpacity
                 key={a.key}
-                style={[s.amenityChip, selected && s.amenityChipActive]}
+                style={[ss.chip, { borderColor: sel ? colors.primary : colors.border, backgroundColor: sel ? colors.primaryMuted : colors.surface }]}
                 onPress={() => toggleAmenity(a.key)}
+                accessibilityLabel={a.label}
               >
-                <Text style={[s.amenityText, selected && s.amenityTextActive]}>{a.label}</Text>
+                <AppText variant="caption1" color={sel ? colors.primary : colors.textSecondary}>{a.label}</AppText>
               </TouchableOpacity>
             )
           })}
         </View>
       </View>
-
-      <View style={s.switchRow}>
-        <Text style={s.switchLabel}>Smart Gate</Text>
-        <Switch
-          value={data.hasSmartGate}
-          onValueChange={(v) => onChange({ hasSmartGate: v })}
-          trackColor={{ false: '#D1D5DB', true: '#0540FF' }}
-          thumbColor="#FFFFFF"
-        />
+      <View style={[ss.switchRow, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}>
+        <AppText variant="callout" color={colors.text}>Smart Gate</AppText>
+        <Switch value={data.hasSmartGate} onValueChange={(v) => onChange({ hasSmartGate: v })}
+          trackColor={{ false: colors.border, true: colors.primary }} thumbColor={colors.surface} />
       </View>
     </View>
   )
 }
 
-// ─── Step 4: Pricing ─────────────────────────────────────────────────────────
-
-function Step4({ data, onChange }: { data: FormState; onChange: (f: Partial<FormState>) => void }) {
-  const netPerHour = data.pricePerHour ? (Number(data.pricePerHour) * 0.95).toFixed(2).replace('.', ',') : '—'
-
+function Step4({ data, onChange }: StepProps) {
+  const { colors } = useTheme()
+  const net = data.pricePerHour ? (Number(data.pricePerHour) * 0.95).toFixed(2) : '--'
   return (
-    <View>
-      <Text style={s.stepTitle}>Tarification</Text>
-      <Text style={s.stepSub}>Fixez vos prix et préférences</Text>
-
-      <View style={s.fieldGroup}>
-        <Text style={s.label}>Prix à l&apos;heure (€) *</Text>
-        <TextInput
-          style={s.input}
-          value={data.pricePerHour}
-          onChangeText={(v) => onChange({ pricePerHour: v })}
-          placeholder="3.50"
-          keyboardType="decimal-pad"
-          placeholderTextColor="#9CA3AF"
-        />
-        <Text style={s.hint}>Vous recevez {netPerHour} €/h après frais (5 %)</Text>
-      </View>
-
-      <View style={s.fieldGroup}>
-        <Text style={s.label}>Prix à la journée (€) — optionnel</Text>
-        <TextInput
-          style={s.input}
-          value={data.pricePerDay}
-          onChangeText={(v) => onChange({ pricePerDay: v })}
-          placeholder="25"
-          keyboardType="decimal-pad"
-          placeholderTextColor="#9CA3AF"
-        />
-      </View>
-
-      <View style={s.switchRow}>
+    <View style={ss.stepBody}>
+      <AppText variant="heading2" color={colors.text}>Tarification</AppText>
+      <AppText variant="callout" color={colors.textSecondary}>Fixez vos prix et preferences</AppText>
+      <AppInput label="Prix a l heure (EUR) *" value={data.pricePerHour} onChangeText={(v) => onChange({ pricePerHour: v })}
+        placeholder="3.50" keyboardType="decimal-pad" helper={'Vous recevez ' + net + ' EUR/h apres frais (5 %)'} />
+      <AppInput label="Prix a la journee (EUR) - optionnel" value={data.pricePerDay} onChangeText={(v) => onChange({ pricePerDay: v })}
+        placeholder="25" keyboardType="decimal-pad" />
+      <View style={[ss.switchRow, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}>
         <View style={{ flex: 1 }}>
-          <Text style={s.switchLabel}>Réservation instantanée</Text>
-          <Text style={s.switchSub}>Les conducteurs réservent sans approbation</Text>
+          <AppText variant="callout" color={colors.text}>Reservation instantanee</AppText>
+          <AppText variant="caption1" color={colors.textSecondary}>Les conducteurs reservent sans approbation</AppText>
         </View>
-        <Switch
-          value={data.instantBook}
-          onValueChange={(v) => onChange({ instantBook: v })}
-          trackColor={{ false: '#D1D5DB', true: '#0540FF' }}
-          thumbColor="#FFFFFF"
-        />
+        <Switch value={data.instantBook} onValueChange={(v) => onChange({ instantBook: v })}
+          trackColor={{ false: colors.border, true: colors.primary }} thumbColor={colors.surface} />
       </View>
     </View>
   )
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+function Step5({ data, onChange }: StepProps) {
+  const { colors } = useTheme()
+  return (
+    <View style={ss.stepBody}>
+      <AppText variant="heading2" color={colors.text}>Dimensions et acces</AppText>
+      <AppText variant="callout" color={colors.textSecondary}>Informations complementaires</AppText>
+      <View style={ss.rowFields}>
+        <View style={{ flex: 1 }}>
+          <AppInput label="Largeur (cm)" value={data.widthCm} onChangeText={(v) => onChange({ widthCm: v })} placeholder="240" keyboardType="numeric" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <AppInput label="Longueur (cm)" value={data.lengthCm} onChangeText={(v) => onChange({ lengthCm: v })} placeholder="500" keyboardType="numeric" />
+        </View>
+      </View>
+      <AppInput label="Hauteur maximale (cm)" value={data.maxHeightCm} onChangeText={(v) => onChange({ maxHeightCm: v })} placeholder="200" keyboardType="numeric" />
+      <View>
+        <AppText variant="caption1" color={colors.textSecondary} style={{ marginBottom: spacing[2] }}>Categorie de taille</AppText>
+        {SIZE_CATEGORIES.map((s) => {
+          const sel = data.sizeCategory === s.value
+          return (
+            <TouchableOpacity key={s.value}
+              style={[ss.radioRow, { borderColor: sel ? colors.primary : colors.border, backgroundColor: sel ? colors.primaryMuted : colors.surface }]}
+              onPress={() => onChange({ sizeCategory: s.value })} accessibilityLabel={s.label}
+            >
+              <View style={[ss.radio, { borderColor: sel ? colors.primary : colors.border }]}>
+                {sel && <View style={[ss.radioDot, { backgroundColor: colors.primary }]} />}
+              </View>
+              <AppText variant="callout" color={sel ? colors.primary : colors.text}>{s.label}</AppText>
+            </TouchableOpacity>
+          )
+        })}
+      </View>
+      <View>
+        <AppText variant="caption1" color={colors.textSecondary} style={{ marginBottom: spacing[2] }}>Politique d annulation</AppText>
+        {CANCELLATION_POLICIES.map((p) => {
+          const sel = data.cancellationPolicy === p.value
+          return (
+            <TouchableOpacity key={p.value}
+              style={[ss.radioRow, { borderColor: sel ? colors.primary : colors.border, backgroundColor: sel ? colors.primaryMuted : colors.surface }]}
+              onPress={() => onChange({ cancellationPolicy: p.value })} accessibilityLabel={p.label}
+            >
+              <View style={[ss.radio, { borderColor: sel ? colors.primary : colors.border }]}>
+                {sel && <View style={[ss.radioDot, { backgroundColor: colors.primary }]} />}
+              </View>
+              <View>
+                <AppText variant="callout" color={sel ? colors.primary : colors.text}>{p.label}</AppText>
+                <AppText variant="caption1" color={colors.textSecondary}>{p.desc}</AppText>
+              </View>
+            </TouchableOpacity>
+          )
+        })}
+      </View>
+      <AppInput label="Instructions d acces" value={data.accessInstructions} onChangeText={(v) => onChange({ accessInstructions: v })}
+        placeholder="Code d entree, emplacement exact..." multiline numberOfLines={3} />
+      <View style={ss.rowFields}>
+        <View style={{ flex: 1 }}>
+          <AppInput label="Etage" value={data.floor} onChangeText={(v) => onChange({ floor: v })} placeholder="-1" keyboardType="numeric" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <AppInput label="N. de place" value={data.spotNumber} onChangeText={(v) => onChange({ spotNumber: v })} placeholder="A12" />
+        </View>
+      </View>
+      <AppInput label="Code batiment" value={data.buildingCode} onChangeText={(v) => onChange({ buildingCode: v })} placeholder="1234" />
+      <AppInput label="URL justificatif propriete" value={data.ownershipProofUrl} onChangeText={(v) => onChange({ ownershipProofUrl: v })}
+        placeholder="https://..." keyboardType="url" autoCapitalize="none" />
+    </View>
+  )
+}
 
 export default function NewListingScreen() {
+  const { colors } = useTheme()
+  const { user } = useAuthStore()
   const [step, setStep] = useState(1)
   const [form, setForm] = useState<FormState>(INITIAL)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   function update(fields: Partial<FormState>) {
-    setForm((prev) => ({ ...prev, ...fields }))
+    setForm((p) => ({ ...p, ...fields }))
     setError(null)
   }
 
   function handleNext() {
     const err = validateStep(step, form)
     if (err) { setError(err); return }
-    setError(null)
     setStep((s) => Math.min(s + 1, TOTAL_STEPS))
   }
 
@@ -445,110 +361,66 @@ export default function NewListingScreen() {
   async function handleSubmit() {
     const err = validateStep(step, form)
     if (err) { setError(err); return }
-
+    if (!user) { setError('Non authentifie'); return }
     setSubmitting(true)
-    setError(null)
-
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('Non authentifié')
-
-      const { data: dbUser } = await supabase
-        .from('users')
-        .select('id')
-        .eq('supabase_id', user.id)
-        .single()
-      if (!dbUser) throw new Error('Profil introuvable')
-
       const { error: insertError } = await supabase.from('spots').insert({
-        host_id: dbUser.id,
-        title: form.title,
-        description: form.description || null,
-        address: form.address,
-        city: form.city,
-        latitude: Number(form.latitude),
-        longitude: Number(form.longitude),
+        host_id: user.id, title: form.title, description: form.description || null,
+        address: form.address, city: form.city,
+        latitude: Number(form.latitude), longitude: Number(form.longitude),
         price_per_hour: Number(form.pricePerHour),
         price_per_day: form.pricePerDay ? Number(form.pricePerDay) : null,
-        type: form.type,
-        status: 'pending_review',
-        has_smart_gate: form.hasSmartGate,
-        amenities: form.amenities,
-        instant_book: form.instantBook,
+        type: form.type, status: 'pending_review',
+        has_smart_gate: form.hasSmartGate, amenities: form.amenities, instant_book: form.instantBook,
+        width_cm: form.widthCm ? Number(form.widthCm) : null,
+        length_cm: form.lengthCm ? Number(form.lengthCm) : null,
+        max_height_cm: form.maxHeightCm ? Number(form.maxHeightCm) : null,
+        size_category: form.sizeCategory, cancellation_policy: form.cancellationPolicy,
+        access_instructions: form.accessInstructions || null,
+        floor: form.floor || null, spot_number: form.spotNumber || null,
+        building_code: form.buildingCode || null, ownership_proof_url: form.ownershipProofUrl || null,
       })
-
       if (insertError) throw new Error(insertError.message)
-
-      Alert.alert(
-        'Annonce soumise !',
-        'Votre annonce est en cours de révision. Elle sera publiée sous 24h.',
-        [{ text: 'OK', onPress: () => router.back() }]
-      )
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Une erreur est survenue')
-    } finally {
-      setSubmitting(false)
-    }
+      Alert.alert('Annonce soumise !', 'Votre annonce est en cours de revision. Elle sera publiee sous 24h.', [
+        { text: 'OK', onPress: () => router.back() },
+      ])
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Une erreur est survenue')
+    } finally { setSubmitting(false) }
   }
 
   const progress = (step / TOTAL_STEPS) * 100
 
   return (
-    <SafeAreaView style={s.safeArea} edges={['top', 'bottom']}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        {/* Header */}
-        <View style={s.header}>
-          <TouchableOpacity onPress={handleBack} style={s.backBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Text style={s.backText}>‹ {step === 1 ? 'Annuler' : 'Retour'}</Text>
+    <SafeAreaView style={[ss.safe, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={[ss.header, { backgroundColor: colors.surface, borderBottomColor: colors.borderLight }]}>
+          <TouchableOpacity onPress={handleBack} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <AppText variant="callout" color={colors.primary}>{step === 1 ? 'Annuler' : '< Retour'}</AppText>
           </TouchableOpacity>
-          <Text style={s.headerTitle}>Nouvelle annonce</Text>
-          <Text style={s.stepCount}>{step}/{TOTAL_STEPS}</Text>
+          <AppText variant="headline" color={colors.text}>Nouvelle annonce</AppText>
+          <AppText variant="caption1" color={colors.textTertiary}>{step}/{TOTAL_STEPS}</AppText>
         </View>
-
-        {/* Progress bar */}
-        <View style={s.progressTrack}>
-          <View style={[s.progressFill, { width: `${progress}%` as any }]} />
+        <View style={[ss.progressTrack, { backgroundColor: colors.borderLight }]}>
+          <View style={{ height: 3, width: (progress + '%') as any, backgroundColor: colors.primary }} />
         </View>
-
-        {/* Content */}
-        <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={s.scrollContent}
-          keyboardShouldPersistTaps="handled"
-        >
-          {step === 1 && <Step1 data={form} onChange={(v) => update({ type: v })} />}
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={ss.scrollContent} keyboardShouldPersistTaps="handled">
+          {step === 1 && <Step1 data={form} onChange={update} />}
           {step === 2 && <Step2 data={form} onChange={update} />}
           {step === 3 && <Step3 data={form} onChange={update} />}
           {step === 4 && <Step4 data={form} onChange={update} />}
-
-          {error && (
-            <View style={s.errorBox}>
-              <Text style={s.errorText}>{error}</Text>
+          {step === 5 && <Step5 data={form} onChange={update} />}
+          {error != null && (
+            <View style={[ss.errorBox, { backgroundColor: colors.dangerMuted, borderColor: colors.danger + '40' }]}>
+              <AppText variant="callout" color={colors.danger}>{error}</AppText>
             </View>
           )}
         </ScrollView>
-
-        {/* Footer navigation */}
-        <View style={s.footer}>
+        <View style={[ss.footer, { backgroundColor: colors.surface, borderTopColor: colors.borderLight }]}>
           {step < TOTAL_STEPS ? (
-            <TouchableOpacity style={s.primaryBtn} onPress={handleNext}>
-              <Text style={s.primaryBtnText}>Suivant →</Text>
-            </TouchableOpacity>
+            <AppButton title="Suivant" onPress={handleNext} variant="primary" size="lg" />
           ) : (
-            <TouchableOpacity
-              style={[s.primaryBtn, s.submitBtn, submitting && s.btnDisabled]}
-              onPress={handleSubmit}
-              disabled={submitting}
-            >
-              {submitting ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={s.primaryBtnText}>Publier l&apos;annonce ✓</Text>
-              )}
-            </TouchableOpacity>
+            <AppButton title="Publier l annonce" onPress={handleSubmit} variant="primary" size="lg" loading={submitting} disabled={submitting} />
           )}
         </View>
       </KeyboardAvoidingView>
@@ -556,164 +428,28 @@ export default function NewListingScreen() {
   )
 }
 
-// ─── Styles ──────────────────────────────────────────────────────────────────
-
-const s = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F8FAFC' },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  backBtn: {},
-  backText: { color: '#0540FF', fontSize: 15, fontWeight: '600' },
-  headerTitle: { fontSize: 16, fontWeight: '800', color: '#1A1A2E' },
-  stepCount: { fontSize: 12, color: '#9CA3AF', fontWeight: '600' },
-  progressTrack: { height: 3, backgroundColor: '#E5E7EB' },
-  progressFill: { height: 3, backgroundColor: '#0540FF' },
-  scrollContent: { padding: 20, paddingBottom: 32 },
-  stepTitle: { fontSize: 20, fontWeight: '800', color: '#1A1A2E', marginBottom: 4 },
-  stepSub: { fontSize: 14, color: '#9CA3AF', marginBottom: 24 },
-  // Type selector
-  typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  typeCard: {
-    width: '47%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: '#E5E7EB',
-    alignItems: 'center',
-    paddingVertical: 20,
-    paddingHorizontal: 8,
-    gap: 10,
-  },
-  typeCardActive: { borderColor: '#0540FF', backgroundColor: '#EFF6FF' },
-  typeIconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#F3F4F6',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  typeIconWrapActive: {
-    backgroundColor: '#DBEAFE',
-  },
-  typeLabel: { fontSize: 13, fontWeight: '700', color: '#6B7280' },
-  typeLabelActive: { color: '#0540FF' },
-  // Fields
-  fieldGroup: { marginBottom: 16 },
-  label: { fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 6 },
-  input: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: '#E5E7EB',
-    paddingHorizontal: 16,
-    height: 48,
-    fontSize: 15,
-    color: '#1A1A2E',
-  },
-  textarea: { height: 96, paddingTop: 12 },
-  charCount: { fontSize: 11, color: '#9CA3AF', textAlign: 'right', marginTop: 4 },
-  hint: { fontSize: 11, color: '#9CA3AF', marginTop: 4 },
-  row: { flexDirection: 'row' },
-  successBadge: {
-    backgroundColor: '#ECFDF5',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#A7F3D0',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginTop: 4,
-  },
-  successText: { fontSize: 12, color: '#059669', fontWeight: '600' },
-  // Autocomplete suggestions
-  suggestionsContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    marginBottom: 16,
-    overflow: 'hidden',
-  },
-  suggestionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  suggestionIcon: { fontSize: 14 },
-  suggestionText: { fontSize: 13, color: '#374151', flex: 1 },
-  geolocateBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
-    paddingVertical: 4,
-  },
-  geolocateIcon: { fontSize: 14 },
-  geolocateText: { fontSize: 14, fontWeight: '600', color: '#0540FF' },
-  // Amenities
-  amenityGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  amenityChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    backgroundColor: '#FFFFFF',
-  },
-  amenityChipActive: { borderColor: '#0540FF', backgroundColor: '#EFF6FF' },
-  amenityText: { fontSize: 12, fontWeight: '600', color: '#6B7280' },
-  amenityTextActive: { color: '#0540FF' },
-  // Switch
-  switchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#F3F4F6',
-    padding: 14,
-    marginBottom: 12,
-  },
-  switchLabel: { fontSize: 14, fontWeight: '700', color: '#1A1A2E' },
-  switchSub: { fontSize: 12, color: '#9CA3AF', marginTop: 2 },
-  // Error
-  errorBox: {
-    backgroundColor: '#FEF2F2',
-    borderWidth: 1,
-    borderColor: '#FECACA',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginTop: 12,
-  },
-  errorText: { fontSize: 13, color: '#DC2626', fontWeight: '500' },
-  // Footer
-  footer: {
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-    padding: 16,
-  },
-  primaryBtn: {
-    backgroundColor: '#0540FF',
-    borderRadius: 14,
-    paddingVertical: 15,
-    alignItems: 'center',
-  },
-  submitBtn: { backgroundColor: '#0540FF' },
-  btnDisabled: { opacity: 0.6 },
-  primaryBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
+const ss = StyleSheet.create({
+  safe: { flex: 1 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing[4], paddingVertical: spacing[3], borderBottomWidth: 1 },
+  progressTrack: { height: 3 },
+  scrollContent: { padding: spacing[5], paddingBottom: spacing[8] },
+  stepBody: { gap: spacing[4] },
+  typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[3] },
+  typeCard: { width: '47%', borderWidth: 2, borderRadius: radii.lg, alignItems: 'center', paddingVertical: spacing[5], gap: spacing[2] },
+  fieldGroup: { gap: spacing[1], position: 'relative' },
+  rawInput: { borderWidth: 1.5, borderRadius: radii.md, paddingHorizontal: spacing[3], paddingVertical: spacing[3], fontSize: 15, minHeight: 48 },
+  loadingIndicator: { position: 'absolute', right: 12, bottom: 12 },
+  suggestions: { borderWidth: 1, borderRadius: radii.md, overflow: 'hidden', marginTop: -spacing[2] },
+  suggestion: { padding: spacing[3], borderBottomWidth: 1 },
+  geoBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
+  successBadge: { borderRadius: radii.sm, padding: spacing[3] },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2] },
+  chip: { borderWidth: 1, borderRadius: radii.full, paddingHorizontal: spacing[3], paddingVertical: spacing[1] },
+  switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: spacing[3], borderRadius: radii.md, borderWidth: 1 },
+  rowFields: { flexDirection: 'row', gap: spacing[3] },
+  radioRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[3], padding: spacing[3], borderRadius: radii.md, borderWidth: 1, marginBottom: spacing[2] },
+  radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  radioDot: { width: 10, height: 10, borderRadius: 5 },
+  errorBox: { borderWidth: 1, borderRadius: radii.md, padding: spacing[3], marginTop: spacing[2] },
+  footer: { borderTopWidth: 1, padding: spacing[4] },
 })

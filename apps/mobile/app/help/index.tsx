@@ -1,313 +1,116 @@
 import { useState } from 'react'
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  StyleSheet,
-  Linking,
-  Platform,
-} from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { Linking, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native'
 import { router } from 'expo-router'
-import {
-  ArrowLeft,
-  ChevronDown,
-  ChevronUp,
-  Mail,
-  HelpCircle,
-} from 'lucide-react-native'
-import { COLORS } from '../../lib/constants'
+import { HelpCircle, Mail, ChevronDown, ChevronUp } from 'lucide-react-native'
+import { ScreenContainer } from '../../src/design-system/components/layout'
+import { SectionHeader } from '../../src/design-system/components/layout/SectionHeader'
+import { AppText } from '../../src/design-system/components/atoms/AppText'
+import { AppButton } from '../../src/design-system/components/atoms/AppButton'
+import { MenuCard } from '../../src/design-system/components/molecules/MenuCard'
+import { useTheme } from '../../src/design-system/theme/useTheme'
+import { spacing } from '../../src/design-system/tokens/spacing'
+import { radii } from '../../src/design-system/tokens/radii'
+import { shadows } from '../../src/design-system/tokens/shadows'
 
-interface FAQItem {
-  question: string
-  answer: string
-}
+interface FAQItem { question: string; answer: string }
 
-const FAQ_DATA: FAQItem[] = [
-  {
-    question: 'Comment réserver une place ?',
-    answer:
-      'Recherchez une place disponible via l\'onglet Recherche ou la carte. Sélectionnez une place, choisissez vos dates et heures, puis confirmez votre réservation. Vous recevrez une confirmation par notification et email.',
-  },
-  {
-    question: 'Comment fonctionne le paiement ?',
-    answer:
-      'Le paiement est sécurisé par Stripe, leader mondial des paiements en ligne. Vos coordonnées bancaires ne sont jamais stockées sur nos serveurs. Une commission de 20 % est prélevée sur chaque transaction pour couvrir les frais de service.',
-  },
-  {
-    question: 'Comment annuler une réservation ?',
-    answer:
-      'Accédez à l\'onglet Réservations, sélectionnez la réservation concernée, puis appuyez sur "Annuler". Les conditions d\'annulation dépendent de la politique choisie lors de la réservation. Un remboursement partiel ou total peut s\'appliquer.',
-  },
-  {
-    question: 'Comment devenir hôte ?',
-    answer:
-      'Pour proposer votre place de parking, rendez-vous dans votre profil et appuyez sur "Ajouter une annonce". Vous devrez vérifier votre identité, renseigner les détails de votre place (adresse, type, prix), puis soumettre votre annonce pour validation sous 24h.',
-  },
-  {
-    question: 'Comment fonctionne le Smart Gate ?',
-    answer:
-      'Le Smart Gate est une barrière connectée qui s\'ouvre automatiquement via un QR code unique généré dans l\'application. À l\'arrivée, appuyez sur "Ouvrir le portail" dans votre réservation active, puis scannez ou affichez le code QR devant le lecteur.',
-  },
-  {
-    question: 'Comment contacter le support ?',
-    answer:
-      'Notre équipe support est disponible du lundi au vendredi de 9h à 18h. Vous pouvez nous écrire à support@flashpark.fr. Nous répondons sous 24h ouvrées.',
-  },
+const FAQ: FAQItem[] = [
+  { question: 'Comment reserver une place ?', answer: 'Recherchez une place via Recherche ou la carte. Selectionnez une place, choisissez vos dates et heures, puis confirmez. Vous recevrez une confirmation par notification et email.' },
+  { question: 'Comment fonctionne le paiement ?', answer: 'Le paiement est securise par Stripe. Vos coordonnees bancaires ne sont jamais stockees sur nos serveurs. Une commission de 20 % est prelevee sur chaque transaction.' },
+  { question: 'Comment annuler une reservation ?', answer: 'Accedez a Reservations, selectionnez la reservation concernee, puis appuyez sur Annuler. Les conditions dependent de la politique choisie.' },
+  { question: 'Comment devenir hote ?', answer: 'Rendez-vous dans votre profil et appuyez sur Devenir hote. Vous devrez renseigner les details de votre place, puis soumettre votre annonce pour validation sous 24h.' },
+  { question: 'Comment fonctionne le Smart Gate ?', answer: 'Le Smart Gate est une barriere connectee qui s ouvre automatiquement via un QR code unique genere dans l application.' },
+  { question: 'Comment contacter le support ?', answer: 'Notre equipe support est disponible du lundi au vendredi de 9h a 18h. Ecrivez-nous a support@flashpark.fr. Nous repondons sous 24h.' },
 ]
 
 function AccordionItem({ item }: { item: FAQItem }) {
+  const { colors } = useTheme()
   const [open, setOpen] = useState(false)
-
   return (
     <TouchableOpacity
-      style={[styles.accordionItem, open && styles.accordionItemOpen]}
+      style={[styles.accordion, { backgroundColor: colors.surface, borderColor: open ? colors.primary : colors.border }]}
       onPress={() => setOpen((p) => !p)}
       activeOpacity={0.75}
+      accessibilityLabel={item.question}
+      accessibilityRole="button"
+      accessibilityState={{ expanded: open }}
     >
       <View style={styles.accordionHeader}>
-        <Text style={[styles.accordionQuestion, open && styles.accordionQuestionOpen]}>
-          {item.question}
-        </Text>
-        {open ? (
-          <ChevronUp color={COLORS.primary} size={18} strokeWidth={2.5} />
-        ) : (
-          <ChevronDown color={COLORS.gray400} size={18} strokeWidth={2.5} />
-        )}
+        <AppText variant="callout" color={open ? colors.primary : colors.text} style={{ flex: 1 }}>{item.question}</AppText>
+        {open
+          ? <ChevronUp size={18} color={colors.primary} strokeWidth={2.5} />
+          : <ChevronDown size={18} color={colors.textSecondary} strokeWidth={2.5} />
+        }
       </View>
       {open && (
-        <Text style={styles.accordionAnswer}>{item.answer}</Text>
+        <AppText variant="callout" color={colors.textSecondary} style={styles.accordionAnswer}>{item.answer}</AppText>
       )}
     </TouchableOpacity>
   )
 }
 
 export default function HelpScreen() {
+  const { colors } = useTheme()
+
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <ArrowLeft color={COLORS.dark} size={22} />
+    <ScreenContainer edges={['top']}>
+      <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+        <TouchableOpacity onPress={() => router.back()} accessibilityLabel="Retour">
+          <AppText variant="callout" color={colors.primary}>Retour</AppText>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Centre d&apos;aide</Text>
-        <View style={{ width: 40 }} />
+        <AppText variant="headline" color={colors.text}>Centre d aide</AppText>
+        <View style={styles.spacer} />
       </View>
 
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Hero */}
-        <View style={styles.hero}>
-          <View style={styles.heroIcon}>
-            <HelpCircle color={COLORS.primary} size={32} strokeWidth={2} />
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={[styles.hero, { backgroundColor: colors.primaryMuted, borderColor: colors.primary + '20' }]}>
+          <View style={[styles.heroIcon, { backgroundColor: colors.surface }]}>
+            <HelpCircle size={28} color={colors.primary} strokeWidth={2} />
           </View>
-          <Text style={styles.heroTitle}>Comment pouvons-nous vous aider ?</Text>
-          <Text style={styles.heroSubtitle}>
-            Trouvez des réponses aux questions fréquentes ci-dessous
-          </Text>
+          <AppText variant="title3" color={colors.text} style={styles.centered}>Comment pouvons-nous vous aider ?</AppText>
+          <AppText variant="callout" color={colors.textSecondary} style={styles.centered}>Trouvez des reponses aux questions frequentes ci-dessous</AppText>
         </View>
 
-        {/* FAQ Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Questions fréquentes</Text>
-          <View style={styles.accordionList}>
-            {FAQ_DATA.map((item, index) => (
-              <AccordionItem key={index} item={item} />
-            ))}
-          </View>
+        <SectionHeader title="Questions frequentes" />
+        <View style={styles.faqList}>
+          {FAQ.map((item, i) => <AccordionItem key={i} item={item} />)}
         </View>
 
-        {/* Contact Section */}
-        <View style={styles.contactCard}>
+        <View style={[styles.contactCard, { backgroundColor: colors.surface, borderColor: colors.border, ...shadows.sm }]}>
           <View style={styles.contactHeader}>
-            <Mail color={COLORS.primary} size={22} strokeWidth={2} />
-            <Text style={styles.contactTitle}>Besoin d&apos;aide ?</Text>
+            <Mail size={20} color={colors.primary} strokeWidth={2} />
+            <AppText variant="title3" color={colors.text}>Besoin d aide ?</AppText>
           </View>
-          <Text style={styles.contactSubtitle}>
-            Vous ne trouvez pas la réponse à votre question ? Notre équipe est là pour vous.
-          </Text>
-          <TouchableOpacity
-            style={styles.contactBtn}
+          <AppText variant="callout" color={colors.textSecondary}>
+            Vous ne trouvez pas la reponse ? Notre equipe est la pour vous.
+          </AppText>
+          <AppButton
+            title="support@flashpark.fr"
             onPress={() => Linking.openURL('mailto:support@flashpark.fr')}
-            activeOpacity={0.85}
-          >
-            <Mail color={COLORS.white} size={16} strokeWidth={2} />
-            <Text style={styles.contactBtnText}>support@flashpark.fr</Text>
-          </TouchableOpacity>
+            variant="primary"
+            size="md"
+          />
         </View>
-
-        <View style={{ height: 20 }} />
       </ScrollView>
-    </SafeAreaView>
+    </ScreenContainer>
   )
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: COLORS.white,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray200,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: spacing[4], paddingVertical: spacing[3],
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  backBtn: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 20,
-    backgroundColor: COLORS.gray100,
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: COLORS.dark,
-  },
-  scrollContent: {
-    padding: 16,
-    gap: 20,
-  },
-  hero: {
-    backgroundColor: COLORS.primaryLight,
-    borderRadius: 20,
-    padding: 24,
-    alignItems: 'center',
-    gap: 8,
-    borderWidth: 1,
-    borderColor: COLORS.primary + '20',
-  },
-  heroIcon: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: COLORS.white,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
-    ...Platform.select({
-      ios: { shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 8 },
-      android: { elevation: 3 },
-    }),
-  },
-  heroTitle: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: COLORS.dark,
-    textAlign: 'center',
-  },
-  heroSubtitle: {
-    fontSize: 13,
-    color: COLORS.gray500,
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-  section: {
-    gap: 12,
-  },
-  sectionTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: COLORS.dark,
-    paddingHorizontal: 4,
-  },
-  accordionList: {
-    gap: 8,
-  },
-  accordionItem: {
-    backgroundColor: COLORS.white,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: COLORS.gray200,
-    padding: 16,
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4 },
-      android: { elevation: 1 },
-    }),
-  },
-  accordionItemOpen: {
-    borderColor: COLORS.primary,
-    backgroundColor: COLORS.primaryLight,
-  },
-  accordionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  accordionQuestion: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.dark,
-    flex: 1,
-    lineHeight: 20,
-  },
-  accordionQuestionOpen: {
-    color: COLORS.primary,
-  },
-  accordionAnswer: {
-    fontSize: 13,
-    color: COLORS.gray700,
-    lineHeight: 20,
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.primary + '30',
-  },
-  contactCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 20,
-    padding: 20,
-    gap: 12,
-    borderWidth: 1,
-    borderColor: COLORS.gray200,
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8 },
-      android: { elevation: 2 },
-    }),
-  },
-  contactHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  contactTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: COLORS.dark,
-  },
-  contactSubtitle: {
-    fontSize: 13,
-    color: COLORS.gray500,
-    lineHeight: 18,
-  },
-  contactBtn: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 14,
-    paddingVertical: 13,
-    paddingHorizontal: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginTop: 4,
-    ...Platform.select({
-      ios: { shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10 },
-      android: { elevation: 4 },
-    }),
-  },
-  contactBtnText: {
-    color: COLORS.white,
-    fontSize: 14,
-    fontWeight: '700',
-  },
+  spacer: { minWidth: 60 },
+  content: { padding: spacing[4], gap: spacing[4], paddingBottom: spacing[8] },
+  hero: { borderWidth: 1, borderRadius: radii.xl, padding: spacing[6], alignItems: 'center', gap: spacing[2] },
+  heroIcon: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', marginBottom: spacing[1] },
+  centered: { textAlign: 'center' },
+  faqList: { gap: spacing[3] },
+  accordion: { borderWidth: 1.5, borderRadius: radii.lg, padding: spacing[4] },
+  accordionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[3] },
+  accordionAnswer: { marginTop: spacing[3], paddingTop: spacing[3], borderTopWidth: 1, borderTopColor: 'rgba(5,64,255,0.15)', lineHeight: 22 },
+  contactCard: { borderWidth: 1, borderRadius: radii.xl, padding: spacing[5], gap: spacing[3] },
+  contactHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
 })

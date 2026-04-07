@@ -1,275 +1,181 @@
 import { useState } from 'react'
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
-  ActivityIndicator,
-  Linking,
-} from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native'
 import { router } from 'expo-router'
-import { supabase } from '../../lib/supabase'
-import { COLORS } from '../../lib/constants'
+import { ScreenContainer } from '../../src/design-system/components/layout'
+import { AppText } from '../../src/design-system/components/atoms/AppText'
+import { AppInput } from '../../src/design-system/components/atoms/AppInput'
+import { AppButton } from '../../src/design-system/components/atoms/AppButton'
+import { SegmentedControl } from '../../src/design-system/components/molecules/SegmentedControl'
+import { Toast } from '../../src/design-system/components/molecules/Toast'
+import { useTheme } from '../../src/design-system/theme/useTheme'
+import { spacing } from '../../src/design-system/tokens/spacing'
+import { radii } from '../../src/design-system/tokens/radii'
+import { useAuthStore } from '../../src/stores/authStore'
 
-type AuthMode = 'login' | 'signup'
+type ToastState = { visible: boolean; message: string; type: 'error' | 'success' | 'info' }
+const INITIAL_TOAST: ToastState = { visible: false, message: '', type: 'info' }
 
 export default function LoginScreen() {
+  const { colors } = useTheme()
+  const { signInWithEmail, signUp, signInWithGoogle, signInWithMagicLink } = useAuthStore()
+  const [modeIndex, setModeIndex] = useState(0)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [fullName, setFullName] = useState('')
+  const [magicEmail, setMagicEmail] = useState('')
   const [loading, setLoading] = useState(false)
-  const [mode, setMode] = useState<AuthMode>('login')
+  const [toast, setToast] = useState<ToastState>(INITIAL_TOAST)
+  const isLogin = modeIndex === 0
 
-  async function handleEmailAuth() {
-    if (!email.trim() || !password.trim()) {
-      Alert.alert('Erreur', 'Veuillez remplir tous les champs.')
-      return
-    }
-    if (password.length < 6) {
-      Alert.alert('Erreur', 'Le mot de passe doit contenir au moins 6 caractères.')
-      return
-    }
+  function showToast(message: string, type: ToastState['type'] = 'error') {
+    setToast({ visible: true, message, type })
+  }
+  function dismissToast() { setToast((p) => ({ ...p, visible: false })) }
 
+  function validate(): string | null {
+    if (!email.trim()) return 'Veuillez entrer votre adresse email.'
+    if (!password.trim()) return 'Veuillez entrer votre mot de passe.'
+    if (password.length < 6) return 'Le mot de passe doit avoir au moins 6 caracteres.'
+    if (!isLogin && !fullName.trim()) return 'Veuillez entrer votre nom complet.'
+    return null
+  }
+
+  async function handleSubmit() {
+    const err = validate()
+    if (err) { showToast(err); return }
     setLoading(true)
-
-    if (mode === 'signup') {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { full_name: email.split('@')[0] },
-        },
-      })
-      setLoading(false)
-      if (error) {
-        Alert.alert('Erreur', error.message)
+    try {
+      if (isLogin) {
+        await signInWithEmail(email.trim(), password)
+        router.replace('/(tabs)/' as any)
       } else {
-        Alert.alert(
-          'Compte créé !',
-          'Vérifiez vos emails pour confirmer votre compte, ou connectez-vous directement.',
-          [{ text: 'OK', onPress: () => setMode('login') }]
-        )
+        await signUp(email.trim(), password, fullName.trim())
+        showToast('Compte cree ! Verifiez vos emails pour confirmer.', 'success')
+        setModeIndex(0)
       }
-    } else {
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
-      setLoading(false)
-      if (error) {
-        Alert.alert('Erreur', error.message)
-      } else {
-        router.replace('/(tabs)/')
-      }
-    }
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Une erreur est survenue.')
+    } finally { setLoading(false) }
   }
 
   async function handleGoogle() {
     setLoading(true)
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: 'flashpark://auth/callback',
-        skipBrowserRedirect: true,
-      },
-    })
-    setLoading(false)
-    if (error) {
-      Alert.alert('Erreur', error.message)
-    } else if (data?.url) {
-      Linking.openURL(data.url)
-    }
+    try { await signInWithGoogle() }
+    catch (e) { showToast(e instanceof Error ? e.message : 'Connexion Google impossible.') }
+    finally { setLoading(false) }
   }
 
   async function handleMagicLink() {
-    if (!email.trim()) {
-      Alert.alert('Erreur', 'Veuillez entrer votre email.')
-      return
-    }
+    if (!magicEmail.trim()) { showToast('Veuillez entrer votre email.'); return }
     setLoading(true)
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: 'flashpark://auth/callback' },
-    })
-    setLoading(false)
-    if (error) {
-      Alert.alert('Erreur', error.message)
-    } else {
-      Alert.alert('Lien envoyé !', `Consultez votre boîte mail ${email}`)
-    }
+    try {
+      await signInWithMagicLink(magicEmail.trim())
+      showToast('Lien de connexion envoye !', 'success')
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Envoi impossible.')
+    } finally { setLoading(false) }
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.inner}
-      >
-        {/* Back button */}
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <Text style={styles.backText}>← Retour</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.logo}>
-          Flash<Text style={styles.logoPrimary}>park</Text>
-        </Text>
-        <Text style={styles.tagline}>Trouvez votre parking en un éclair</Text>
-
-        {/* Mode toggle */}
-        <View style={styles.modeToggle}>
-          <TouchableOpacity
-            style={[styles.modeBtn, mode === 'login' && styles.modeBtnActive]}
-            onPress={() => setMode('login')}
-          >
-            <Text style={[styles.modeBtnText, mode === 'login' && styles.modeBtnTextActive]}>
-              Connexion
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.modeBtn, mode === 'signup' && styles.modeBtnActive]}
-            onPress={() => setMode('signup')}
-          >
-            <Text style={[styles.modeBtnText, mode === 'signup' && styles.modeBtnTextActive]}>
-              Inscription
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.form}>
-          <Text style={styles.label}>Adresse email</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="vous@exemple.fr"
-            placeholderTextColor={COLORS.gray400}
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoComplete="email"
-          />
-
-          <Text style={styles.label}>Mot de passe</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="••••••••"
-            placeholderTextColor={COLORS.gray400}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            autoComplete="password"
-          />
-
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleEmailAuth}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.buttonText}>
-                {mode === 'login' ? 'Se connecter' : "S'inscrire"}
-              </Text>
-            )}
-          </TouchableOpacity>
-
-          {/* Divider */}
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>ou</Text>
-            <View style={styles.dividerLine} />
+    <ScreenContainer scroll edges={['top', 'bottom']}>
+      <Toast message={toast.message} type={toast.type} visible={toast.visible} onDismiss={dismissToast} />
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.kav}>
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <View style={styles.logoWrap}>
+            <AppText variant="largeTitle" style={{ color: colors.text }}>
+              Flash<AppText variant="largeTitle" color={colors.primary}>park</AppText>
+            </AppText>
+            <AppText variant="callout" color={colors.textSecondary} style={styles.centered}>
+              Trouvez votre parking en un eclair
+            </AppText>
           </View>
 
-          {/* Google OAuth */}
+          <SegmentedControl
+            segments={['Connexion', 'Inscription']}
+            selectedIndex={modeIndex}
+            onChange={setModeIndex}
+          />
+
+          <View style={styles.form}>
+            {!isLogin && (
+              <AppInput label="Nom complet" value={fullName} onChangeText={setFullName}
+                placeholder="Jean Dupont" autoCorrect={false} autoCapitalize="words"
+                accessibilityLabel="Nom complet" />
+            )}
+            <AppInput label="Adresse email" value={email} onChangeText={setEmail}
+              placeholder="vous@exemple.fr" keyboardType="email-address" autoCapitalize="none"
+              autoComplete="email" accessibilityLabel="Adresse email" />
+            <AppInput label="Mot de passe" value={password} onChangeText={setPassword}
+              placeholder="Min. 6 caracteres" isPassword
+              autoComplete={isLogin ? 'current-password' : 'new-password'}
+              accessibilityLabel="Mot de passe" />
+            {isLogin && (
+              <TouchableOpacity hitSlop={8} accessibilityLabel="Mot de passe oublie">
+                <AppText variant="callout" color={colors.primary} style={styles.right}>
+                  Mot de passe oublie ?
+                </AppText>
+              </TouchableOpacity>
+            )}
+            <AppButton
+              title={isLogin ? 'Se connecter' : "S'inscrire"}
+              onPress={handleSubmit} variant="primary" size="lg" loading={loading}
+            />
+          </View>
+
+          <View style={styles.divider}>
+            <View style={[styles.line, { backgroundColor: colors.border }]} />
+            <AppText variant="caption1" color={colors.textTertiary}>ou continuer avec</AppText>
+            <View style={[styles.line, { backgroundColor: colors.border }]} />
+          </View>
+
           <TouchableOpacity
-            style={styles.googleBtn}
-            onPress={handleGoogle}
-            disabled={loading}
+            style={[styles.oauthBtn, { borderColor: colors.border, backgroundColor: colors.surface }]}
+            onPress={handleGoogle} disabled={loading} activeOpacity={0.7}
+            accessibilityLabel="Continuer avec Google"
           >
-            <Text style={styles.googleG}>G</Text>
-            <Text style={styles.googleText}>Continuer avec Google</Text>
+            <AppText variant="headline" style={styles.googleG}>G</AppText>
+            <AppText variant="callout" color={colors.text}>Continuer avec Google</AppText>
           </TouchableOpacity>
 
-          {/* Magic link */}
-          <TouchableOpacity
-            onPress={handleMagicLink}
-            disabled={loading}
-          >
-            <Text style={styles.magicLinkText}>Recevoir un lien magique par email</Text>
-          </TouchableOpacity>
-        </View>
+          <View style={[styles.magic, { backgroundColor: colors.borderLight, borderRadius: radii.lg }]}>
+            <AppText variant="callout" color={colors.textSecondary} style={styles.centered}>
+              Recevoir un lien de connexion
+            </AppText>
+            <AppInput value={magicEmail} onChangeText={setMagicEmail}
+              placeholder="votre@email.fr" keyboardType="email-address" autoCapitalize="none"
+              accessibilityLabel="Email pour lien de connexion" />
+            <AppButton title="Envoyer le lien" onPress={handleMagicLink}
+              variant="outline" size="md" loading={loading} />
+          </View>
 
-        <Text style={styles.terms}>
-          En continuant, vous acceptez nos Conditions d&apos;utilisation et notre Politique de
-          confidentialité.
-        </Text>
+          <AppText variant="caption2" color={colors.textTertiary} style={styles.centered}>
+            En continuant, vous acceptez nos Conditions d utilisation et notre Politique de confidentialite.
+          </AppText>
+        </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </ScreenContainer>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
-  inner: { flex: 1, paddingHorizontal: 24, justifyContent: 'center' },
-  backBtn: { position: 'absolute', top: 10, left: 0 },
-  backText: { fontSize: 15, color: COLORS.primary, fontWeight: '600' },
-  logo: { fontSize: 40, fontWeight: '800', color: COLORS.dark, textAlign: 'center' },
-  logoPrimary: { color: COLORS.primary },
-  tagline: { fontSize: 16, color: COLORS.gray500, textAlign: 'center', marginTop: 8, marginBottom: 28 },
-  modeToggle: {
-    flexDirection: 'row',
-    backgroundColor: COLORS.gray100,
-    borderRadius: 12,
-    padding: 4,
-    marginBottom: 20,
+  kav: { flex: 1 },
+  content: {
+    flexGrow: 1,
+    paddingHorizontal: spacing[5],
+    paddingTop: spacing[12],
+    paddingBottom: spacing[8],
+    gap: spacing[5],
   },
-  modeBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: 'center',
+  logoWrap: { alignItems: 'center', gap: spacing[1] },
+  centered: { textAlign: 'center' },
+  right: { textAlign: 'right' },
+  form: { gap: spacing[3] },
+  divider: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
+  line: { flex: 1, height: 1 },
+  oauthBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: spacing[2], borderWidth: 1.5, borderRadius: radii.md, height: 48,
   },
-  modeBtnActive: { backgroundColor: COLORS.white },
-  modeBtnText: { fontSize: 14, fontWeight: '600', color: COLORS.gray400 },
-  modeBtnTextActive: { color: COLORS.dark },
-  form: { gap: 10 },
-  label: { fontSize: 13, fontWeight: '600', color: COLORS.dark, marginTop: 2 },
-  input: {
-    borderWidth: 1.5,
-    borderColor: COLORS.gray200,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    backgroundColor: COLORS.white,
-    color: COLORS.dark,
-  },
-  button: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
-  divider: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 4 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: COLORS.gray200 },
-  dividerText: { fontSize: 13, color: COLORS.gray400 },
-  googleBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    borderWidth: 1.5,
-    borderColor: COLORS.gray200,
-    borderRadius: 12,
-    paddingVertical: 14,
-    backgroundColor: COLORS.white,
-  },
-  googleG: { fontSize: 18, fontWeight: '700', color: '#4285F4' },
-  googleText: { fontSize: 15, fontWeight: '600', color: COLORS.dark },
-  magicLinkText: { fontSize: 14, fontWeight: '600', color: COLORS.primary, textAlign: 'center', marginTop: 4 },
-  terms: { fontSize: 12, color: COLORS.gray400, textAlign: 'center', marginTop: 24, lineHeight: 18 },
+  googleG: { color: '#4285F4' },
+  magic: { padding: spacing[4], gap: spacing[3] },
 })

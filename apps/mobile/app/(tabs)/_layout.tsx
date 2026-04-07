@@ -1,112 +1,135 @@
+import { useEffect } from 'react'
+import { Platform, StyleSheet, TouchableOpacity, View, Text } from 'react-native'
 import { Tabs } from 'expo-router'
+import { BlurView } from 'expo-blur'
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Home, Search, Calendar, MessageCircle, User } from 'lucide-react-native'
-import { Platform, StyleSheet, View } from 'react-native'
-import { COLORS } from '../../lib/constants'
+import { useTheme } from '../../src/design-system/theme/useTheme'
+import { haptics } from '../../src/design-system/tokens/haptics'
+import { useUnreadCount } from '../../src/api/hooks/useNotifications'
+
+const TABS = [
+  { name: 'index', label: 'Explorer', Icon: Home },
+  { name: 'search', label: 'Rechercher', Icon: Search },
+  { name: 'bookings', label: 'Reservations', Icon: Calendar },
+  { name: 'messages', label: 'Messages', Icon: MessageCircle },
+  { name: 'profile', label: 'Profil', Icon: User },
+] as const
+
+const TAB_HEIGHT = Platform.OS === 'ios' ? 88 : 64
+
+interface TabBarProps {
+  state: { index: number; routes: { name: string }[] }
+  navigation: {
+    emit: (e: { type: string; target: string; canPreventDefault: boolean }) => { defaultPrevented: boolean }
+    navigate: (name: string) => void
+  }
+}
+
+function BadgeDot({ count }: { count: number }) {
+  const { colors } = useTheme()
+  if (count <= 0) return null
+  return (
+    <View style={[styles.badge, { backgroundColor: colors.danger }]}>
+      <Text style={[styles.badgeText, { color: colors.textInverse }]}>
+        {count > 99 ? '99+' : String(count)}
+      </Text>
+    </View>
+  )
+}
+
+function CustomTabBar({ state, navigation }: TabBarProps) {
+  const { colors, isDark } = useTheme()
+  const insets = useSafeAreaInsets()
+  const unread = useUnreadCount().data ?? 0
+
+  function handlePress(index: number, name: string) {
+    const event = navigation.emit({
+      type: 'tabPress',
+      target: state.routes[index].name,
+      canPreventDefault: true,
+    })
+    if (!event.defaultPrevented) {
+      haptics.selection()
+      navigation.navigate(name)
+    }
+  }
+
+  return (
+    <View style={[styles.outer, { height: TAB_HEIGHT + insets.bottom, paddingBottom: insets.bottom }]}>
+      {Platform.OS === 'ios' ? (
+        <BlurView intensity={80} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
+      ) : (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.surface }]} />
+      )}
+      <View style={[styles.borderTop, { borderTopColor: colors.border }]} />
+      <View style={styles.row}>
+        {TABS.map((tab, index) => {
+          const isFocused = state.index === index
+          const { Icon, label, name } = tab
+          const showBadge = name === 'messages' && unread > 0
+          return (
+            <TouchableOpacity
+              key={name}
+              style={styles.tab}
+              onPress={() => handlePress(index, name)}
+              activeOpacity={0.7}
+              accessibilityLabel={label}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: isFocused }}
+            >
+              <View style={styles.iconWrap}>
+                <Icon
+                  size={22}
+                  color={isFocused ? colors.primary : colors.textSecondary}
+                  fill={isFocused ? colors.primary : 'transparent'}
+                  strokeWidth={isFocused ? 2.5 : 1.8}
+                />
+                {showBadge && <BadgeDot count={unread} />}
+              </View>
+              <Text style={[styles.tabLabel, { color: isFocused ? colors.primary : colors.textSecondary }]}>
+                {label}
+              </Text>
+            </TouchableOpacity>
+          )
+        })}
+      </View>
+    </View>
+  )
+}
 
 export default function TabsLayout() {
   return (
     <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: '#9CA3AF',
-        tabBarStyle: styles.tabBar,
-        tabBarLabelStyle: styles.tabLabel,
-        tabBarIconStyle: styles.tabIcon,
-        headerShown: false,
-      }}
+      screenOptions={{ headerShown: false }}
+      tabBar={(props) => (
+        <CustomTabBar
+          state={props.state as TabBarProps['state']}
+          navigation={props.navigation as TabBarProps['navigation']}
+        />
+      )}
     >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Explorer',
-          tabBarIcon: ({ color, focused }) => (
-            <Home
-              color={color}
-              size={22}
-              fill={focused ? COLORS.primary : 'transparent'}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="search"
-        options={{
-          title: 'Rechercher',
-          tabBarIcon: ({ color }) => <Search color={color} size={22} />,
-        }}
-      />
-      <Tabs.Screen
-        name="bookings"
-        options={{
-          title: 'Réservations',
-          tabBarIcon: ({ color, focused }) => (
-            <Calendar
-              color={color}
-              size={22}
-              fill={focused ? COLORS.primary : 'transparent'}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="host"
-        options={{
-          href: null, // hide host tab — moved to profile menu
-        }}
-      />
-      <Tabs.Screen
-        name="messages"
-        options={{
-          title: 'Messages',
-          tabBarIcon: ({ color, focused }) => (
-            <MessageCircle
-              color={color}
-              size={22}
-              fill={focused ? COLORS.primary : 'transparent'}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Profil',
-          tabBarIcon: ({ color, focused }) => (
-            <User
-              color={color}
-              size={22}
-              fill={focused ? COLORS.primary : 'transparent'}
-            />
-          ),
-        }}
-      />
+      <Tabs.Screen name="index" />
+      <Tabs.Screen name="search" />
+      <Tabs.Screen name="bookings" />
+      <Tabs.Screen name="host" options={{ href: null }} />
+      <Tabs.Screen name="messages" />
+      <Tabs.Screen name="profile" />
     </Tabs>
   )
 }
 
 const styles = StyleSheet.create({
-  tabBar: {
-    backgroundColor: COLORS.white,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    height: Platform.OS === 'ios' ? 88 : 64,
-    paddingBottom: Platform.OS === 'ios' ? 28 : 8,
-    paddingTop: 8,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.06,
-        shadowRadius: 8,
-      },
-      android: { elevation: 8 },
-    }),
+  outer: { position: 'absolute', bottom: 0, left: 0, right: 0, overflow: 'hidden' },
+  borderTop: { position: 'absolute', top: 0, left: 0, right: 0, borderTopWidth: StyleSheet.hairlineWidth },
+  row: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingTop: 8 },
+  tab: { flex: 1, alignItems: 'center', gap: 2 },
+  iconWrap: { position: 'relative' },
+  badge: {
+    position: 'absolute', top: -4, right: -6, minWidth: 16, height: 16,
+    borderRadius: 8, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3,
   },
-  tabLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  tabIcon: {
-    marginBottom: 0,
-  },
+  badgeText: { fontSize: 9, fontWeight: '700' },
+  tabLabel: { fontSize: 10, fontWeight: '600' },
 })

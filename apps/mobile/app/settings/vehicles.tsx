@@ -1,821 +1,324 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useState } from 'react'
 import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  StyleSheet,
-  TextInput,
-  Alert,
-  ScrollView,
-  Switch,
-  Platform,
-  ActivityIndicator,
-  Modal,
+  ActivityIndicator, Alert, FlatList, Modal, ScrollView,
+  StyleSheet, Switch, TouchableOpacity, View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
-import { ArrowLeft, Plus, Car, Star, Trash2, Zap, X, ChevronDown } from 'lucide-react-native'
-import { supabase } from '../../lib/supabase'
-import { COLORS } from '../../lib/constants'
+import { Plus, Car, Star, Trash2, Zap, X, ChevronDown } from 'lucide-react-native'
+import { ScreenContainer } from '../../src/design-system/components/layout'
+import { AppText } from '../../src/design-system/components/atoms/AppText'
+import { AppInput } from '../../src/design-system/components/atoms/AppInput'
+import { AppButton } from '../../src/design-system/components/atoms/AppButton'
+import { EmptyState } from '../../src/design-system/components/molecules/EmptyState'
+import { VehicleCard } from '../../src/design-system/components/molecules/VehicleCard'
+import { useTheme } from '../../src/design-system/theme/useTheme'
+import { spacing } from '../../src/design-system/tokens/spacing'
+import { radii } from '../../src/design-system/tokens/radii'
+import { useVehicles, useCreateVehicle, useDeleteVehicle, useUpdateVehicle } from '../../src/api/hooks/useVehicles'
 
-const VEHICLE_TYPES = [
-  { key: 'sedan', label: 'Berline' },
-  { key: 'suv', label: 'SUV' },
-  { key: 'coupe', label: 'Coupe' },
-  { key: 'hatchback', label: 'Compacte' },
-  { key: 'van', label: 'Monospace' },
-  { key: 'truck', label: 'Pick-up' },
+type VehicleType = 'car' | 'truck' | 'motorcycle' | 'other'
+type SizeCategory = 'compact' | 'standard' | 'large' | 'xl'
+
+const VEHICLE_TYPES: { key: VehicleType; label: string }[] = [
+  { key: 'car', label: 'Voiture' },
+  { key: 'truck', label: 'Camionnette' },
   { key: 'motorcycle', label: 'Moto' },
   { key: 'other', label: 'Autre' },
 ]
 
-interface Vehicle {
-  id: string
-  license_plate: string
-  brand: string
-  model: string
-  color: string | null
-  type: string
-  height_cm: number | null
-  is_electric: boolean
-  is_default: boolean
-}
-
 interface AddForm {
-  license_plate: string
-  brand: string
-  model: string
-  color: string
-  type: string
-  height_cm: string
-  is_electric: boolean
-  is_default: boolean
+  license_plate: string; brand: string; model: string; color: string
+  type: VehicleType; width: string; length: string; height: string
+  size_category: SizeCategory; is_electric: boolean; is_default: boolean
 }
-
 const EMPTY_FORM: AddForm = {
-  license_plate: '',
-  brand: '',
-  model: '',
-  color: '',
-  type: 'sedan',
-  height_cm: '',
-  is_electric: false,
-  is_default: false,
+  license_plate: '', brand: '', model: '', color: '',
+  type: 'car', width: '', length: '', height: '',
+  size_category: 'standard', is_electric: false, is_default: false,
 }
 
 export default function VehiclesScreen() {
-  const [vehicles, setVehicles] = useState<Vehicle[]>([])
-  const [dbUserId, setDbUserId] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+  const { colors } = useTheme()
+  const { data: vehicles = [], isLoading, refetch, isRefetching } = useVehicles()
+  const createMutation = useCreateVehicle()
+  const deleteMutation = useDeleteVehicle()
+  const updateMutation = useUpdateVehicle()
   const [showAdd, setShowAdd] = useState(false)
   const [showTypePicker, setShowTypePicker] = useState(false)
   const [form, setForm] = useState<AddForm>(EMPTY_FORM)
-  const [saving, setSaving] = useState(false)
 
-  const loadVehicles = useCallback(async () => {
-    setLoading(true)
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { setLoading(false); return }
+  function updateForm(fields: Partial<AddForm>) { setForm((p) => ({ ...p, ...fields })) }
 
-      const { data: dbUser } = await supabase
-        .from('users')
-        .select('id')
-        .eq('supabase_id', user.id)
-        .single()
-
-      if (!dbUser) { setLoading(false); return }
-
-      setDbUserId(dbUser.id)
-
-      const { data } = await supabase
-        .from('vehicles')
-        .select('*')
-        .eq('user_id', dbUser.id)
-        .order('is_default', { ascending: false })
-        .order('created_at', { ascending: false })
-
-      setVehicles(data ?? [])
-    } catch {
-      // Silently ignore
-    }
-    setLoading(false)
-  }, [])
-
-  useEffect(() => {
-    loadVehicles()
-  }, [loadVehicles])
-
-  async function handleDelete(vehicleId: string) {
-    Alert.alert(
-      'Supprimer le vehicule',
-      'Voulez-vous vraiment supprimer ce vehicule ?',
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Supprimer',
-          style: 'destructive',
-          onPress: async () => {
-            const { error } = await supabase.from('vehicles').delete().eq('id', vehicleId)
-            if (error) {
-              Alert.alert('Erreur', error.message)
-            } else {
-              setVehicles((prev) => prev.filter((v) => v.id !== vehicleId))
-            }
-          },
-        },
-      ]
-    )
-  }
-
-  async function handleSetDefault(vehicleId: string) {
-    if (!dbUserId) return
-    // Unset all defaults for this user first
-    await supabase.from('vehicles').update({ is_default: false }).eq('user_id', dbUserId)
-    await supabase.from('vehicles').update({ is_default: true }).eq('id', vehicleId)
-    setVehicles((prev) =>
-      prev.map((v) => ({ ...v, is_default: v.id === vehicleId }))
-    )
-  }
-
-  async function handleAddVehicle() {
-    if (!dbUserId) return
+  async function handleAdd() {
     const plate = form.license_plate.trim().toUpperCase()
-    const brand = form.brand.trim()
-    const model = form.model.trim()
-
-    if (!plate || !brand || !model) {
-      Alert.alert('Erreur', 'La plaque, la marque et le modele sont obligatoires.')
+    if (!plate || !form.brand.trim()) {
+      Alert.alert('Erreur', 'La plaque et la marque sont obligatoires.')
       return
     }
-
-    setSaving(true)
-
-    // If setting as default, unset others
-    if (form.is_default) {
-      await supabase.from('vehicles').update({ is_default: false }).eq('user_id', dbUserId)
-    }
-
-    const { data, error } = await supabase
-      .from('vehicles')
-      .insert({
-        user_id: dbUserId,
+    try {
+      await createMutation.mutateAsync({
         license_plate: plate,
-        brand,
-        model,
-        color: form.color.trim() || null,
-        type: form.type,
-        height_cm: form.height_cm ? parseInt(form.height_cm, 10) : null,
+        brand: form.brand.trim() || undefined,
+        model: form.model.trim() || undefined,
+        color: form.color.trim() || undefined,
+        type: form.type as any,
+        width: form.width ? Number(form.width) : undefined,
+        length: form.length ? Number(form.length) : undefined,
+        height: form.height ? Number(form.height) : undefined,
+        size_category: form.size_category as any,
         is_electric: form.is_electric,
         is_default: form.is_default,
       })
-      .select()
-      .single()
-
-    setSaving(false)
-
-    if (error) {
-      Alert.alert('Erreur', error.message)
-    } else if (data) {
-      setVehicles((prev) => {
-        const updated = form.is_default ? prev.map((v) => ({ ...v, is_default: false })) : prev
-        return [data, ...updated]
-      })
       setShowAdd(false)
       setForm(EMPTY_FORM)
+    } catch (e) {
+      Alert.alert('Erreur', e instanceof Error ? e.message : 'Impossible d ajouter le vehicule.')
     }
   }
 
-  const typeLabel = VEHICLE_TYPES.find((t) => t.key === form.type)?.label ?? 'Berline'
+  async function handleDelete(id: string) {
+    Alert.alert('Supprimer', 'Voulez-vous vraiment supprimer ce vehicule ?', [
+      { text: 'Annuler', style: 'cancel' },
+      { text: 'Supprimer', style: 'destructive', onPress: async () => {
+        try { await deleteMutation.mutateAsync(id) }
+        catch (e) { Alert.alert('Erreur', e instanceof Error ? e.message : 'Impossible.') }
+      }},
+    ])
+  }
+
+  async function handleSetDefault(id: string) {
+    try { await updateMutation.mutateAsync({ id, is_default: true }) }
+    catch (e) { Alert.alert('Erreur', e instanceof Error ? e.message : 'Impossible.') }
+  }
+
+  const typeLabel = VEHICLE_TYPES.find((t) => t.key === form.type)?.label ?? 'Voiture'
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.7}>
-          <ArrowLeft color={COLORS.dark} size={20} />
+    <ScreenContainer edges={['top']}>
+      <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+        <TouchableOpacity onPress={() => router.back()} accessibilityLabel="Fermer">
+          <AppText variant="callout" color={colors.primary}>Fermer</AppText>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Mes vehicules</Text>
+        <AppText variant="headline" color={colors.text}>Mes vehicules</AppText>
         <TouchableOpacity
-          style={styles.addIconBtn}
+          style={[styles.addIconBtn, { backgroundColor: colors.primaryMuted }]}
           onPress={() => setShowAdd(true)}
-          activeOpacity={0.7}
+          accessibilityLabel="Ajouter un vehicule"
         >
-          <Plus color={COLORS.primary} size={22} />
+          <Plus size={20} color={colors.primary} />
         </TouchableOpacity>
       </View>
 
-      {loading ? (
-        <View style={styles.loadingWrap}>
-          <ActivityIndicator color={COLORS.primary} size="large" />
-        </View>
+      {isLoading ? (
+        <ActivityIndicator color={colors.primary} style={{ flex: 1 }} />
       ) : (
         <FlatList
           data={vehicles}
           keyExtractor={(v) => v.id}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={styles.list}
+          onRefresh={refetch}
+          refreshing={isRefetching}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
-            <View style={styles.empty}>
-              <View style={styles.emptyIconCircle}>
-                <Car color={COLORS.gray300} size={36} />
-              </View>
-              <Text style={styles.emptyTitle}>Aucun vehicule</Text>
-              <Text style={styles.emptySubtitle}>
-                Ajoutez votre vehicule pour faciliter vos reservations
-              </Text>
-            </View>
+            <EmptyState
+              icon={Car}
+              title="Aucun vehicule"
+              subtitle="Ajoutez votre vehicule pour faciliter vos reservations"
+              actionLabel="Ajouter un vehicule"
+              onAction={() => setShowAdd(true)}
+            />
           }
-          renderItem={({ item }) => {
-            const typeObj = VEHICLE_TYPES.find((t) => t.key === item.type)
-            return (
-              <View style={styles.vehicleCard}>
-                <View style={styles.vehicleCardLeft}>
-                  <View style={styles.vehicleIconWrap}>
-                    <Car color={COLORS.primary} size={22} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <View style={styles.vehicleNameRow}>
-                      <Text style={styles.vehicleName}>{item.brand} {item.model}</Text>
-                      {item.is_default && (
-                        <View style={styles.defaultBadge}>
-                          <Star color={COLORS.warning} size={11} fill={COLORS.warning} />
-                          <Text style={styles.defaultBadgeText}>Par defaut</Text>
-                        </View>
-                      )}
-                    </View>
-                    <Text style={styles.vehiclePlate}>{item.license_plate}</Text>
-                    <View style={styles.vehicleMeta}>
-                      {typeObj && (
-                        <View style={styles.typeBadge}>
-                          <Text style={styles.typeBadgeText}>{typeObj.label}</Text>
-                        </View>
-                      )}
-                      {item.is_electric && (
-                        <View style={[styles.typeBadge, { backgroundColor: COLORS.successLight }]}>
-                          <Zap color={COLORS.success} size={10} fill={COLORS.success} />
-                          <Text style={[styles.typeBadgeText, { color: COLORS.success }]}>Electrique</Text>
-                        </View>
-                      )}
-                      {item.color ? (
-                        <Text style={styles.vehicleColor}>{item.color}</Text>
-                      ) : null}
-                    </View>
-                  </View>
-                </View>
-                <View style={styles.vehicleActions}>
-                  {!item.is_default && (
-                    <TouchableOpacity
-                      style={styles.actionBtn}
-                      onPress={() => handleSetDefault(item.id)}
-                      activeOpacity={0.7}
-                    >
-                      <Star color={COLORS.gray400} size={18} />
-                    </TouchableOpacity>
-                  )}
-                  <TouchableOpacity
-                    style={[styles.actionBtn, styles.deleteBtn]}
-                    onPress={() => handleDelete(item.id)}
-                    activeOpacity={0.7}
-                  >
-                    <Trash2 color={COLORS.danger} size={18} />
-                  </TouchableOpacity>
-                </View>
+          renderItem={({ item }) => (
+            <View style={styles.vehicleRow}>
+              <View style={{ flex: 1 }}>
+                <VehicleCard
+                  vehicle={{
+                    id: item.id,
+                    plate: item.license_plate,
+                    brand: item.brand ?? undefined,
+                    model: item.model ?? undefined,
+                    type: item.type as any,
+                    width: item.width != null ? parseFloat(item.width) : undefined,
+                    length: item.length != null ? parseFloat(item.length) : undefined,
+                    height: item.height != null ? parseFloat(item.height) : undefined,
+                  }}
+                />
               </View>
-            )
-          }}
+              <View style={styles.vehicleActions}>
+                {!item.is_default && (
+                  <TouchableOpacity
+                    style={[styles.actionBtn, { backgroundColor: colors.borderLight }]}
+                    onPress={() => handleSetDefault(item.id)}
+                    accessibilityLabel="Definir comme vehicule par defaut"
+                  >
+                    <Star size={18} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={[styles.actionBtn, { backgroundColor: colors.dangerMuted }]}
+                  onPress={() => handleDelete(item.id)}
+                  accessibilityLabel="Supprimer ce vehicule"
+                >
+                  <Trash2 size={18} color={colors.danger} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
           ListFooterComponent={
-            <TouchableOpacity
-              style={styles.addBtn}
-              onPress={() => setShowAdd(true)}
-              activeOpacity={0.8}
-            >
-              <Plus color={COLORS.primary} size={20} />
-              <Text style={styles.addBtnText}>Ajouter un vehicule</Text>
-            </TouchableOpacity>
+            vehicles.length > 0 ? (
+              <TouchableOpacity
+                style={[styles.addBtn, { borderColor: colors.primary }]}
+                onPress={() => setShowAdd(true)}
+                activeOpacity={0.8}
+                accessibilityLabel="Ajouter un vehicule"
+              >
+                <Plus size={18} color={colors.primary} />
+                <AppText variant="callout" color={colors.primary}>Ajouter un vehicule</AppText>
+              </TouchableOpacity>
+            ) : null
           }
         />
       )}
 
-      {/* Add Vehicle Modal */}
       <Modal visible={showAdd} animationType="slide" presentationStyle="pageSheet">
-        <SafeAreaView style={styles.modalContainer} edges={['top']}>
-          {/* Modal header */}
-          <View style={styles.modalHeader}>
+        <SafeAreaView style={[styles.modal, { backgroundColor: colors.background }]} edges={['top']}>
+          <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
             <TouchableOpacity
-              style={styles.backBtn}
+              style={[styles.actionBtn, { backgroundColor: colors.borderLight }]}
               onPress={() => { setShowAdd(false); setForm(EMPTY_FORM) }}
-              activeOpacity={0.7}
+              accessibilityLabel="Fermer"
             >
-              <X color={COLORS.dark} size={20} />
+              <X size={20} color={colors.text} />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Ajouter un vehicule</Text>
+            <AppText variant="headline" color={colors.text}>Ajouter un vehicule</AppText>
             <View style={{ width: 40 }} />
           </View>
 
-          <ScrollView
-            contentContainerStyle={styles.formContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            {/* License plate */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Plaque d'immatriculation *</Text>
-              <TextInput
-                style={styles.input}
-                value={form.license_plate}
-                onChangeText={(v) => setForm((f) => ({ ...f, license_plate: v }))}
-                placeholder="AB-123-CD"
-                placeholderTextColor={COLORS.gray400}
-                autoCapitalize="characters"
-              />
-            </View>
-
-            {/* Brand + Model */}
+          <ScrollView contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            <AppInput label="Plaque d immatriculation *" value={form.license_plate}
+              onChangeText={(v) => updateForm({ license_plate: v })} placeholder="AB-123-CD"
+              autoCapitalize="characters" accessibilityLabel="Plaque d immatriculation" />
             <View style={styles.row}>
-              <View style={[styles.inputGroup, { flex: 1 }]}>
-                <Text style={styles.inputLabel}>Marque *</Text>
-                <TextInput
-                  style={styles.input}
-                  value={form.brand}
-                  onChangeText={(v) => setForm((f) => ({ ...f, brand: v }))}
-                  placeholder="Renault"
-                  placeholderTextColor={COLORS.gray400}
-                />
+              <View style={{ flex: 1 }}>
+                <AppInput label="Marque *" value={form.brand} onChangeText={(v) => updateForm({ brand: v })} placeholder="Renault" accessibilityLabel="Marque" />
               </View>
-              <View style={[styles.inputGroup, { flex: 1 }]}>
-                <Text style={styles.inputLabel}>Modele *</Text>
-                <TextInput
-                  style={styles.input}
-                  value={form.model}
-                  onChangeText={(v) => setForm((f) => ({ ...f, model: v }))}
-                  placeholder="Clio"
-                  placeholderTextColor={COLORS.gray400}
-                />
+              <View style={{ flex: 1 }}>
+                <AppInput label="Modele" value={form.model} onChangeText={(v) => updateForm({ model: v })} placeholder="Clio" accessibilityLabel="Modele" />
               </View>
             </View>
+            <AppInput label="Couleur" value={form.color} onChangeText={(v) => updateForm({ color: v })} placeholder="Blanc, Noir..." accessibilityLabel="Couleur" />
 
-            {/* Color */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Couleur</Text>
-              <TextInput
-                style={styles.input}
-                value={form.color}
-                onChangeText={(v) => setForm((f) => ({ ...f, color: v }))}
-                placeholder="Blanc, Noir, Rouge..."
-                placeholderTextColor={COLORS.gray400}
-              />
-            </View>
-
-            {/* Type picker */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Type de vehicule</Text>
+            <View>
+              <AppText variant="caption1" color={colors.textSecondary} style={styles.inputLabel}>Type de vehicule</AppText>
               <TouchableOpacity
-                style={[styles.input, styles.pickerBtn]}
-                onPress={() => setShowTypePicker(true)}
-                activeOpacity={0.7}
+                style={[styles.pickerBtn, { borderColor: colors.border, backgroundColor: colors.surface }]}
+                onPress={() => setShowTypePicker(true)} accessibilityLabel="Type de vehicule"
               >
-                <Text style={{ fontSize: 15, color: COLORS.dark }}>{typeLabel}</Text>
-                <ChevronDown color={COLORS.gray400} size={18} />
+                <AppText variant="callout" color={colors.text}>{typeLabel}</AppText>
+                <ChevronDown size={18} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
 
-            {/* Height */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Hauteur du vehicule (cm)</Text>
-              <TextInput
-                style={styles.input}
-                value={form.height_cm}
-                onChangeText={(v) => setForm((f) => ({ ...f, height_cm: v }))}
-                placeholder="150"
-                placeholderTextColor={COLORS.gray400}
-                keyboardType="numeric"
-              />
-            </View>
-
-            {/* Toggles */}
-            <View style={styles.toggleCard}>
-              <View style={styles.toggleRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.toggleLabel}>Vehicule electrique</Text>
-                  <Text style={styles.toggleDesc}>Affiche les places avec recharge EV</Text>
-                </View>
-                <Switch
-                  value={form.is_electric}
-                  onValueChange={(v) => setForm((f) => ({ ...f, is_electric: v }))}
-                  trackColor={{ false: COLORS.gray300, true: COLORS.success }}
-                  thumbColor={COLORS.white}
-                />
+            <View style={styles.row}>
+              <View style={{ flex: 1 }}>
+                <AppInput label="Largeur (m)" value={form.width} onChangeText={(v) => updateForm({ width: v })} placeholder="1.8" keyboardType="decimal-pad" accessibilityLabel="Largeur" />
               </View>
-              <View style={styles.divider} />
-              <View style={styles.toggleRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.toggleLabel}>Vehicule par defaut</Text>
-                  <Text style={styles.toggleDesc}>Utilise automatiquement pour les reservations</Text>
-                </View>
-                <Switch
-                  value={form.is_default}
-                  onValueChange={(v) => setForm((f) => ({ ...f, is_default: v }))}
-                  trackColor={{ false: COLORS.gray300, true: COLORS.primary }}
-                  thumbColor={COLORS.white}
-                />
+              <View style={{ flex: 1 }}>
+                <AppInput label="Longueur (m)" value={form.length} onChangeText={(v) => updateForm({ length: v })} placeholder="4.5" keyboardType="decimal-pad" accessibilityLabel="Longueur" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <AppInput label="Hauteur (m)" value={form.height} onChangeText={(v) => updateForm({ height: v })} placeholder="1.5" keyboardType="decimal-pad" accessibilityLabel="Hauteur" />
               </View>
             </View>
 
-            {/* Save */}
-            <TouchableOpacity
-              style={[styles.saveBtn, saving && { opacity: 0.6 }]}
-              onPress={handleAddVehicle}
-              disabled={saving}
-              activeOpacity={0.7}
-            >
-              {saving
-                ? <ActivityIndicator color={COLORS.white} size="small" />
-                : <Text style={styles.saveBtnText}>Ajouter le vehicule</Text>
-              }
-            </TouchableOpacity>
+            <View style={[styles.toggleCard, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}>
+              <View style={styles.toggleRow}>
+                <View style={{ flex: 1 }}>
+                  <AppText variant="callout" color={colors.text}>Vehicule electrique</AppText>
+                  <AppText variant="caption1" color={colors.textSecondary}>Affiche les places avec recharge EV</AppText>
+                </View>
+                <Switch value={form.is_electric} onValueChange={(v) => updateForm({ is_electric: v })}
+                  trackColor={{ false: colors.border, true: colors.success }} thumbColor={colors.surface} />
+              </View>
+              <View style={[styles.toggleDivider, { backgroundColor: colors.borderLight }]} />
+              <View style={styles.toggleRow}>
+                <View style={{ flex: 1 }}>
+                  <AppText variant="callout" color={colors.text}>Vehicule par defaut</AppText>
+                  <AppText variant="caption1" color={colors.textSecondary}>Utilise automatiquement pour les reservations</AppText>
+                </View>
+                <Switch value={form.is_default} onValueChange={(v) => updateForm({ is_default: v })}
+                  trackColor={{ false: colors.border, true: colors.primary }} thumbColor={colors.surface} />
+              </View>
+            </View>
+
+            <AppButton title="Ajouter le vehicule" onPress={handleAdd} variant="primary" size="lg" loading={createMutation.isPending} />
           </ScrollView>
         </SafeAreaView>
       </Modal>
 
-      {/* Type picker modal */}
-      <Modal visible={showTypePicker} animationType="slide" presentationStyle="pageSheet" transparent>
-        <View style={styles.pickerOverlay}>
-          <View style={styles.pickerSheet}>
-            <View style={styles.pickerHeader}>
-              <Text style={styles.pickerTitle}>Type de vehicule</Text>
-              <TouchableOpacity onPress={() => setShowTypePicker(false)}>
-                <X color={COLORS.dark} size={20} />
+      <Modal visible={showTypePicker} animationType="slide" transparent>
+        <TouchableOpacity style={styles.pickerOverlay} onPress={() => setShowTypePicker(false)} activeOpacity={1}>
+          <View style={[styles.pickerSheet, { backgroundColor: colors.surface }]}>
+            <View style={[styles.pickerHeader, { borderBottomColor: colors.border }]}>
+              <AppText variant="headline" color={colors.text}>Type de vehicule</AppText>
+              <TouchableOpacity onPress={() => setShowTypePicker(false)} accessibilityLabel="Fermer">
+                <X size={20} color={colors.text} />
               </TouchableOpacity>
             </View>
             {VEHICLE_TYPES.map((t) => (
               <TouchableOpacity
                 key={t.key}
-                style={[styles.pickerOption, form.type === t.key && styles.pickerOptionActive]}
-                onPress={() => { setForm((f) => ({ ...f, type: t.key })); setShowTypePicker(false) }}
-                activeOpacity={0.7}
+                style={[styles.pickerOption, { borderBottomColor: colors.borderLight }, form.type === t.key && { backgroundColor: colors.primaryMuted }]}
+                onPress={() => { updateForm({ type: t.key }); setShowTypePicker(false) }}
+                accessibilityLabel={t.label}
               >
-                <Text style={[styles.pickerOptionText, form.type === t.key && { color: COLORS.primary, fontWeight: '700' }]}>
-                  {t.label}
-                </Text>
-                {form.type === t.key && (
-                  <View style={styles.pickerCheckDot} />
-                )}
+                <AppText variant="callout" color={form.type === t.key ? colors.primary : colors.text}>{t.label}</AppText>
+                {form.type === t.key && <View style={[styles.checkDot, { backgroundColor: colors.primary }]} />}
               </TouchableOpacity>
             ))}
           </View>
-        </View>
+        </TouchableOpacity>
       </Modal>
-    </SafeAreaView>
+    </ScreenContainer>
   )
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    backgroundColor: COLORS.white,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray100,
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4 },
-      android: { elevation: 2 },
-    }),
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: spacing[4], paddingVertical: spacing[3],
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.gray100,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: 17,
-    fontWeight: '700',
-    color: COLORS.dark,
-  },
-  addIconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loadingWrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  listContent: {
-    padding: 16,
-    gap: 10,
-    flexGrow: 1,
-  },
-
-  // Vehicle cards
-  vehicleCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.white,
-    borderRadius: 16,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: COLORS.gray100,
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8 },
-      android: { elevation: 2 },
-    }),
-  },
-  vehicleCardLeft: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  vehicleIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: COLORS.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  vehicleNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexWrap: 'wrap',
-  },
-  vehicleName: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: COLORS.dark,
-  },
-  defaultBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: COLORS.warningLight,
-    borderRadius: 8,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  defaultBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: COLORS.warning,
-  },
-  vehiclePlate: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.gray500,
-    marginTop: 2,
-    letterSpacing: 0.5,
-  },
-  vehicleMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 6,
-    flexWrap: 'wrap',
-  },
-  typeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: COLORS.gray100,
-    borderRadius: 8,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  typeBadgeText: {
-    fontSize: 11,
-    color: COLORS.gray500,
-    fontWeight: '500',
-  },
-  vehicleColor: {
-    fontSize: 11,
-    color: COLORS.gray400,
-  },
-  vehicleActions: {
-    flexDirection: 'row',
-    gap: 6,
-    marginLeft: 8,
-  },
-  actionBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: COLORS.gray100,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  deleteBtn: {
-    backgroundColor: COLORS.dangerLight,
-  },
-
-  // Add button
+  addIconBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  list: { padding: spacing[4], gap: spacing[3], flexGrow: 1 },
+  vehicleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
+  vehicleActions: { flexDirection: 'row', gap: spacing[2] },
+  actionBtn: { width: 36, height: 36, borderRadius: radii.sm, alignItems: 'center', justifyContent: 'center' },
   addBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    borderWidth: 1.5,
-    borderColor: COLORS.primary,
-    borderStyle: 'dashed',
-    borderRadius: 16,
-    paddingVertical: 16,
-    marginTop: 6,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2],
+    borderWidth: 1.5, borderStyle: 'dashed', borderRadius: radii.lg, paddingVertical: spacing[4], marginTop: spacing[2],
   },
-  addBtnText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: COLORS.primary,
-  },
-
-  // Empty
-  empty: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 60,
-    gap: 10,
-  },
-  emptyIconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: COLORS.gray100,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: COLORS.dark,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    color: COLORS.gray400,
-    textAlign: 'center',
-    lineHeight: 20,
-    paddingHorizontal: 32,
-  },
-
-  // Modal
-  modalContainer: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    backgroundColor: COLORS.white,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray100,
-  },
-  formContent: {
-    padding: 16,
-    gap: 14,
-    paddingBottom: 48,
-  },
-  row: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  inputGroup: {
-    gap: 6,
-  },
-  inputLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.gray500,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  input: {
-    borderWidth: 1.5,
-    borderColor: COLORS.gray200,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: COLORS.dark,
-    backgroundColor: COLORS.gray50,
-  },
+  modal: { flex: 1 },
+  formContent: { padding: spacing[4], gap: spacing[3], paddingBottom: spacing[12] },
+  row: { flexDirection: 'row', gap: spacing[3] },
+  inputLabel: { marginBottom: spacing[1] },
   pickerBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    borderWidth: 1.5, borderRadius: radii.md, paddingHorizontal: spacing[3], height: 48,
   },
-  toggleCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 16,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: COLORS.gray100,
-  },
-  toggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 12,
-  },
-  toggleLabel: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: COLORS.dark,
-  },
-  toggleDesc: {
-    fontSize: 12,
-    color: COLORS.gray400,
-    marginTop: 1,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: COLORS.gray100,
-    marginHorizontal: 16,
-  },
-  saveBtn: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 14,
-    paddingVertical: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 4,
-  },
-  saveBtnText: {
-    color: COLORS.white,
-    fontWeight: '700',
-    fontSize: 16,
-  },
-
-  // Type picker
-  pickerOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'flex-end',
-  },
-  pickerSheet: {
-    backgroundColor: COLORS.white,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingBottom: 34,
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.1, shadowRadius: 12 },
-      android: { elevation: 16 },
-    }),
-  },
+  toggleCard: { borderRadius: radii.lg, borderWidth: 1, overflow: 'hidden' },
+  toggleRow: { flexDirection: 'row', alignItems: 'center', padding: spacing[4], gap: spacing[3] },
+  toggleDivider: { height: 1, marginHorizontal: spacing[4] },
+  pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  pickerSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 34 },
   pickerHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray100,
-  },
-  pickerTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: COLORS.dark,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: spacing[5], paddingVertical: spacing[4], borderBottomWidth: StyleSheet.hairlineWidth,
   },
   pickerOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray100,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: spacing[5], paddingVertical: spacing[4], borderBottomWidth: 1,
   },
-  pickerOptionActive: {
-    backgroundColor: COLORS.primaryLight,
-  },
-  pickerOptionText: {
-    fontSize: 15,
-    color: COLORS.dark,
-    fontWeight: '500',
-  },
-  pickerCheckDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: COLORS.primary,
-  },
+  checkDot: { width: 8, height: 8, borderRadius: 4 },
 })

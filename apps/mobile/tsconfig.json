@@ -3,7 +3,8 @@
   "compilerOptions": {
     "jsx": "react-native",
     "lib": [
-      "ES2022"
+      "ES2022",
+      "DOM"
     ],
     "paths": {
       "@flashpark/api": [
@@ -16,6 +17,7 @@
   },
   "include": [
     "app",
+    "src",
     "*.ts",
     "*.tsx",
     ".expo/types/**/*.ts",
