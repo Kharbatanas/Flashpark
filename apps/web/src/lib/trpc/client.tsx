@@ -4,7 +4,6 @@ import { useState } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { httpBatchLink, loggerLink } from '@trpc/client'
 import { createTRPCReact } from '@trpc/react-query'
-import superjson from 'superjson'
 import type { AppRouter } from '@flashpark/api'
 
 export const api = createTRPCReact<AppRouter>()
@@ -51,7 +50,6 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
         }),
         httpBatchLink({
           url: `${getBaseUrl()}/api/trpc`,
-          transformer: superjson,
           headers() {
             const token = getAuthToken()
             return token ? { Authorization: `Bearer ${token}` } : {}

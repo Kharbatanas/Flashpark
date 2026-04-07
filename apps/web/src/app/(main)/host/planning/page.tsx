@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { api } from '../../../../lib/trpc/client'
@@ -30,7 +30,7 @@ function formatDT(d: string | Date) {
   }).format(new Date(d))
 }
 
-export default function PlanningPage() {
+function PlanningPageInner() {
   useRequireHost()
   const searchParams = useSearchParams()
   const preselectedSpot = searchParams.get('spot')
@@ -185,5 +185,13 @@ export default function PlanningPage() {
         )}
       </div>
     </div>
+  )
+}
+
+export default function PlanningPage() {
+  return (
+    <Suspense>
+      <PlanningPageInner />
+    </Suspense>
   )
 }

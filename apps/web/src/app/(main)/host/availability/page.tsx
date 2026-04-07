@@ -248,9 +248,10 @@ export default function AvailabilityPage() {
   }
 
   const serializedSlots = (slots ?? []).map((s) => ({
-    ...s,
-    startTime: s.startTime instanceof Date ? s.startTime.toISOString() : s.startTime,
-    endTime: s.endTime instanceof Date ? s.endTime.toISOString() : s.endTime,
+    id: s.id as string,
+    isAvailable: s.isAvailable as boolean,
+    startTime: typeof s.startTime === 'object' && s.startTime !== null ? (s.startTime as Date).toISOString() : String(s.startTime),
+    endTime: typeof s.endTime === 'object' && s.endTime !== null ? (s.endTime as Date).toISOString() : String(s.endTime),
   }))
 
   return (

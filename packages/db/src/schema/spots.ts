@@ -10,6 +10,9 @@ import {
   jsonb,
 } from 'drizzle-orm/pg-core'
 import { users } from './users'
+import { vehicleSizeCategoryEnum, cancellationPolicyEnum } from './enums'
+
+export { vehicleSizeCategoryEnum, cancellationPolicyEnum }
 
 export const spotTypeEnum = pgEnum('spot_type', [
   'outdoor',
@@ -18,7 +21,12 @@ export const spotTypeEnum = pgEnum('spot_type', [
   'covered',
   'underground',
 ])
-export const spotStatusEnum = pgEnum('spot_status', ['active', 'inactive', 'pending_review'])
+export const spotStatusEnum = pgEnum('spot_status', [
+  'active',
+  'inactive',
+  'pending_review',
+  'pending_verification',
+])
 
 export const spots = pgTable('spots', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -44,6 +52,25 @@ export const spots = pgTable('spots', {
   instantBook: boolean('instant_book').notNull().default(true),
   rating: numeric('rating', { precision: 3, scale: 2 }),
   reviewCount: integer('review_count').notNull().default(0),
+  // Physical dimensions (meters)
+  width: numeric('width', { precision: 4, scale: 2 }),
+  length: numeric('length', { precision: 4, scale: 2 }),
+  sizeCategory: vehicleSizeCategoryEnum('size_category').notNull().default('sedan'),
+  // Cancellation policy
+  cancellationPolicy: cancellationPolicyEnum('cancellation_policy').notNull().default('flexible'),
+  // Access details
+  accessInstructions: text('access_instructions'),
+  accessPhotos: jsonb('access_photos').$type<string[]>().notNull().default([]),
+  // Precise location
+  floorNumber: text('floor_number'),
+  spotNumber: text('spot_number'),
+  buildingCode: text('building_code'),
+  gpsPinLat: numeric('gps_pin_lat', { precision: 10, scale: 8 }),
+  gpsPinLng: numeric('gps_pin_lng', { precision: 11, scale: 8 }),
+  // Verification
+  ownershipProofUrl: text('ownership_proof_url'),
+  verifiedAt: timestamp('verified_at', { withTimezone: true }),
+  verifiedBy: uuid('verified_by').references(() => users.id),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })

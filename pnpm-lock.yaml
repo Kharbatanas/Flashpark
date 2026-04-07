@@ -238,6 +238,9 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
+      drizzle-orm:
+        specifier: ^0.38.4
+        version: 0.38.4(@types/react@18.3.28)(postgres@3.4.8)(react@18.3.1)
       framer-motion:
         specifier: ^12.38.0
         version: 12.38.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -326,6 +329,9 @@ importers:
       '@trpc/server':
         specifier: ^11.0.0
         version: 11.16.0(typescript@5.9.3)
+      drizzle-orm:
+        specifier: ^0.38.3
+        version: 0.38.4(@types/react@18.3.28)(postgres@3.4.8)(react@18.3.1)
       superjson:
         specifier: ^2.2.1
         version: 2.2.6

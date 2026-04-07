@@ -33,10 +33,11 @@ export const wishlistsRouter = createTRPCRouter({
         return { saved: false }
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await ctx.db.insert(wishlists).values({
         userId: ctx.userId,
         spotId: input.spotId,
-      })
+      } as any)
       return { saved: true }
     }),
 

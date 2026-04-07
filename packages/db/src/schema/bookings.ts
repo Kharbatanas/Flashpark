@@ -1,4 +1,13 @@
-import { pgTable, uuid, timestamp, numeric, text, pgEnum, boolean } from 'drizzle-orm/pg-core'
+import {
+  pgTable,
+  uuid,
+  timestamp,
+  numeric,
+  text,
+  pgEnum,
+  boolean,
+  integer,
+} from 'drizzle-orm/pg-core'
 import { users } from './users'
 import { spots } from './spots'
 import { vehicles } from './vehicles'
@@ -33,6 +42,16 @@ export const bookings = pgTable('bookings', {
   accessGranted: boolean('access_granted').notNull().default(false),
   cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
   cancelledBy: uuid('cancelled_by').references(() => users.id),
+  // Check-in / check-out tracking
+  checkedInAt: timestamp('checked_in_at', { withTimezone: true }),
+  checkedOutAt: timestamp('checked_out_at', { withTimezone: true }),
+  // Extension tracking
+  originalEndTime: timestamp('original_end_time', { withTimezone: true }),
+  extensionCount: integer('extension_count').notNull().default(0),
+  // Overstay tracking
+  overstayCharged: boolean('overstay_charged').notNull().default(false),
+  overstayAmount: numeric('overstay_amount', { precision: 10, scale: 2 }),
+  noShow: boolean('no_show').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })

@@ -31,7 +31,8 @@ export const notificationsRouter = createTRPCRouter({
   markAllRead: protectedProcedure.mutation(async ({ ctx }) => {
     await ctx.db
       .update(notifications)
-      .set({ readAt: new Date() })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .set({ readAt: new Date() } as any)
       .where(and(eq(notifications.userId, ctx.userId), isNull(notifications.readAt)))
     return { ok: true }
   }),
@@ -42,7 +43,8 @@ export const notificationsRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await ctx.db
         .update(notifications)
-        .set({ readAt: new Date() })
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .set({ readAt: new Date() } as any)
         .where(and(eq(notifications.id, input.id), eq(notifications.userId, ctx.userId)))
       return { ok: true }
     }),

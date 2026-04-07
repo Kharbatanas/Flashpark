@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server'
 import { createSupabaseServerClient } from '../../../lib/supabase/server'
-import { db, users } from '@flashpark/db'
-import { eq } from 'drizzle-orm'
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
@@ -26,21 +24,23 @@ export async function GET(request: Request) {
 
   try {
     // Check if user exists in our DB
-    const existing = await db.query.users.findFirst({
-      where: eq(users.supabaseId, supabaseUser.id),
-    })
+    const { data: existing } = await supabase
+      .from('users')
+      .select('id')
+      .eq('supabase_id', supabaseUser.id)
+      .single()
 
     if (!existing) {
       // Create user record
-      await db.insert(users).values({
-        supabaseId: supabaseUser.id,
+      await supabase.from('users').insert({
+        supabase_id: supabaseUser.id,
         email: supabaseUser.email!,
-        fullName:
+        full_name:
           supabaseUser.user_metadata?.full_name ??
           supabaseUser.user_metadata?.name ??
           supabaseUser.email?.split('@')[0] ??
           'Utilisateur',
-        avatarUrl: supabaseUser.user_metadata?.avatar_url ?? null,
+        avatar_url: supabaseUser.user_metadata?.avatar_url ?? null,
         role: 'driver',
       })
     }

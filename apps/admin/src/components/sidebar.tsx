@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { href: '/payments', label: 'Paiements', icon: '€' },
   { href: '/reviews', label: 'Avis', icon: '⭐' },
   { href: '/verification', label: 'Vérification', icon: '🛡️' },
+  { href: '/disputes', label: 'Litiges', icon: '⚠️' },
   { href: '/intelligence', label: 'Veille Marché', icon: '🕵️' },
   { href: '/support', label: 'Support', icon: '💬' },
   { href: '/settings', label: 'Paramètres', icon: '⚙️' },

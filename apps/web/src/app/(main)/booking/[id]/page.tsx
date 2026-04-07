@@ -75,6 +75,10 @@ export default async function BookingConfirmationPage({ params }: Props) {
         status: booking.status,
         totalPrice: booking.totalPrice,
         platformFee: booking.platformFee,
+        startTime: startDate.toISOString(),
+        endTime: endDate.toISOString(),
+        checkedInAt: booking.checkedInAt ? new Date(booking.checkedInAt).toISOString() : null,
+        originalEndTime: booking.originalEndTime ? new Date(booking.originalEndTime).toISOString() : null,
       }}
       spot={{
         id: spot.id,

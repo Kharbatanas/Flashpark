@@ -6,7 +6,7 @@ import { createTRPCRouter, protectedProcedure } from '../trpc'
 import { users, verificationDocuments, bookings } from '@flashpark/db'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2024-12-18.acacia',
+  apiVersion: '2025-02-24.acacia',
 })
 
 export const usersRouter = createTRPCRouter({
@@ -29,7 +29,8 @@ export const usersRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const [updated] = await ctx.db
         .update(users)
-        .set({ ...input, updatedAt: new Date() })
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .set({ ...input, updatedAt: new Date() } as any)
         .where(eq(users.id, ctx.userId))
         .returning()
       return updated
@@ -51,7 +52,8 @@ export const usersRouter = createTRPCRouter({
 
     const [updated] = await ctx.db
       .update(users)
-      .set({ stripeCustomerId: customer.id, updatedAt: new Date() })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .set({ stripeCustomerId: customer.id, updatedAt: new Date() } as any)
       .where(eq(users.id, ctx.userId))
       .returning()
 
@@ -80,7 +82,8 @@ export const usersRouter = createTRPCRouter({
 
     const [updated] = await ctx.db
       .update(users)
-      .set({ role: 'both', updatedAt: new Date() })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .set({ role: 'both', updatedAt: new Date() } as any)
       .where(eq(users.id, ctx.userId))
       .returning()
     return updated
@@ -90,7 +93,8 @@ export const usersRouter = createTRPCRouter({
     // Cancel all pending/confirmed bookings first (bookings.driverId has onDelete: restrict)
     await ctx.db
       .update(bookings)
-      .set({ status: 'cancelled', cancelledAt: new Date(), cancelledBy: ctx.userId, updatedAt: new Date() })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .set({ status: 'cancelled', cancelledAt: new Date(), cancelledBy: ctx.userId, updatedAt: new Date() } as any)
       .where(
         and(
           eq(bookings.driverId, ctx.userId),

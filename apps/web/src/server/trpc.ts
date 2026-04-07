@@ -1,6 +1,7 @@
 import { createTRPCContext } from '@flashpark/api'
 import { createSupabaseServerClient } from '../lib/supabase/server'
-import { createServerClient, type User } from '@supabase/ssr'
+import { createServerClient } from '@supabase/ssr'
+import type { User } from '@supabase/supabase-js'
 import { db, users } from '@flashpark/db'
 import { eq } from 'drizzle-orm'
 

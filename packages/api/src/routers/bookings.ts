@@ -13,7 +13,7 @@ function generateQrCode(): string {
 }
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2024-12-18.acacia',
+  apiVersion: '2025-02-24.acacia',
 })
 
 export const bookingsRouter = createTRPCRouter({
@@ -121,6 +121,7 @@ export const bookingsRouter = createTRPCRouter({
         // Insert — if we get here, no conflict exists (atomically guaranteed)
         return tx
           .insert(bookings)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           .values({
             driverId: ctx.userId,
             spotId,
@@ -132,7 +133,7 @@ export const bookingsRouter = createTRPCRouter({
             hostPayout: String(hostPayout),
             status: initialStatus,
             qrCode,
-          })
+          } as any)
           .returning()
       })
 
@@ -190,20 +191,30 @@ export const bookingsRouter = createTRPCRouter({
       const now = new Date()
       const hoursUntilStart = (booking.startTime.getTime() - now.getTime()) / (1000 * 60 * 60)
 
-      // Cancellation policy:
-      // - pending or confirmed with payment intent, > 24h before start: full refund
-      // - confirmed with payment intent, 2–24h before start: 50% refund
-      // - confirmed with payment intent, < 2h before start: no refund
-      // - no payment intent: no refund needed (not yet charged)
+      // Fetch the spot to determine the cancellation policy
+      const cancelSpot = await ctx.db.query.spots.findFirst({ where: eq(spots.id, booking.spotId) })
+      const policy = cancelSpot?.cancellationPolicy ?? 'flexible'
+
+      // Thresholds (hours) per policy:
+      //   flexible:  full refund > 2h before, 50% 0–2h before
+      //   moderate:  full refund > 24h before, 50% 2–24h before, no refund < 2h
+      //   strict:    full refund > 48h before, 50% 24–48h before, no refund < 24h
+      const thresholds: Record<string, { full: number; half: number }> = {
+        flexible:  { full: 2,  half: 0  },
+        moderate:  { full: 24, half: 2  },
+        strict:    { full: 48, half: 24 },
+      }
+      const { full: fullRefundHours, half: halfRefundHours } = thresholds[policy]!
+
       let refundAmountCents: number | null = null
       if (booking.stripePaymentIntentId) {
         const totalCents = Math.round(parseFloat(booking.totalPrice) * 100)
         if (booking.status === 'pending') {
           // Pending bookings always get full refund (payment was captured but not yet confirmed)
           refundAmountCents = totalCents
-        } else if (hoursUntilStart > 24) {
+        } else if (hoursUntilStart > fullRefundHours) {
           refundAmountCents = totalCents
-        } else if (hoursUntilStart > 2) {
+        } else if (hoursUntilStart > halfRefundHours) {
           refundAmountCents = Math.round(totalCents * 0.5)
         } else {
           refundAmountCents = 0
@@ -231,7 +242,8 @@ export const bookingsRouter = createTRPCRouter({
       const finalStatus = needsRefund ? 'refunded' : 'cancelled'
       const [updated] = await ctx.db
         .update(bookings)
-        .set({ status: finalStatus, cancelledAt: now, cancelledBy: ctx.userId, updatedAt: now })
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .set({ status: finalStatus, cancelledAt: now, cancelledBy: ctx.userId, updatedAt: now } as any)
         .where(and(
           eq(bookings.id, input.id),
           eq(bookings.driverId, ctx.userId),
@@ -282,7 +294,8 @@ export const bookingsRouter = createTRPCRouter({
 
       const [updated] = await ctx.db
         .update(bookings)
-        .set({ status: 'confirmed', qrCode, updatedAt: new Date() })
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .set({ status: 'confirmed', qrCode, updatedAt: new Date() } as any)
         .where(and(
           eq(bookings.id, input.id),
           eq(bookings.status, 'pending')
@@ -326,7 +339,8 @@ export const bookingsRouter = createTRPCRouter({
 
       const [updated] = await ctx.db
         .update(bookings)
-        .set({ status: 'cancelled', cancelledAt: new Date(), cancelledBy: ctx.userId, updatedAt: new Date() })
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .set({ status: 'cancelled', cancelledAt: new Date(), cancelledBy: ctx.userId, updatedAt: new Date() } as any)
         .where(and(
           eq(bookings.id, input.id),
           eq(bookings.status, 'pending')
@@ -386,7 +400,8 @@ export const bookingsRouter = createTRPCRouter({
       const finalStatus = booking.stripePaymentIntentId ? 'refunded' : 'cancelled'
       const [updated] = await ctx.db
         .update(bookings)
-        .set({ status: finalStatus, cancelledAt: new Date(), cancelledBy: ctx.userId, updatedAt: new Date() })
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .set({ status: finalStatus, cancelledAt: new Date(), cancelledBy: ctx.userId, updatedAt: new Date() } as any)
         .where(and(eq(bookings.id, input.id), eq(bookings.status, 'confirmed')))
         .returning()
 
@@ -469,6 +484,262 @@ export const bookingsRouter = createTRPCRouter({
       }
     }),
 
+  // Driver checks in at the parking spot
+  checkIn: protectedProcedure
+    .input(z.object({ bookingId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const booking = await ctx.db.query.bookings.findFirst({
+        where: and(eq(bookings.id, input.bookingId), eq(bookings.driverId, ctx.userId)),
+      })
+      if (!booking) throw new TRPCError({ code: 'NOT_FOUND', message: 'Réservation introuvable' })
+
+      if (booking.status !== 'confirmed' && booking.status !== 'active') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Vous ne pouvez faire un check-in que sur une réservation confirmée ou active' })
+      }
+
+      const now = new Date()
+      const startTime = new Date(booking.startTime)
+      const endTime = new Date(booking.endTime)
+      const minutesBeforeStart = (startTime.getTime() - now.getTime()) / (1000 * 60)
+
+      if (minutesBeforeStart > 15) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Le check-in est disponible 15 minutes avant le début de la réservation' })
+      }
+
+      if (now > endTime) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'La réservation est terminée, impossible de faire un check-in' })
+      }
+
+      const [updated] = await ctx.db
+        .update(bookings)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .set({ checkedInAt: now, status: 'active', updatedAt: now } as any)
+        .where(and(
+          eq(bookings.id, input.bookingId),
+          eq(bookings.driverId, ctx.userId),
+          or(eq(bookings.status, 'confirmed'), eq(bookings.status, 'active'))
+        ))
+        .returning()
+
+      if (!updated) {
+        throw new TRPCError({ code: 'CONFLICT', message: 'Le statut de la réservation a changé entre-temps' })
+      }
+
+      const spot = await ctx.db.query.spots.findFirst({ where: eq(spots.id, booking.spotId) })
+      if (spot) {
+        createNotification(ctx.db, {
+          userId: spot.hostId,
+          type: 'booking_checked_in',
+          title: 'Conducteur arrivé',
+          body: `Le conducteur a effectué son check-in pour "${spot.title}"`,
+          data: { bookingId: booking.id, spotId: spot.id },
+        }).catch((err) => console.warn('[notify] Notification failed:', err))
+      }
+
+      return updated
+    }),
+
+  // Driver checks out of the parking spot
+  checkOut: protectedProcedure
+    .input(z.object({ bookingId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const booking = await ctx.db.query.bookings.findFirst({
+        where: and(eq(bookings.id, input.bookingId), eq(bookings.driverId, ctx.userId)),
+      })
+      if (!booking) throw new TRPCError({ code: 'NOT_FOUND', message: 'Réservation introuvable' })
+
+      if (booking.status !== 'active') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Vous ne pouvez faire un check-out que sur une réservation active' })
+      }
+
+      if (!booking.checkedInAt) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Vous devez effectuer un check-in avant de pouvoir faire un check-out' })
+      }
+
+      const now = new Date()
+
+      const [updated] = await ctx.db
+        .update(bookings)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .set({ checkedOutAt: now, status: 'completed', updatedAt: now } as any)
+        .where(and(
+          eq(bookings.id, input.bookingId),
+          eq(bookings.driverId, ctx.userId),
+          eq(bookings.status, 'active')
+        ))
+        .returning()
+
+      if (!updated) {
+        throw new TRPCError({ code: 'CONFLICT', message: 'Le statut de la réservation a changé entre-temps' })
+      }
+
+      const spot = await ctx.db.query.spots.findFirst({ where: eq(spots.id, booking.spotId) })
+      if (spot) {
+        createNotification(ctx.db, {
+          userId: spot.hostId,
+          type: 'booking_checked_out',
+          title: 'Conducteur parti',
+          body: `Le conducteur a effectué son check-out pour "${spot.title}"`,
+          data: { bookingId: booking.id, spotId: spot.id },
+        }).catch((err) => console.warn('[notify] Notification failed:', err))
+      }
+
+      return updated
+    }),
+
+  // Driver extends an active booking
+  extend: protectedProcedure
+    .input(z.object({
+      bookingId: z.string().uuid(),
+      newEndTime: z.date(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { bookingId, newEndTime } = input
+
+      const booking = await ctx.db.query.bookings.findFirst({
+        where: and(eq(bookings.id, bookingId), eq(bookings.driverId, ctx.userId)),
+      })
+      if (!booking) throw new TRPCError({ code: 'NOT_FOUND', message: 'Réservation introuvable' })
+
+      if (booking.status !== 'active') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: "L'extension n'est possible que sur une réservation active" })
+      }
+
+      const currentEndTime = new Date(booking.endTime)
+
+      if (newEndTime <= currentEndTime) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: "La nouvelle heure de fin doit être après l'heure de fin actuelle" })
+      }
+
+      // Use original_end_time if this booking was already extended, otherwise current end_time
+      const baseEndTime = booking.originalEndTime ? new Date(booking.originalEndTime) : currentEndTime
+      const maxEndTime = new Date(baseEndTime.getTime() + 8 * 60 * 60 * 1000)
+
+      if (newEndTime > maxEndTime) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: "L'extension ne peut pas dépasser 8 heures au-delà de l'heure de fin originale" })
+      }
+
+      // Check for conflicts with other bookings in the extended period
+      const conflict = await ctx.db.query.bookings.findFirst({
+        where: and(
+          eq(bookings.spotId, booking.spotId),
+          not(eq(bookings.id, bookingId)),
+          not(eq(bookings.status, 'cancelled')),
+          not(eq(bookings.status, 'refunded')),
+          or(
+            and(gt(bookings.startTime, currentEndTime), lt(bookings.startTime, newEndTime)),
+            and(gt(bookings.endTime, currentEndTime), lt(bookings.endTime, newEndTime)),
+            and(lte(bookings.startTime, currentEndTime), gte(bookings.endTime, newEndTime))
+          )
+        ),
+      })
+      if (conflict) {
+        throw new TRPCError({ code: 'CONFLICT', message: 'Ce créneau est déjà réservé par un autre conducteur' })
+      }
+
+      const spot = await ctx.db.query.spots.findFirst({ where: eq(spots.id, booking.spotId) })
+      if (!spot) throw new TRPCError({ code: 'NOT_FOUND', message: 'Place introuvable' })
+
+      const additionalHours = (newEndTime.getTime() - currentEndTime.getTime()) / (1000 * 60 * 60)
+      const additionalPrice = Math.round(additionalHours * parseFloat(spot.pricePerHour) * 100) / 100
+      const additionalFee = Math.round(additionalPrice * 0.2 * 100) / 100
+      const additionalPayout = Math.round((additionalPrice - additionalFee) * 100) / 100
+
+      const newTotalPrice = Math.round((parseFloat(booking.totalPrice) + additionalPrice) * 100) / 100
+      const newPlatformFee = Math.round((parseFloat(booking.platformFee) + additionalFee) * 100) / 100
+      const newHostPayout = Math.round((parseFloat(booking.hostPayout) + additionalPayout) * 100) / 100
+
+      // Preserve the original end time (before any extension) on first extension
+      const originalEndTime = booking.originalEndTime ?? currentEndTime
+
+      const [updated] = await ctx.db
+        .update(bookings)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .set({
+          endTime: newEndTime,
+          originalEndTime,
+          extensionCount: (booking.extensionCount ?? 0) + 1,
+          totalPrice: String(newTotalPrice),
+          platformFee: String(newPlatformFee),
+          hostPayout: String(newHostPayout),
+          updatedAt: new Date(),
+        } as any)
+        .where(and(
+          eq(bookings.id, bookingId),
+          eq(bookings.driverId, ctx.userId),
+          eq(bookings.status, 'active')
+        ))
+        .returning()
+
+      if (!updated) {
+        throw new TRPCError({ code: 'CONFLICT', message: 'Le statut de la réservation a changé entre-temps' })
+      }
+
+      createNotification(ctx.db, {
+        userId: spot.hostId,
+        type: 'booking_extended',
+        title: 'Réservation prolongée',
+        body: `Le conducteur a prolongé sa réservation pour "${spot.title}" jusqu'à ${newEndTime.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`,
+        data: { bookingId: booking.id, spotId: spot.id },
+      }).catch((err) => console.warn('[notify] Notification failed:', err))
+
+      return { ...updated, additionalCost: { price: additionalPrice, fee: additionalFee, payout: additionalPayout } }
+    }),
+
+  // Host marks a driver as no-show
+  markNoShow: hostProcedure
+    .input(z.object({ bookingId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const booking = await ctx.db.query.bookings.findFirst({
+        where: eq(bookings.id, input.bookingId),
+      })
+      if (!booking) throw new TRPCError({ code: 'NOT_FOUND', message: 'Réservation introuvable' })
+
+      const spot = await ctx.db.query.spots.findFirst({
+        where: and(eq(spots.id, booking.spotId), eq(spots.hostId, ctx.userId)),
+      })
+      if (!spot) throw new TRPCError({ code: 'FORBIDDEN', message: "Vous n'êtes pas le propriétaire de cette place" })
+
+      if (booking.status !== 'confirmed') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: "Seules les réservations confirmées peuvent être marquées comme no-show" })
+      }
+
+      const now = new Date()
+      const minutesSinceStart = (now.getTime() - new Date(booking.startTime).getTime()) / (1000 * 60)
+
+      if (minutesSinceStart < 30) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: "Vous pouvez marquer un no-show uniquement 30 minutes après l'heure de début" })
+      }
+
+      if (booking.checkedInAt) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Le conducteur a déjà effectué son check-in' })
+      }
+
+      const [updated] = await ctx.db
+        .update(bookings)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .set({ noShow: true, status: 'completed', updatedAt: now } as any)
+        .where(and(
+          eq(bookings.id, input.bookingId),
+          eq(bookings.status, 'confirmed')
+        ))
+        .returning()
+
+      if (!updated) {
+        throw new TRPCError({ code: 'CONFLICT', message: 'Le statut de la réservation a changé entre-temps' })
+      }
+
+      createNotification(ctx.db, {
+        userId: booking.driverId,
+        type: 'booking_no_show',
+        title: 'No-show enregistré',
+        body: `Vous avez été marqué comme absent pour votre réservation chez "${spot.title}". Aucun remboursement ne sera effectué.`,
+        data: { bookingId: booking.id, spotId: spot.id },
+      }).catch((err) => console.warn('[notify] Notification failed:', err))
+
+      return updated
+    }),
+
   // Verify a booking by QR code or booking ID (for hosts)
   verifyCode: protectedProcedure
     .input(z.object({ code: z.string().min(1) }))
@@ -478,14 +749,13 @@ export const bookingsRouter = createTRPCRouter({
       // Exact match on qr_code or booking ID only (no partial matching)
       const booking = await ctx.db.query.bookings.findFirst({
         where: or(eq(bookings.qrCode, code), eq(bookings.id, code)),
-        with: { spot: true },
       })
 
       if (!booking) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Reservation introuvable' })
       }
 
-      const spot = booking.spot ?? await ctx.db.query.spots.findFirst({
+      const spot = await ctx.db.query.spots.findFirst({
         where: eq(spots.id, booking.spotId),
       })
 

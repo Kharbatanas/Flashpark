@@ -116,6 +116,7 @@ export const reviewsRouter = createTRPCRouter({
 
       const [review] = await ctx.db
         .insert(reviews)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .values({
           bookingId: input.bookingId,
           reviewerId: ctx.userId,
@@ -124,7 +125,7 @@ export const reviewsRouter = createTRPCRouter({
           ratingAccuracy: input.ratingAccuracy,
           ratingCleanliness: input.ratingCleanliness,
           comment: input.comment,
-        })
+        } as any)
         .returning()
 
       return review

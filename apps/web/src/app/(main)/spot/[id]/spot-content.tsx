@@ -48,6 +48,9 @@ const AMENITY_META: Record<string, { label: string; Icon: React.ElementType }> =
 
 /* ─── types ──────────────────────────────────────────────────── */
 
+type SizeCategory = 'motorcycle' | 'compact' | 'sedan' | 'suv' | 'van'
+type CancellationPolicy = 'flexible' | 'moderate' | 'strict'
+
 interface SpotData {
   id: string
   title: string
@@ -69,6 +72,18 @@ interface SpotData {
   maxVehicleHeight: string | null
   parkingInstructions: string | null
   hostId: string
+  // Extended fields
+  width?: string | null
+  length?: string | null
+  sizeCategory?: SizeCategory | null
+  cancellationPolicy?: CancellationPolicy | null
+  accessInstructions?: string | null
+  accessPhotos?: string[] | null
+  floorNumber?: string | null
+  spotNumber?: string | null
+  buildingCode?: string | null
+  gpsPinLat?: string | null
+  gpsPinLng?: string | null
 }
 
 /* ─── helpers ────────────────────────────────────────────────── */
@@ -371,6 +386,270 @@ function Divider() {
   return <div className="my-8 border-b border-gray-100" />
 }
 
+/* ─── size category meta ─────────────────────────────────────── */
+
+const SIZE_CATEGORY_META: Record<SizeCategory, { label: string; icon: string }> = {
+  motorcycle: { label: 'Moto', icon: '🏍️' },
+  compact: { label: 'Citadine', icon: '🚗' },
+  sedan: { label: 'Berline', icon: '🚘' },
+  suv: { label: 'SUV', icon: '🚙' },
+  van: { label: 'Utilitaire', icon: '🚐' },
+}
+
+const CANCELLATION_POLICY_META: Record<CancellationPolicy, { label: string; desc: string; color: string }> = {
+  flexible: {
+    label: 'Flexible',
+    desc: "Remboursement intégral jusqu'à 2h avant. 50% entre 0-2h.",
+    color: 'text-emerald-700 bg-emerald-50 border-emerald-200',
+  },
+  moderate: {
+    label: 'Modérée',
+    desc: "Remboursement intégral jusqu'à 24h avant. 50% entre 2-24h. Aucun après.",
+    color: 'text-amber-700 bg-amber-50 border-amber-200',
+  },
+  strict: {
+    label: 'Stricte',
+    desc: "Remboursement intégral jusqu'à 48h avant. 50% entre 24-48h. Aucun après.",
+    color: 'text-red-700 bg-red-50 border-red-200',
+  },
+}
+
+/* ─── informations pratiques section ─────────────────────────── */
+
+function PracticalInfoSection({ spot }: { spot: SpotData }) {
+  const hasDimensions = spot.width || spot.length || spot.maxVehicleHeight
+  const sizeCategory = spot.sizeCategory as SizeCategory | null | undefined
+  const cancellationPolicy = spot.cancellationPolicy as CancellationPolicy | null | undefined
+  const sizeMeta = sizeCategory ? SIZE_CATEGORY_META[sizeCategory] : null
+  const policyMeta = cancellationPolicy ? CANCELLATION_POLICY_META[cancellationPolicy] : null
+
+  if (!hasDimensions && !sizeMeta && !policyMeta) return null
+
+  return (
+    <FadeIn direction="up">
+      <div>
+        <h2 className="mb-3 text-base font-semibold text-gray-900 md:text-lg">Informations pratiques</h2>
+        <div className="space-y-3">
+          {hasDimensions && (
+            <div className="flex items-start gap-3 rounded-xl border border-gray-100 bg-white px-4 py-3 text-sm">
+              <Car className="mt-0.5 h-5 w-5 flex-shrink-0 text-[#0540FF]" />
+              <div>
+                <p className="font-medium text-gray-800">Dimensions de la place</p>
+                <p className="mt-0.5 text-gray-500">
+                  {[
+                    spot.width && `${Number(spot.width).toFixed(2)} m de large`,
+                    spot.length && `${Number(spot.length).toFixed(2)} m de long`,
+                    spot.maxVehicleHeight && `${Number(spot.maxVehicleHeight).toFixed(2)} m de hauteur max`,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {sizeMeta && (
+            <div className="flex items-center gap-3 rounded-xl border border-gray-100 bg-white px-4 py-3 text-sm">
+              <span className="text-xl">{sizeMeta.icon}</span>
+              <div>
+                <p className="font-medium text-gray-800">Adapté aux {sizeMeta.label}s</p>
+                <p className="mt-0.5 text-gray-500">Catégorie de véhicule maximum acceptée</p>
+              </div>
+            </div>
+          )}
+
+          {policyMeta && (
+            <div className={`rounded-xl border px-4 py-3 text-sm ${policyMeta.color}`}>
+              <p className="font-semibold">Annulation {policyMeta.label}</p>
+              <p className="mt-0.5">{policyMeta.desc}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </FadeIn>
+  )
+}
+
+/* ─── access instructions section ───────────────────────────── */
+
+function AccessInstructionsSection({
+  spot,
+  hasConfirmedBooking,
+}: {
+  spot: SpotData
+  hasConfirmedBooking: boolean
+}) {
+  const hasAnyAccessInfo =
+    spot.accessInstructions ||
+    (spot.accessPhotos && spot.accessPhotos.length > 0) ||
+    spot.floorNumber ||
+    spot.spotNumber ||
+    spot.buildingCode ||
+    spot.gpsPinLat
+
+  if (!hasAnyAccessInfo && !spot.parkingInstructions) return null
+
+  if (!hasConfirmedBooking) {
+    return (
+      <FadeIn direction="up">
+        <div>
+          <h2 className="mb-3 text-base font-semibold text-gray-900 md:text-lg">Instructions d&apos;accès</h2>
+          <div className="flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-4 text-sm text-blue-800">
+            <Info className="h-5 w-5 flex-shrink-0" />
+            <span>Réservez pour voir les instructions d&apos;accès détaillées</span>
+          </div>
+        </div>
+      </FadeIn>
+    )
+  }
+
+  const mapsUrl =
+    spot.gpsPinLat && spot.gpsPinLng
+      ? `https://www.google.com/maps/dir/?api=1&destination=${spot.gpsPinLat},${spot.gpsPinLng}`
+      : null
+
+  return (
+    <FadeIn direction="up">
+      <div>
+        <h2 className="mb-3 text-base font-semibold text-gray-900 md:text-lg">Instructions d&apos;accès</h2>
+        <div className="space-y-3">
+          {(spot.accessInstructions || spot.parkingInstructions) && (
+            <div className="flex gap-3 rounded-xl border border-blue-100 bg-blue-50 p-4">
+              <Info className="mt-0.5 h-5 w-5 flex-shrink-0 text-[#0540FF]" />
+              <p className="whitespace-pre-line text-[15px] leading-relaxed text-gray-700">
+                {spot.accessInstructions || spot.parkingInstructions}
+              </p>
+            </div>
+          )}
+
+          {(spot.floorNumber || spot.spotNumber || spot.buildingCode) && (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {spot.floorNumber && (
+                <div className="rounded-xl border border-gray-100 bg-white px-3 py-3 text-sm">
+                  <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Étage</p>
+                  <p className="mt-1 font-semibold text-[#1A1A2E]">{spot.floorNumber}</p>
+                </div>
+              )}
+              {spot.spotNumber && (
+                <div className="rounded-xl border border-gray-100 bg-white px-3 py-3 text-sm">
+                  <p className="text-xs font-medium uppercase tracking-wide text-gray-400">N° de place</p>
+                  <p className="mt-1 font-semibold text-[#1A1A2E]">{spot.spotNumber}</p>
+                </div>
+              )}
+              {spot.buildingCode && (
+                <div className="rounded-xl border border-gray-100 bg-white px-3 py-3 text-sm">
+                  <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Code accès</p>
+                  <p className="mt-1 font-semibold text-[#1A1A2E]">{spot.buildingCode}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {spot.accessPhotos && spot.accessPhotos.length > 0 && (
+            <div>
+              <p className="mb-2 text-xs font-medium text-gray-500">Photos d&apos;accès</p>
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                {spot.accessPhotos.map((url, i) => (
+                  <a
+                    key={i}
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group relative aspect-square overflow-hidden rounded-xl bg-gray-100"
+                  >
+                    <img
+                      src={url}
+                      alt={`Accès ${i + 1}`}
+                      className="h-full w-full object-cover transition group-hover:opacity-90"
+                    />
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {mapsUrl && (
+            <a
+              href={mapsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 rounded-xl border border-[#0540FF]/20 bg-blue-50 px-4 py-3 text-sm font-medium text-[#0540FF] hover:bg-blue-100 transition-colors"
+            >
+              <MapPin className="h-4 w-4 flex-shrink-0" />
+              Ouvrir l&apos;entrée dans Maps
+            </a>
+          )}
+        </div>
+      </div>
+    </FadeIn>
+  )
+}
+
+/* ─── vehicle compatibility check ────────────────────────────── */
+
+function VehicleCompatibilityCheck({ spotId }: { spotId: string }) {
+  const { data: vehicles, isLoading: vehiclesLoading } = api.vehicles.list.useQuery(undefined, {
+    retry: false,
+  })
+
+  const defaultVehicle = vehicles?.find((v) => v.isDefault) ?? vehicles?.[0]
+
+  const { data: compatibility, isLoading: compatLoading } = api.spots.checkVehicleCompatibility.useQuery(
+    { spotId, vehicleId: defaultVehicle?.id },
+    { enabled: !!defaultVehicle, retry: false }
+  )
+
+  if (vehiclesLoading) return null
+  if (!vehicles || vehicles.length === 0) return null
+
+  const isLoading = compatLoading
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-sm text-gray-400">
+        <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-[#0540FF]" />
+        Vérification de compatibilité...
+      </div>
+    )
+  }
+
+  if (!compatibility) return null
+
+  if (compatibility.compatible) {
+    return (
+      <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+        <svg className="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+        </svg>
+        <div>
+          <p className="font-medium">Compatible avec votre véhicule</p>
+          {defaultVehicle?.brand && (
+            <p className="mt-0.5 text-xs text-emerald-600">
+              {defaultVehicle.brand} {defaultVehicle.model}
+            </p>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+      <div className="flex items-center gap-2 font-medium">
+        <svg className="h-5 w-5 flex-shrink-0 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+        Attention — incompatibilité possible
+      </div>
+      <ul className="mt-2 space-y-1">
+        {compatibility.warnings.map((w, i) => (
+          <li key={i} className="text-xs text-amber-700">{w}</li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 /* ─── mobile sticky CTA bar ──────────────────────────────────── */
 
 function MobileStickyBar({
@@ -415,6 +694,9 @@ export function SpotContent({ spot }: { spot: SpotData }) {
     { spotId: spot.id },
     { retry: false }
   )
+
+  // myBookingForSpot returns completed bookings — treat any completed booking as access granted
+  const hasConfirmedBooking = !!myBooking
 
   const [showContactTooltip, setShowContactTooltip] = useState(false)
 
@@ -624,20 +906,28 @@ export function SpotContent({ spot }: { spot: SpotData }) {
 
               {spot.amenities.length > 0 && <Divider />}
 
-              {/* Parking instructions */}
-              {spot.parkingInstructions && (
-                <FadeIn direction="up">
-                  <div>
-                    <h2 className="mb-3 text-base font-semibold text-gray-900 md:text-lg">Instructions d&apos;accès</h2>
-                    <div className="flex gap-3 rounded-xl border border-blue-100 bg-blue-50 p-4">
-                      <Info className="mt-0.5 h-5 w-5 flex-shrink-0 text-[#0540FF]" />
-                      <p className="text-[15px] leading-relaxed text-gray-700 whitespace-pre-line">
-                        {spot.parkingInstructions}
-                      </p>
-                    </div>
-                  </div>
-                  <Divider />
-                </FadeIn>
+              {/* Practical info: dimensions, size category, cancellation policy */}
+              <PracticalInfoSection spot={spot} />
+
+              {(spot.width || spot.length || spot.maxVehicleHeight || spot.sizeCategory || spot.cancellationPolicy) && (
+                <Divider />
+              )}
+
+              {/* Vehicle compatibility check (shown to logged-in drivers with vehicles) */}
+              <VehicleCompatibilityCheck spotId={spot.id} />
+
+              <div className="mt-6" />
+
+              {/* Access instructions */}
+              <AccessInstructionsSection spot={spot} hasConfirmedBooking={hasConfirmedBooking} />
+
+              {(spot.parkingInstructions ||
+                spot.accessInstructions ||
+                (spot.accessPhotos && spot.accessPhotos.length > 0) ||
+                spot.floorNumber ||
+                spot.spotNumber ||
+                spot.gpsPinLat) && (
+                <Divider />
               )}
 
               {/* Location */}

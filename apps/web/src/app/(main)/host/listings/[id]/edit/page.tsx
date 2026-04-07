@@ -8,6 +8,8 @@ import { useRequireHost } from '../../../../../../lib/use-require-host'
 import { createSupabaseBrowserClient } from '../../../../../../lib/supabase/client'
 
 type SpotType = 'outdoor' | 'indoor' | 'garage' | 'covered' | 'underground'
+type SizeCategory = 'motorcycle' | 'compact' | 'sedan' | 'suv' | 'van'
+type CancellationPolicy = 'flexible' | 'moderate' | 'strict'
 
 interface FormData {
   title: string
@@ -18,6 +20,20 @@ interface FormData {
   status: 'active' | 'inactive'
   photos: string[]
   parkingInstructions: string
+  // dimensions & compatibility
+  width: string
+  length: string
+  sizeCategory: SizeCategory
+  cancellationPolicy: CancellationPolicy
+  // access instructions
+  accessInstructions: string
+  accessPhotos: string[]
+  floorNumber: string
+  spotNumber: string
+  buildingCode: string
+  gpsPinLat: string
+  gpsPinLng: string
+  ownershipProofUrl: string
 }
 
 const AMENITIES = [
@@ -37,6 +53,32 @@ const TYPE_LABELS: Record<string, string> = {
   underground: 'Souterrain',
 }
 
+const SIZE_CATEGORIES: { value: SizeCategory; label: string; icon: string }[] = [
+  { value: 'motorcycle', label: 'Moto', icon: '🏍️' },
+  { value: 'compact', label: 'Citadine', icon: '🚗' },
+  { value: 'sedan', label: 'Berline', icon: '🚘' },
+  { value: 'suv', label: 'SUV', icon: '🚙' },
+  { value: 'van', label: 'Utilitaire', icon: '🚐' },
+]
+
+const CANCELLATION_POLICIES: { value: CancellationPolicy; label: string; desc: string }[] = [
+  {
+    value: 'flexible',
+    label: 'Flexible',
+    desc: "Remboursement intégral jusqu'à 2h avant. 50% après.",
+  },
+  {
+    value: 'moderate',
+    label: 'Modérée',
+    desc: "Remboursement intégral jusqu'à 24h avant. 50% entre 2-24h. Aucun après.",
+  },
+  {
+    value: 'strict',
+    label: 'Stricte',
+    desc: "Remboursement intégral jusqu'à 48h avant. 50% entre 24-48h. Aucun après.",
+  },
+]
+
 export default function EditListingPage() {
   useRequireHost()
   const router = useRouter()
@@ -52,6 +94,18 @@ export default function EditListingPage() {
     status: 'active',
     photos: [],
     parkingInstructions: '',
+    width: '',
+    length: '',
+    sizeCategory: 'sedan',
+    cancellationPolicy: 'flexible',
+    accessInstructions: '',
+    accessPhotos: [],
+    floorNumber: '',
+    spotNumber: '',
+    buildingCode: '',
+    gpsPinLat: '',
+    gpsPinLng: '',
+    ownershipProofUrl: '',
   })
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -62,6 +116,7 @@ export default function EditListingPage() {
 
   useEffect(() => {
     if (spot) {
+      const s = spot as Record<string, unknown>
       setForm({
         title: spot.title,
         description: spot.description ?? '',
@@ -70,7 +125,19 @@ export default function EditListingPage() {
         pricePerDay: spot.pricePerDay ? String(spot.pricePerDay) : '',
         status: spot.status === 'active' ? 'active' : 'inactive',
         photos: (spot.photos as string[]) ?? [],
-        parkingInstructions: (spot as any).parkingInstructions ?? '',
+        parkingInstructions: (s.parkingInstructions as string) ?? '',
+        width: s.width ? String(s.width) : '',
+        length: s.length ? String(s.length) : '',
+        sizeCategory: (s.sizeCategory as SizeCategory) ?? 'sedan',
+        cancellationPolicy: (s.cancellationPolicy as CancellationPolicy) ?? 'flexible',
+        accessInstructions: (s.accessInstructions as string) ?? '',
+        accessPhotos: (s.accessPhotos as string[]) ?? [],
+        floorNumber: (s.floorNumber as string) ?? '',
+        spotNumber: (s.spotNumber as string) ?? '',
+        buildingCode: (s.buildingCode as string) ?? '',
+        gpsPinLat: s.gpsPinLat ? String(s.gpsPinLat) : '',
+        gpsPinLng: s.gpsPinLng ? String(s.gpsPinLng) : '',
+        ownershipProofUrl: (s.ownershipProofUrl as string) ?? '',
       })
     }
   }, [spot])
@@ -125,7 +192,7 @@ export default function EditListingPage() {
         if (skipped.length) alert(`Fichiers trop volumineux (max 5 Mo) : ${skipped.join(', ')}`)
         update({ photos: [...form.photos, ...newUrls] })
       } catch {
-        setError('Erreur lors de l\'upload')
+        setError("Erreur lors de l'upload")
       } finally {
         setUploading(false)
       }
@@ -137,6 +204,20 @@ export default function EditListingPage() {
     update({ photos: form.photos.filter((_, i) => i !== idx) })
   }
 
+  function addAccessPhoto() {
+    if (form.accessPhotos.length >= 10) return
+    update({ accessPhotos: [...form.accessPhotos, ''] })
+  }
+
+  function updateAccessPhoto(idx: number, value: string) {
+    const updated = form.accessPhotos.map((p, i) => (i === idx ? value : p))
+    update({ accessPhotos: updated })
+  }
+
+  function removeAccessPhoto(idx: number) {
+    update({ accessPhotos: form.accessPhotos.filter((_, i) => i !== idx) })
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (form.title.trim().length < 5) {
@@ -144,7 +225,17 @@ export default function EditListingPage() {
       return
     }
     if (!form.pricePerHour || Number(form.pricePerHour) <= 0) {
-      setError('Le prix a l\'heure est requis')
+      setError("Le prix a l'heure est requis")
+      return
+    }
+    for (const url of form.accessPhotos) {
+      if (url && !url.startsWith('https://')) {
+        setError("Les URLs de photos d'accès doivent commencer par https://")
+        return
+      }
+    }
+    if (form.ownershipProofUrl && !form.ownershipProofUrl.startsWith('https://')) {
+      setError("L'URL du justificatif doit commencer par https://")
       return
     }
 
@@ -159,6 +250,18 @@ export default function EditListingPage() {
         pricePerHour: Number(form.pricePerHour),
         pricePerDay: form.pricePerDay ? Number(form.pricePerDay) : undefined,
         status: form.status,
+        width: form.width ? Number(form.width) : undefined,
+        length: form.length ? Number(form.length) : undefined,
+        sizeCategory: form.sizeCategory,
+        cancellationPolicy: form.cancellationPolicy,
+        accessInstructions: form.accessInstructions || undefined,
+        accessPhotos: form.accessPhotos.filter((url) => url.startsWith('https://')),
+        floorNumber: form.floorNumber || undefined,
+        spotNumber: form.spotNumber || undefined,
+        buildingCode: form.buildingCode || undefined,
+        gpsPinLat: form.gpsPinLat ? Number(form.gpsPinLat) : undefined,
+        gpsPinLng: form.gpsPinLng ? Number(form.gpsPinLng) : undefined,
+        ownershipProofUrl: form.ownershipProofUrl || undefined,
       })
       setSaved(true)
     } catch (err) {
@@ -314,9 +417,100 @@ export default function EditListingPage() {
               </div>
             </div>
 
-            {/* Parking instructions */}
+            {/* Dimensions & Compatibility */}
             <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-              <h2 className="mb-4 font-semibold text-[#1A1A2E]">Instructions d&apos;acces</h2>
+              <h2 className="mb-4 font-semibold text-[#1A1A2E]">Dimensions &amp; Compatibilité</h2>
+
+              {/* Width & Length */}
+              <div className="mb-4 grid grid-cols-2 gap-4">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Largeur (m)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    step="0.1"
+                    value={form.width}
+                    onChange={(e) => update({ width: e.target.value })}
+                    placeholder="2.5"
+                    className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-[#0540FF] focus:outline-none focus:ring-1 focus:ring-[#0540FF]"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Longueur (m)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="20"
+                    step="0.1"
+                    value={form.length}
+                    onChange={(e) => update({ length: e.target.value })}
+                    placeholder="5.0"
+                    className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-[#0540FF] focus:outline-none focus:ring-1 focus:ring-[#0540FF]"
+                  />
+                </div>
+              </div>
+              <p className="mb-5 text-xs text-gray-400">
+                Renseigner les dimensions aide les conducteurs à vérifier la compatibilité
+              </p>
+
+              {/* Size category */}
+              <div className="mb-5">
+                <label className="mb-2 block text-sm font-medium text-gray-700">Catégorie de véhicule max</label>
+                <div className="flex flex-wrap gap-2">
+                  {SIZE_CATEGORIES.map((cat) => (
+                    <button
+                      key={cat.value}
+                      type="button"
+                      onClick={() => update({ sizeCategory: cat.value })}
+                      className={`flex items-center gap-2 rounded-xl border-2 px-3 py-2 text-sm transition-all ${
+                        form.sizeCategory === cat.value
+                          ? 'border-[#0540FF] bg-blue-50 text-[#0540FF]'
+                          : 'border-gray-100 text-gray-600 hover:border-gray-300'
+                      }`}
+                    >
+                      <span>{cat.icon}</span>
+                      <span className="text-xs font-medium">{cat.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Cancellation policy */}
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">Politique d&apos;annulation</label>
+                <div className="space-y-2">
+                  {CANCELLATION_POLICIES.map((policy) => (
+                    <button
+                      key={policy.value}
+                      type="button"
+                      onClick={() => update({ cancellationPolicy: policy.value })}
+                      className={`flex w-full items-start gap-3 rounded-xl border-2 p-3 text-left transition-all ${
+                        form.cancellationPolicy === policy.value
+                          ? 'border-[#0540FF] bg-blue-50'
+                          : 'border-gray-100 bg-white hover:border-gray-200'
+                      }`}
+                    >
+                      <div className={`mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border-2 ${
+                        form.cancellationPolicy === policy.value ? 'border-[#0540FF] bg-[#0540FF]' : 'border-gray-300'
+                      }`}>
+                        {form.cancellationPolicy === policy.value && (
+                          <div className="h-2 w-2 rounded-full bg-white" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-[#1A1A2E]">{policy.label}</p>
+                        <p className="mt-0.5 text-xs text-gray-500">{policy.desc}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Parking instructions (legacy field) */}
+            <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+              <h2 className="mb-4 font-semibold text-[#1A1A2E]">Instructions d&apos;acces (résumé)</h2>
               <p className="mb-2 text-xs text-gray-500">Etage, code portail, numero de place, consignes...</p>
               <textarea
                 value={form.parkingInstructions}
@@ -326,6 +520,163 @@ export default function EditListingPage() {
                 placeholder="Ex: 2eme sous-sol, place 42. Code portail: 1234. Tourner a droite apres l'entree."
                 className="w-full resize-none rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-[#0540FF] focus:outline-none focus:ring-1 focus:ring-[#0540FF]"
               />
+            </div>
+
+            {/* Access instructions */}
+            <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+              <h2 className="mb-1 font-semibold text-[#1A1A2E]">Instructions d&apos;accès détaillées</h2>
+              <p className="mb-4 text-xs text-gray-500">Partagées uniquement avec les conducteurs ayant une réservation confirmée</p>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Comment accéder à la place ?</label>
+                  <textarea
+                    value={form.accessInstructions}
+                    onChange={(e) => update({ accessInstructions: e.target.value })}
+                    rows={4}
+                    maxLength={2000}
+                    placeholder="Ex: Entrez par le portail principal, code 1234. Prenez l'ascenseur au sous-sol -1. La place est numérotée B12 sur le mur."
+                    className="w-full resize-none rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-[#0540FF] focus:outline-none focus:ring-1 focus:ring-[#0540FF]"
+                  />
+                  <p className="mt-1 text-right text-xs text-gray-400">{form.accessInstructions.length}/2000</p>
+                </div>
+
+                {/* Building details */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700">Étage / Niveau</label>
+                    <input
+                      type="text"
+                      value={form.floorNumber}
+                      onChange={(e) => update({ floorNumber: e.target.value })}
+                      placeholder="-1, RDC, 2"
+                      maxLength={10}
+                      className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-[#0540FF] focus:outline-none focus:ring-1 focus:ring-[#0540FF]"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700">N° de place</label>
+                    <input
+                      type="text"
+                      value={form.spotNumber}
+                      onChange={(e) => update({ spotNumber: e.target.value })}
+                      placeholder="B12, 47"
+                      maxLength={20}
+                      className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-[#0540FF] focus:outline-none focus:ring-1 focus:ring-[#0540FF]"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                    Code d&apos;accès immeuble <span className="font-normal text-gray-400">(optionnel)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={form.buildingCode}
+                    onChange={(e) => update({ buildingCode: e.target.value })}
+                    placeholder="1234"
+                    maxLength={20}
+                    className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-[#0540FF] focus:outline-none focus:ring-1 focus:ring-[#0540FF]"
+                  />
+                </div>
+
+                {/* Access photos */}
+                <div>
+                  <div className="mb-2 flex items-center justify-between">
+                    <label className="text-sm font-medium text-gray-700">
+                      Photos d&apos;accès <span className="font-normal text-gray-400">(entrée, escalier, place)</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={addAccessPhoto}
+                      disabled={form.accessPhotos.length >= 10}
+                      className="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-40"
+                    >
+                      + Ajouter
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {form.accessPhotos.map((url, idx) => (
+                      <div key={idx} className="flex gap-2">
+                        <input
+                          type="url"
+                          value={url}
+                          onChange={(e) => updateAccessPhoto(idx, e.target.value)}
+                          placeholder="https://..."
+                          className="flex-1 rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:border-[#0540FF] focus:outline-none focus:ring-1 focus:ring-[#0540FF]"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeAccessPhoto(idx)}
+                          className="flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 text-gray-400 hover:border-red-200 hover:text-red-500"
+                        >
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                    {form.accessPhotos.length === 0 && (
+                      <p className="text-xs text-gray-400">Aucune photo d&apos;accès — optionnel mais recommandé</p>
+                    )}
+                    <p className="text-xs text-gray-400">{form.accessPhotos.length}/10 photos</p>
+                  </div>
+                </div>
+
+                {/* GPS pin */}
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                    Position GPS exacte de l&apos;entrée <span className="font-normal text-gray-400">(optionnel)</span>
+                  </label>
+                  <p className="mb-2 text-xs text-gray-400">Aidez les conducteurs à trouver l&apos;entrée facilement</p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="mb-1 block text-xs text-gray-500">Latitude</label>
+                      <input
+                        type="number"
+                        min="-90"
+                        max="90"
+                        step="0.00001"
+                        value={form.gpsPinLat}
+                        onChange={(e) => update({ gpsPinLat: e.target.value })}
+                        placeholder="43.70314"
+                        className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-[#0540FF] focus:outline-none focus:ring-1 focus:ring-[#0540FF]"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-gray-500">Longitude</label>
+                      <input
+                        type="number"
+                        min="-180"
+                        max="180"
+                        step="0.00001"
+                        value={form.gpsPinLng}
+                        onChange={(e) => update({ gpsPinLng: e.target.value })}
+                        placeholder="7.26608"
+                        className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-[#0540FF] focus:outline-none focus:ring-1 focus:ring-[#0540FF]"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Ownership proof */}
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                    Justificatif de propriété / bail
+                  </label>
+                  <p className="mb-2 text-xs text-gray-400">
+                    Titre de propriété, bail, ou appel de charges (requis pour la vérification)
+                  </p>
+                  <input
+                    type="url"
+                    value={form.ownershipProofUrl}
+                    onChange={(e) => update({ ownershipProofUrl: e.target.value })}
+                    placeholder="https://..."
+                    className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-[#0540FF] focus:outline-none focus:ring-1 focus:ring-[#0540FF]"
+                  />
+                </div>
+              </div>
             </div>
 
             {/* Availability link */}

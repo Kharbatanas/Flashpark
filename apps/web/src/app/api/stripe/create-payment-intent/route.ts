@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { createSupabaseServerClient } from '../../../../lib/supabase/server'
-import { db, bookings, users } from '@flashpark/db'
-import { eq } from 'drizzle-orm'
 import { rateLimit, getClientIp } from '../../../../lib/rate-limit'
 
 if (!process.env.STRIPE_SECRET_KEY) {
@@ -10,7 +8,7 @@ if (!process.env.STRIPE_SECRET_KEY) {
 }
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: '2024-12-18.acacia',
+  apiVersion: '2025-02-24.acacia',
 })
 
 export async function POST(request: Request) {
@@ -30,9 +28,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   }
 
-  const dbUser = await db.query.users.findFirst({
-    where: eq(users.supabaseId, user.id),
-  })
+  const { data: dbUser } = await supabase
+    .from('users')
+    .select('id')
+    .eq('supabase_id', user.id)
+    .single()
 
   if (!dbUser) {
     return NextResponse.json({ error: 'Utilisateur introuvable' }, { status: 404 })
@@ -48,20 +48,22 @@ export async function POST(request: Request) {
   }
 
   // Fetch booking
-  const booking = await db.query.bookings.findFirst({
-    where: eq(bookings.id, bookingId),
-  })
+  const { data: booking } = await supabase
+    .from('bookings')
+    .select('id, driver_id, total_price, platform_fee')
+    .eq('id', bookingId)
+    .single()
 
   if (!booking) {
     return NextResponse.json({ error: 'Réservation introuvable' }, { status: 404 })
   }
 
-  if (booking.driverId !== dbUser.id) {
+  if (booking.driver_id !== dbUser.id) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const totalCents = Math.round(Number(booking.totalPrice) * 100)
-  const feeCents = Math.round(Number(booking.platformFee) * 100)
+  const totalCents = Math.round(Number(booking.total_price) * 100)
+  const feeCents = Math.round(Number(booking.platform_fee) * 100)
 
   if (totalCents < 50) {
     return NextResponse.json({ error: 'Montant trop faible' }, { status: 400 })
@@ -79,10 +81,10 @@ export async function POST(request: Request) {
     })
 
     // Update booking with paymentIntentId
-    await db
-      .update(bookings)
-      .set({ stripePaymentIntentId: paymentIntent.id })
-      .where(eq(bookings.id, bookingId))
+    await supabase
+      .from('bookings')
+      .update({ stripe_payment_intent_id: paymentIntent.id })
+      .eq('id', bookingId)
 
     return NextResponse.json({ clientSecret: paymentIntent.client_secret })
   } catch {

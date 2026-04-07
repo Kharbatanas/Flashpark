@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server'
 import { createSupabaseServerClient } from '../../../../../lib/supabase/server'
-import { db, bookings, users } from '@flashpark/db'
-import { and, eq, or } from 'drizzle-orm'
 
 interface RouteParams {
   params: { id: string }
@@ -17,17 +15,24 @@ export async function POST(_request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
   }
 
-  const dbUser = await db.query.users.findFirst({
-    where: eq(users.supabaseId, user.id),
-  })
+  // Get the user's internal ID
+  const { data: dbUser } = await supabase
+    .from('users')
+    .select('id')
+    .eq('supabase_id', user.id)
+    .single()
 
   if (!dbUser) {
     return NextResponse.json({ error: 'Utilisateur introuvable' }, { status: 404 })
   }
 
-  const booking = await db.query.bookings.findFirst({
-    where: and(eq(bookings.id, params.id), eq(bookings.driverId, dbUser.id)),
-  })
+  // Fetch the booking
+  const { data: booking } = await supabase
+    .from('bookings')
+    .select('id, status, driver_id')
+    .eq('id', params.id)
+    .eq('driver_id', dbUser.id)
+    .single()
 
   if (!booking) {
     return NextResponse.json({ error: 'Réservation introuvable' }, { status: 404 })
@@ -44,15 +49,23 @@ export async function POST(_request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: 'Réservation déjà annulée' }, { status: 400 })
   }
 
-  const [updated] = await db
-    .update(bookings)
-    .set({ status: 'cancelled', cancelledAt: new Date(), cancelledBy: dbUser.id, updatedAt: new Date() })
-    .where(and(
-      eq(bookings.id, params.id),
-      eq(bookings.driverId, dbUser.id),
-      or(eq(bookings.status, 'pending'), eq(bookings.status, 'confirmed'))
-    ))
-    .returning()
+  const { data: updated, error } = await supabase
+    .from('bookings')
+    .update({
+      status: 'cancelled',
+      cancelled_at: new Date().toISOString(),
+      cancelled_by: dbUser.id,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', params.id)
+    .eq('driver_id', dbUser.id)
+    .in('status', ['pending', 'confirmed'])
+    .select()
+    .single()
+
+  if (error) {
+    return NextResponse.json({ error: 'Échec de l\'annulation' }, { status: 500 })
+  }
 
   return NextResponse.json({ success: true, booking: updated })
 }

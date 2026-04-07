@@ -9,6 +9,8 @@ import { AddressAutocomplete, type AddressResult } from '../../../../../componen
 
 // ───────────────── Types ─────────────────
 type SpotType = 'outdoor' | 'indoor' | 'garage' | 'covered' | 'underground'
+type SizeCategory = 'motorcycle' | 'compact' | 'sedan' | 'suv' | 'van'
+type CancellationPolicy = 'flexible' | 'moderate' | 'strict'
 
 interface FormData {
   type: SpotType | null
@@ -25,9 +27,23 @@ interface FormData {
   instantBook: boolean
   hasSmartGate: boolean
   maxVehicleHeight: string
+  // dimensions & compatibility
+  width: string
+  length: string
+  sizeCategory: SizeCategory
+  cancellationPolicy: CancellationPolicy
+  // access instructions
+  accessInstructions: string
+  floorNumber: string
+  spotNumber: string
+  buildingCode: string
+  accessPhotos: string[]
+  gpsPinLat: string
+  gpsPinLng: string
+  ownershipProofUrl: string
 }
 
-const TOTAL_STEPS = 6
+const TOTAL_STEPS = 7
 
 // ───────────────── Step 1: Type ─────────────────
 const TYPES: { value: SpotType; label: string; icon: string; desc: string }[] = [
@@ -97,7 +113,6 @@ function Step2({
           />
         </div>
 
-        {/* City — auto-filled, editable */}
         <div>
           <label className="mb-1.5 block text-sm font-medium text-gray-700">Ville *</label>
           <input
@@ -109,7 +124,6 @@ function Step2({
           />
         </div>
 
-        {/* Lat/Lng — read-only, auto-filled */}
         {data.latitude && data.longitude && (
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-700">
             Position enregistree : {data.latitude.toFixed(5)}, {data.longitude.toFixed(5)}
@@ -304,7 +318,6 @@ function Step4Photos({
         Ajoutez jusqu&apos;à 5 photos de votre place (optionnel mais recommandé)
       </p>
 
-      {/* Upload zone */}
       <button
         type="button"
         onClick={() => inputRef.current?.click()}
@@ -342,7 +355,6 @@ function Step4Photos({
         </p>
       )}
 
-      {/* Preview grid */}
       {data.photos.length > 0 && (
         <div className="grid grid-cols-3 gap-2">
           {data.photos.map((url, i) => (
@@ -370,8 +382,322 @@ function Step4Photos({
   )
 }
 
-// ───────────────── Step 5: Pricing ─────────────────
-function Step5({
+// ───────────────── Step 5: Dimensions & Compatibilité + Instructions d'accès ─────────────────
+
+const SIZE_CATEGORIES: { value: SizeCategory; label: string; icon: string; desc: string }[] = [
+  { value: 'motorcycle', label: 'Moto', icon: '🏍️', desc: 'Moto uniquement' },
+  { value: 'compact', label: 'Citadine', icon: '🚗', desc: 'Petite voiture' },
+  { value: 'sedan', label: 'Berline', icon: '🚘', desc: 'Véhicule standard' },
+  { value: 'suv', label: 'SUV', icon: '🚙', desc: 'Grand SUV / 4x4' },
+  { value: 'van', label: 'Utilitaire', icon: '🚐', desc: 'Van / utilitaire' },
+]
+
+const CANCELLATION_POLICIES: {
+  value: CancellationPolicy
+  label: string
+  desc: string
+}[] = [
+  {
+    value: 'flexible',
+    label: 'Flexible',
+    desc: 'Remboursement intégral jusqu\'à 2h avant. 50% après.',
+  },
+  {
+    value: 'moderate',
+    label: 'Modérée',
+    desc: 'Remboursement intégral jusqu\'à 24h avant. 50% entre 2-24h. Aucun après.',
+  },
+  {
+    value: 'strict',
+    label: 'Stricte',
+    desc: 'Remboursement intégral jusqu\'à 48h avant. 50% entre 24-48h. Aucun après.',
+  },
+]
+
+function Step5DimensionsAccess({
+  data,
+  onChange,
+}: {
+  data: FormData
+  onChange: (fields: Partial<FormData>) => void
+}) {
+  function addAccessPhoto() {
+    if (data.accessPhotos.length >= 10) return
+    onChange({ accessPhotos: [...data.accessPhotos, ''] })
+  }
+
+  function updateAccessPhoto(idx: number, value: string) {
+    const updated = data.accessPhotos.map((p, i) => (i === idx ? value : p))
+    onChange({ accessPhotos: updated })
+  }
+
+  function removeAccessPhoto(idx: number) {
+    onChange({ accessPhotos: data.accessPhotos.filter((_, i) => i !== idx) })
+  }
+
+  return (
+    <div className="space-y-8">
+      <div>
+        <h2 className="mb-2 text-xl font-bold text-[#1A1A2E]">Dimensions &amp; Compatibilité</h2>
+        <p className="mb-6 text-sm text-gray-500">
+          Renseigner les dimensions aide les conducteurs à vérifier la compatibilité
+        </p>
+
+        {/* Dimensions */}
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Largeur (m)</label>
+              <input
+                type="number"
+                min="1"
+                max="10"
+                step="0.1"
+                value={data.width}
+                onChange={(e) => onChange({ width: e.target.value })}
+                placeholder="2.5"
+                className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-[#0540FF] focus:outline-none focus:ring-1 focus:ring-[#0540FF]"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Longueur (m)</label>
+              <input
+                type="number"
+                min="1"
+                max="20"
+                step="0.1"
+                value={data.length}
+                onChange={(e) => onChange({ length: e.target.value })}
+                placeholder="5.0"
+                className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-[#0540FF] focus:outline-none focus:ring-1 focus:ring-[#0540FF]"
+              />
+            </div>
+          </div>
+          <p className="text-xs text-gray-400">Optionnel — hauteur max déjà renseignée à l&apos;étape précédente</p>
+        </div>
+
+        {/* Size category */}
+        <div className="mt-5">
+          <label className="mb-3 block text-sm font-medium text-gray-700">Catégorie de véhicule max</label>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {SIZE_CATEGORIES.map((cat) => (
+              <button
+                key={cat.value}
+                type="button"
+                onClick={() => onChange({ sizeCategory: cat.value })}
+                className={`flex items-center gap-3 rounded-xl border-2 px-4 py-3 text-left transition-all ${
+                  data.sizeCategory === cat.value
+                    ? 'border-[#0540FF] bg-blue-50'
+                    : 'border-gray-100 bg-white hover:border-[#0540FF]/30 hover:bg-gray-50'
+                }`}
+              >
+                <span className="text-2xl">{cat.icon}</span>
+                <div>
+                  <p className="text-sm font-semibold text-[#1A1A2E]">{cat.label}</p>
+                  <p className="text-xs text-gray-400">{cat.desc}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Cancellation policy */}
+        <div className="mt-5">
+          <label className="mb-3 block text-sm font-medium text-gray-700">Politique d&apos;annulation</label>
+          <div className="space-y-2">
+            {CANCELLATION_POLICIES.map((policy) => (
+              <button
+                key={policy.value}
+                type="button"
+                onClick={() => onChange({ cancellationPolicy: policy.value })}
+                className={`flex w-full items-start gap-4 rounded-xl border-2 p-4 text-left transition-all ${
+                  data.cancellationPolicy === policy.value
+                    ? 'border-[#0540FF] bg-blue-50'
+                    : 'border-gray-100 bg-white hover:border-[#0540FF]/30 hover:bg-gray-50'
+                }`}
+              >
+                <div className={`mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border-2 ${
+                  data.cancellationPolicy === policy.value
+                    ? 'border-[#0540FF] bg-[#0540FF]'
+                    : 'border-gray-300'
+                }`}>
+                  {data.cancellationPolicy === policy.value && (
+                    <div className="h-2 w-2 rounded-full bg-white" />
+                  )}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-[#1A1A2E]">{policy.label}</p>
+                  <p className="mt-0.5 text-xs text-gray-500">{policy.desc}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Instructions d'accès ── */}
+      <div className="border-t border-gray-100 pt-8">
+        <h2 className="mb-2 text-xl font-bold text-[#1A1A2E]">Instructions d&apos;accès</h2>
+        <p className="mb-6 text-sm text-gray-500">Partagées uniquement avec les conducteurs ayant une réservation confirmée</p>
+
+        {/* Access instructions textarea */}
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">Comment accéder à la place ?</label>
+            <textarea
+              value={data.accessInstructions}
+              onChange={(e) => onChange({ accessInstructions: e.target.value })}
+              rows={4}
+              maxLength={2000}
+              placeholder="Ex: Entrez par le portail principal, code 1234. Prenez l'ascenseur au sous-sol -1. La place est numérotée B12 sur le mur."
+              className="w-full resize-none rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-[#0540FF] focus:outline-none focus:ring-1 focus:ring-[#0540FF]"
+            />
+            <p className="mt-1 text-right text-xs text-gray-400">{data.accessInstructions.length}/2000</p>
+          </div>
+
+          {/* Building details */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Étage / Niveau</label>
+              <input
+                type="text"
+                value={data.floorNumber}
+                onChange={(e) => onChange({ floorNumber: e.target.value })}
+                placeholder="-1, RDC, 2"
+                maxLength={10}
+                className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-[#0540FF] focus:outline-none focus:ring-1 focus:ring-[#0540FF]"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">N° de place</label>
+              <input
+                type="text"
+                value={data.spotNumber}
+                onChange={(e) => onChange({ spotNumber: e.target.value })}
+                placeholder="B12, 47"
+                maxLength={20}
+                className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-[#0540FF] focus:outline-none focus:ring-1 focus:ring-[#0540FF]"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">
+              Code d&apos;accès immeuble <span className="font-normal text-gray-400">(optionnel)</span>
+            </label>
+            <input
+              type="text"
+              value={data.buildingCode}
+              onChange={(e) => onChange({ buildingCode: e.target.value })}
+              placeholder="1234"
+              maxLength={20}
+              className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-[#0540FF] focus:outline-none focus:ring-1 focus:ring-[#0540FF]"
+            />
+          </div>
+
+          {/* Access photos */}
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <label className="text-sm font-medium text-gray-700">
+                Photos d&apos;accès <span className="font-normal text-gray-400">(entrée, escalier, place)</span>
+              </label>
+              <button
+                type="button"
+                onClick={addAccessPhoto}
+                disabled={data.accessPhotos.length >= 10}
+                className="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-40"
+              >
+                + Ajouter
+              </button>
+            </div>
+            <div className="space-y-2">
+              {data.accessPhotos.map((url, idx) => (
+                <div key={idx} className="flex gap-2">
+                  <input
+                    type="url"
+                    value={url}
+                    onChange={(e) => updateAccessPhoto(idx, e.target.value)}
+                    placeholder="https://..."
+                    className="flex-1 rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:border-[#0540FF] focus:outline-none focus:ring-1 focus:ring-[#0540FF]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeAccessPhoto(idx)}
+                    className="flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 text-gray-400 hover:border-red-200 hover:text-red-500"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+              {data.accessPhotos.length === 0 && (
+                <p className="text-xs text-gray-400">Aucune photo d&apos;accès ajoutée — optionnel mais recommandé</p>
+              )}
+              <p className="text-xs text-gray-400">{data.accessPhotos.length}/10 photos</p>
+            </div>
+          </div>
+
+          {/* GPS pin */}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">
+              Position GPS exacte de l&apos;entrée <span className="font-normal text-gray-400">(optionnel)</span>
+            </label>
+            <p className="mb-2 text-xs text-gray-400">Aidez les conducteurs à trouver l&apos;entrée facilement</p>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="mb-1 block text-xs text-gray-500">Latitude</label>
+                <input
+                  type="number"
+                  min="-90"
+                  max="90"
+                  step="0.00001"
+                  value={data.gpsPinLat}
+                  onChange={(e) => onChange({ gpsPinLat: e.target.value })}
+                  placeholder="43.70314"
+                  className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-[#0540FF] focus:outline-none focus:ring-1 focus:ring-[#0540FF]"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-gray-500">Longitude</label>
+                <input
+                  type="number"
+                  min="-180"
+                  max="180"
+                  step="0.00001"
+                  value={data.gpsPinLng}
+                  onChange={(e) => onChange({ gpsPinLng: e.target.value })}
+                  placeholder="7.26608"
+                  className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-[#0540FF] focus:outline-none focus:ring-1 focus:ring-[#0540FF]"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Ownership proof */}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">
+              Justificatif de propriété / bail
+            </label>
+            <p className="mb-2 text-xs text-gray-400">
+              Titre de propriété, bail, ou appel de charges (requis pour la vérification)
+            </p>
+            <input
+              type="url"
+              value={data.ownershipProofUrl}
+              onChange={(e) => onChange({ ownershipProofUrl: e.target.value })}
+              placeholder="https://..."
+              className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-[#0540FF] focus:outline-none focus:ring-1 focus:ring-[#0540FF]"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ───────────────── Step 6: Pricing ─────────────────
+function Step6Pricing({
   data,
   onChange,
 }: {
@@ -444,8 +770,22 @@ function Step5({
   )
 }
 
-// ───────────────── Step 6: Review ─────────────────
-function Step6({ data }: { data: FormData }) {
+// ───────────────── Step 7: Review ─────────────────
+const SIZE_LABELS: Record<SizeCategory, string> = {
+  motorcycle: 'Moto',
+  compact: 'Citadine',
+  sedan: 'Berline',
+  suv: 'SUV',
+  van: 'Utilitaire',
+}
+
+const POLICY_LABELS: Record<CancellationPolicy, string> = {
+  flexible: 'Flexible',
+  moderate: 'Modérée',
+  strict: 'Stricte',
+}
+
+function Step7Review({ data }: { data: FormData }) {
   const typeLabel = TYPES.find((t) => t.value === data.type)?.label ?? data.type
 
   return (
@@ -464,6 +804,23 @@ function Step6({ data }: { data: FormData }) {
           { label: 'Description', value: data.description || '—' },
           { label: 'Équipements', value: data.amenities.join(', ') || '—' },
           { label: 'Photos', value: data.photos.length > 0 ? `${data.photos.length} photo(s)` : 'Aucune' },
+          {
+            label: 'Dimensions',
+            value: data.width && data.length
+              ? `${data.width} m × ${data.length} m`
+              : data.width ? `Largeur ${data.width} m` : data.length ? `Longueur ${data.length} m` : '—',
+          },
+          { label: 'Catégorie max', value: SIZE_LABELS[data.sizeCategory] },
+          { label: 'Annulation', value: POLICY_LABELS[data.cancellationPolicy] },
+          { label: 'Étage', value: data.floorNumber || '—' },
+          { label: 'N° place', value: data.spotNumber || '—' },
+          { label: 'Code accès', value: data.buildingCode || '—' },
+          {
+            label: 'Photos accès',
+            value: data.accessPhotos.filter(Boolean).length > 0
+              ? `${data.accessPhotos.filter(Boolean).length} photo(s)`
+              : 'Aucune',
+          },
           { label: 'Prix/heure', value: data.pricePerHour ? `${Number(data.pricePerHour).toFixed(2).replace('.', ',')} €` : '—' },
           { label: 'Prix/jour', value: data.pricePerDay ? `${Number(data.pricePerDay).toFixed(2).replace('.', ',')} €` : '—' },
           { label: 'Hauteur max', value: data.maxVehicleHeight ? `${Number(data.maxVehicleHeight).toFixed(1)} m` : '—' },
@@ -501,6 +858,18 @@ const INITIAL_DATA: FormData = {
   instantBook: true,
   hasSmartGate: false,
   maxVehicleHeight: '',
+  width: '',
+  length: '',
+  sizeCategory: 'sedan',
+  cancellationPolicy: 'flexible',
+  accessInstructions: '',
+  floorNumber: '',
+  spotNumber: '',
+  buildingCode: '',
+  accessPhotos: [],
+  gpsPinLat: '',
+  gpsPinLng: '',
+  ownershipProofUrl: '',
 }
 
 function validateStep(step: number, data: FormData): string | null {
@@ -511,8 +880,18 @@ function validateStep(step: number, data: FormData): string | null {
     if (!data.latitude || !data.longitude) return 'Les coordonnées GPS sont requises'
   }
   if (step === 3 && data.title.trim().length < 5) return 'Le titre doit faire au moins 5 caractères'
-  // step 4 = photos, optional — no validation
-  if (step === 5 && (!data.pricePerHour || Number(data.pricePerHour) <= 0))
+  if (step === 5) {
+    // Validate access photo URLs — they must be https if non-empty
+    for (const url of data.accessPhotos) {
+      if (url && !url.startsWith('https://')) {
+        return 'Les URLs de photos d\'accès doivent commencer par https://'
+      }
+    }
+    if (data.ownershipProofUrl && !data.ownershipProofUrl.startsWith('https://')) {
+      return 'L\'URL du justificatif doit commencer par https://'
+    }
+  }
+  if (step === 6 && (!data.pricePerHour || Number(data.pricePerHour) <= 0))
     return 'Le prix à l\'heure est requis'
   return null
 }
@@ -568,6 +947,18 @@ export default function NewListingPage() {
         instantBook: data.instantBook,
         hasSmartGate: data.hasSmartGate,
         maxVehicleHeight: data.maxVehicleHeight ? Number(data.maxVehicleHeight) : undefined,
+        width: data.width ? Number(data.width) : undefined,
+        length: data.length ? Number(data.length) : undefined,
+        sizeCategory: data.sizeCategory,
+        cancellationPolicy: data.cancellationPolicy,
+        accessInstructions: data.accessInstructions || undefined,
+        accessPhotos: data.accessPhotos.filter((url) => url.startsWith('https://')),
+        floorNumber: data.floorNumber || undefined,
+        spotNumber: data.spotNumber || undefined,
+        buildingCode: data.buildingCode || undefined,
+        gpsPinLat: data.gpsPinLat ? Number(data.gpsPinLat) : undefined,
+        gpsPinLng: data.gpsPinLng ? Number(data.gpsPinLng) : undefined,
+        ownershipProofUrl: data.ownershipProofUrl || undefined,
       })
       router.push('/host/listings')
     } catch (err) {
@@ -584,7 +975,6 @@ export default function NewListingPage() {
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-[#1A1A2E]">Nouvelle annonce</h1>
           <p className="mt-1 text-sm text-gray-500">Étape {step} sur {TOTAL_STEPS}</p>
-          {/* Progress bar */}
           <div className="mt-4 h-1.5 w-full rounded-full bg-gray-200">
             <div
               className="h-1.5 rounded-full bg-[#0540FF] transition-all duration-300"
@@ -599,8 +989,9 @@ export default function NewListingPage() {
           {step === 2 && <Step2 data={data} onChange={update} />}
           {step === 3 && <Step3 data={data} onChange={update} />}
           {step === 4 && <Step4Photos data={data} onChange={update} />}
-          {step === 5 && <Step5 data={data} onChange={update} />}
-          {step === 6 && <Step6 data={data} />}
+          {step === 5 && <Step5DimensionsAccess data={data} onChange={update} />}
+          {step === 6 && <Step6Pricing data={data} onChange={update} />}
+          {step === 7 && <Step7Review data={data} />}
 
           {error && (
             <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

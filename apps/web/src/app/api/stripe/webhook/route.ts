@@ -1,13 +1,12 @@
 import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
-import { db, bookings, users } from '@flashpark/db'
-import { eq } from 'drizzle-orm'
+import { createSupabaseServerClient } from '../../../../lib/supabase/server'
 import { rateLimit, getClientIp } from '../../../../lib/rate-limit'
 
 export const runtime = 'nodejs'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2024-12-18.acacia',
+  apiVersion: '2025-02-24.acacia',
 })
 
 export async function POST(request: Request) {
@@ -37,6 +36,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid webhook signature' }, { status: 400 })
   }
 
+  const supabase = createSupabaseServerClient()
+
   try {
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object as Stripe.Checkout.Session
@@ -47,9 +48,12 @@ export async function POST(request: Request) {
       }
 
       // Cross-validate: booking must exist and be in a confirmable state
-      const booking = await db.query.bookings.findFirst({
-        where: eq(bookings.id, bookingId),
-      })
+      const { data: booking } = await supabase
+        .from('bookings')
+        .select('id, status')
+        .eq('id', bookingId)
+        .single()
+
       if (!booking || booking.status === 'cancelled' || booking.status === 'refunded') {
         return NextResponse.json({ received: true })
       }
@@ -59,14 +63,14 @@ export async function POST(request: Request) {
         ? session.payment_intent
         : null
 
-      await db
-        .update(bookings)
-        .set({
+      await supabase
+        .from('bookings')
+        .update({
           status: 'confirmed',
-          ...(paymentIntentId ? { stripePaymentIntentId: paymentIntentId } : {}),
-          updatedAt: new Date(),
+          ...(paymentIntentId ? { stripe_payment_intent_id: paymentIntentId } : {}),
+          updated_at: new Date().toISOString(),
         })
-        .where(eq(bookings.id, bookingId))
+        .eq('id', bookingId)
     }
 
     if (event.type === 'payment_intent.payment_failed') {
@@ -77,10 +81,14 @@ export async function POST(request: Request) {
         return NextResponse.json({ received: true })
       }
 
-      await db
-        .update(bookings)
-        .set({ status: 'cancelled', cancelledAt: new Date(), updatedAt: new Date() })
-        .where(eq(bookings.id, bookingId))
+      await supabase
+        .from('bookings')
+        .update({
+          status: 'cancelled',
+          cancelled_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', bookingId)
     }
 
     // Abandoned session cleanup — user opened checkout but never paid
@@ -92,10 +100,14 @@ export async function POST(request: Request) {
         return NextResponse.json({ received: true })
       }
 
-      await db
-        .update(bookings)
-        .set({ status: 'cancelled', cancelledAt: new Date(), updatedAt: new Date() })
-        .where(eq(bookings.id, bookingId))
+      await supabase
+        .from('bookings')
+        .update({
+          status: 'cancelled',
+          cancelled_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', bookingId)
     }
 
     if (event.type === 'charge.refunded') {
@@ -103,10 +115,13 @@ export async function POST(request: Request) {
       const paymentIntentId = typeof charge.payment_intent === 'string' ? charge.payment_intent : null
 
       if (paymentIntentId) {
-        await db
-          .update(bookings)
-          .set({ status: 'refunded', updatedAt: new Date() })
-          .where(eq(bookings.stripePaymentIntentId, paymentIntentId))
+        await supabase
+          .from('bookings')
+          .update({
+            status: 'refunded',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('stripe_payment_intent_id', paymentIntentId)
       }
     }
 
@@ -120,16 +135,16 @@ export async function POST(request: Request) {
         (!account.requirements?.past_due?.length)
 
       if (isFullyVerified) {
-        await db
-          .update(users)
-          .set({ isVerified: true, updatedAt: new Date() })
-          .where(eq(users.stripeAccountId, account.id))
+        await supabase
+          .from('users')
+          .update({ is_verified: true, updated_at: new Date().toISOString() })
+          .eq('stripe_account_id', account.id)
       } else if (!account.charges_enabled) {
         // Account was disabled — remove verification
-        await db
-          .update(users)
-          .set({ isVerified: false, updatedAt: new Date() })
-          .where(eq(users.stripeAccountId, account.id))
+        await supabase
+          .from('users')
+          .update({ is_verified: false, updated_at: new Date().toISOString() })
+          .eq('stripe_account_id', account.id)
       }
     }
   } catch {

@@ -1,10 +1,13 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { QRCodeSVG } from 'qrcode.react'
 import { ReviewsSection } from '../../../../components/reviews-section'
 import { BookingMessages } from '../../../../components/booking-messages'
-import { PageTransition, FadeIn, StaggerContainer, StaggerItem, motion } from '../../../../components/motion'
+import { PageTransition, FadeIn, StaggerContainer, StaggerItem, motion, AnimatePresence } from '../../../../components/motion'
+import { api } from '../../../../lib/trpc/client'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import {
@@ -20,7 +23,16 @@ import {
   Zap,
   Navigation,
   Info,
+  LogIn,
+  LogOut,
+  Timer,
+  AlertTriangle,
+  Plus,
+  X,
+  ChevronDown,
 } from 'lucide-react'
+
+/* ─── constants ─────────────────────────────────────────────────── */
 
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
   pending:   { label: 'En attente',  className: 'bg-amber-50 text-amber-700 border-amber-200' },
@@ -31,6 +43,8 @@ const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
   refunded:  { label: 'Remboursée',  className: 'bg-gray-100 text-gray-600 border-gray-200' },
 }
 
+/* ─── types ──────────────────────────────────────────────────────── */
+
 interface BookingContentProps {
   booking: {
     id: string
@@ -38,6 +52,10 @@ interface BookingContentProps {
     status: string
     totalPrice: string
     platformFee: string
+    startTime: string
+    endTime: string
+    checkedInAt: string | null
+    originalEndTime: string | null
   }
   spot: {
     id: string
@@ -61,6 +79,401 @@ interface BookingContentProps {
   currentUserId: string
 }
 
+/* ─── helpers ────────────────────────────────────────────────────── */
+
+function formatDuration(ms: number): string {
+  const totalMinutes = Math.max(0, Math.floor(ms / 60000))
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  if (hours > 0 && minutes > 0) return `${hours} h ${minutes} min`
+  if (hours > 0) return `${hours} h`
+  return `${minutes} min`
+}
+
+function formatTime(iso: string): string {
+  return new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
+}
+
+/* ─── countdown / timer display ─────────────────────────────────── */
+
+function BookingTimer({ booking }: {
+  booking: Pick<BookingContentProps['booking'], 'status' | 'startTime' | 'endTime' | 'checkedInAt'>
+}) {
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000)
+    return () => clearInterval(id)
+  }, [])
+
+  const startMs = new Date(booking.startTime).getTime()
+  const endMs = new Date(booking.endTime).getTime()
+  const msUntilStart = startMs - now
+  const msRemaining = endMs - now
+  const isApproachingEnd = booking.status === 'active' && msRemaining > 0 && msRemaining < 15 * 60 * 1000
+
+  if (booking.status === 'confirmed' && msUntilStart > 0) {
+    return (
+      <div className="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+        <Timer className="h-4 w-4 flex-shrink-0 text-[#0540FF]" />
+        <span>Votre réservation commence dans <strong>{formatDuration(msUntilStart)}</strong></span>
+      </div>
+    )
+  }
+
+  if (booking.status === 'active' && msRemaining > 0) {
+    if (isApproachingEnd) {
+      return (
+        <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <AlertTriangle className="h-4 w-4 flex-shrink-0 text-[#F5A623]" />
+          <span>Votre créneau se termine dans <strong>{formatDuration(msRemaining)}</strong></span>
+        </div>
+      )
+    }
+    return (
+      <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+        <Clock className="h-4 w-4 flex-shrink-0 text-[#10B981]" />
+        <span>Temps restant : <strong>{formatDuration(msRemaining)}</strong></span>
+      </div>
+    )
+  }
+
+  return null
+}
+
+/* ─── extension modal ────────────────────────────────────────────── */
+
+interface ExtensionModalProps {
+  booking: Pick<BookingContentProps['booking'], 'id' | 'endTime' | 'originalEndTime'>
+  pricePerHour: number
+  onClose: () => void
+  onSuccess: (newEndTime: string, additionalCost: number) => void
+}
+
+function ExtensionModal({ booking, pricePerHour, onClose, onSuccess }: ExtensionModalProps) {
+  const currentEnd = new Date(booking.endTime)
+  const baseEnd = booking.originalEndTime ? new Date(booking.originalEndTime) : currentEnd
+  const maxEnd = new Date(baseEnd.getTime() + 8 * 60 * 60 * 1000)
+
+  // Build 30-min increment options from current end up to max
+  const options: Date[] = []
+  let cursor = new Date(currentEnd.getTime() + 30 * 60 * 1000)
+  while (cursor <= maxEnd) {
+    options.push(new Date(cursor))
+    cursor = new Date(cursor.getTime() + 30 * 60 * 1000)
+  }
+
+  const [selectedIndex, setSelectedIndex] = useState(0)
+  const [error, setError] = useState<string | null>(null)
+
+  const extendMutation = api.bookings.extend.useMutation()
+
+  const selectedEnd = options[selectedIndex]
+  const additionalHours = selectedEnd
+    ? (selectedEnd.getTime() - currentEnd.getTime()) / (1000 * 60 * 60)
+    : 0
+  const estimatedCost = Math.round(additionalHours * pricePerHour * 100) / 100
+
+  async function handleConfirm() {
+    if (!selectedEnd) return
+    setError(null)
+    try {
+      await extendMutation.mutateAsync({ bookingId: booking.id, newEndTime: selectedEnd })
+      onSuccess(selectedEnd.toISOString(), estimatedCost)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Une erreur est survenue')
+    }
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 px-4 pb-8 sm:items-center"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 40 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 40 }}
+        transition={{ type: 'spring', stiffness: 300, damping: 28 }}
+        className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-5 flex items-center justify-between">
+          <h2 className="text-lg font-bold text-gray-900">Prolonger ma réservation</h2>
+          <button
+            onClick={onClose}
+            className="rounded-full p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <p className="mb-3 text-sm text-gray-500">
+          Heure de fin actuelle : <strong className="text-gray-900">{formatTime(booking.endTime)}</strong>
+        </p>
+
+        {options.length === 0 ? (
+          <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            Vous avez atteint la durée maximale d&apos;extension (8 h).
+          </p>
+        ) : (
+          <>
+            <div className="mb-4 relative">
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-gray-400">
+                Nouvelle heure de fin
+              </label>
+              <div className="relative">
+                <select
+                  value={selectedIndex}
+                  onChange={(e) => setSelectedIndex(Number(e.target.value))}
+                  className="w-full appearance-none rounded-xl border border-gray-200 bg-white px-4 py-3 pr-10 text-sm font-medium text-gray-900 focus:border-[#0540FF] focus:outline-none focus:ring-2 focus:ring-[#0540FF]/20"
+                >
+                  {options.map((opt, i) => {
+                    const addH = (opt.getTime() - currentEnd.getTime()) / (1000 * 60 * 60)
+                    const addCost = Math.round(addH * pricePerHour * 100) / 100
+                    return (
+                      <option key={i} value={i}>
+                        {formatTime(opt.toISOString())} — +{addH % 1 === 0 ? addH : addH.toFixed(1)} h (+{addCost.toFixed(2).replace('.', ',')} €)
+                      </option>
+                    )
+                  })}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              </div>
+            </div>
+
+            <div className="mb-5 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
+              <p className="text-sm text-blue-800">
+                Coût supplémentaire estimé :{' '}
+                <strong>{estimatedCost.toFixed(2).replace('.', ',')} €</strong>
+              </p>
+            </div>
+          </>
+        )}
+
+        {error && (
+          <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-600">{error}</p>
+        )}
+
+        <div className="flex gap-3">
+          <button
+            onClick={onClose}
+            className="flex-1 rounded-xl border border-gray-200 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+          >
+            Annuler
+          </button>
+          {options.length > 0 && (
+            <Button
+              onClick={handleConfirm}
+              loading={extendMutation.isPending}
+              disabled={options.length === 0}
+              className="flex-1 rounded-xl bg-[#0540FF] text-sm font-semibold text-white hover:bg-[#0435D2]"
+            >
+              Confirmer
+            </Button>
+          )}
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
+/* ─── dispute banner ─────────────────────────────────────────────── */
+
+const DISPUTE_TYPE_LABELS: Record<string, string> = {
+  spot_occupied:    'Place occupée',
+  spot_not_matching: 'Non conforme à l\'annonce',
+  access_issue:     'Problème d\'accès',
+  safety_concern:   'Problème de sécurité',
+  other:            'Autre',
+}
+
+const DISPUTE_STATUS_LABELS: Record<string, { label: string; className: string }> = {
+  open:                  { label: 'Litige en cours',  className: 'border-amber-200 bg-amber-50 text-amber-800' },
+  under_review:          { label: 'En cours d\'examen', className: 'border-amber-200 bg-amber-50 text-amber-800' },
+  resolved_refunded:     { label: 'Litige résolu — Remboursé',   className: 'border-emerald-200 bg-emerald-50 text-emerald-800' },
+  resolved_rejected:     { label: 'Litige résolu — Rejeté',      className: 'border-red-200 bg-red-50 text-red-800' },
+  resolved_compensation: { label: 'Litige résolu — Compensation', className: 'border-emerald-200 bg-emerald-50 text-emerald-800' },
+}
+
+function DisputeBanner({ bookingId }: { bookingId: string }) {
+  const { data: dispute } = api.disputes.byBooking.useQuery({ bookingId }, { retry: false })
+
+  if (!dispute) return null
+
+  const statusConfig = DISPUTE_STATUS_LABELS[dispute.status] ?? { label: dispute.status, className: 'border-gray-200 bg-gray-50 text-gray-800' }
+
+  return (
+    <FadeIn>
+      <div className={`rounded-xl border px-4 py-4 ${statusConfig.className}`}>
+        <p className="font-semibold">{statusConfig.label}</p>
+        <p className="mt-0.5 text-sm opacity-80">
+          Type : {DISPUTE_TYPE_LABELS[dispute.type] ?? dispute.type}
+        </p>
+        {dispute.resolution && (
+          <p className="mt-2 text-sm">
+            <span className="font-medium">Résolution :</span> {dispute.resolution}
+          </p>
+        )}
+      </div>
+    </FadeIn>
+  )
+}
+
+/* ─── toast ──────────────────────────────────────────────────────── */
+
+function Toast({ message, type }: { message: string; type: 'success' | 'error' }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      className={`fixed right-4 top-4 z-50 flex items-center gap-2 rounded-xl border px-4 py-3 shadow-lg ${
+        type === 'success'
+          ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+          : 'border-red-200 bg-red-50 text-red-800'
+      }`}
+    >
+      {type === 'success'
+        ? <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+        : <AlertCircle className="h-4 w-4 flex-shrink-0" />}
+      <span className="text-sm font-medium">{message}</span>
+    </motion.div>
+  )
+}
+
+/* ─── action buttons section ─────────────────────────────────────── */
+
+interface DriverActionsProps {
+  booking: BookingContentProps['booking']
+  pricePerHour: number
+}
+
+function DriverActions({ booking, pricePerHour }: DriverActionsProps) {
+  const router = useRouter()
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+  const [showExtensionModal, setShowExtensionModal] = useState(false)
+  const [currentStatus, setCurrentStatus] = useState(booking.status)
+  const [currentEndTime, setCurrentEndTime] = useState(booking.endTime)
+
+  const checkInMutation = api.bookings.checkIn.useMutation()
+  const checkOutMutation = api.bookings.checkOut.useMutation()
+
+  const now = Date.now()
+  const startMs = new Date(booking.startTime).getTime()
+  const endMs = new Date(currentEndTime).getTime()
+  const msUntilStart = startMs - now
+  const canCheckIn = currentStatus === 'confirmed' && msUntilStart <= 15 * 60 * 1000 && now < endMs
+  const canCheckOut = currentStatus === 'active' && booking.checkedInAt !== null
+  const canExtend = currentStatus === 'active'
+
+  function showToast(message: string, type: 'success' | 'error') {
+    setToast({ message, type })
+    setTimeout(() => setToast(null), 3500)
+  }
+
+  async function handleCheckIn() {
+    try {
+      await checkInMutation.mutateAsync({ bookingId: booking.id })
+      setCurrentStatus('active')
+      showToast('Check-in effectué avec succès !', 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Une erreur est survenue', 'error')
+    }
+  }
+
+  async function handleCheckOut() {
+    try {
+      await checkOutMutation.mutateAsync({ bookingId: booking.id })
+      showToast('Check-out effectué. Redirection...', 'success')
+      setTimeout(() => router.push(`/review/${booking.id}`), 1500)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Une erreur est survenue', 'error')
+    }
+  }
+
+  function handleExtensionSuccess(newEndTime: string, additionalCost: number) {
+    setCurrentEndTime(newEndTime)
+    setShowExtensionModal(false)
+    showToast(
+      `Réservation prolongée jusqu'à ${formatTime(newEndTime)} (+${additionalCost.toFixed(2).replace('.', ',')} €)`,
+      'success'
+    )
+  }
+
+  if (!canCheckIn && !canCheckOut && !canExtend) return null
+
+  return (
+    <>
+      <AnimatePresence>
+        {toast && <Toast message={toast.message} type={toast.type} />}
+      </AnimatePresence>
+
+      <FadeIn delay={0.7}>
+        <div className="space-y-3 rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Actions</p>
+
+          {canCheckIn && (
+            <motion.div whileTap={{ scale: 0.98 }}>
+              <Button
+                onClick={handleCheckIn}
+                loading={checkInMutation.isPending}
+                className="w-full rounded-xl bg-[#10B981] py-3 text-sm font-semibold text-white hover:bg-emerald-600"
+              >
+                <LogIn className="mr-2 h-4 w-4" />
+                Arrivé — Check-in
+              </Button>
+            </motion.div>
+          )}
+
+          {canCheckOut && (
+            <motion.div whileTap={{ scale: 0.98 }}>
+              <Button
+                onClick={handleCheckOut}
+                loading={checkOutMutation.isPending}
+                className="w-full rounded-xl py-3 text-sm font-semibold text-white"
+                style={{ backgroundColor: '#F5A623' }}
+              >
+                <LogOut className="mr-2 h-4 w-4" />
+                Partir — Check-out
+              </Button>
+            </motion.div>
+          )}
+
+          {canExtend && (
+            <motion.div whileTap={{ scale: 0.98 }}>
+              <Button
+                variant="outline"
+                onClick={() => setShowExtensionModal(true)}
+                className="w-full rounded-xl border-[#0540FF] py-3 text-sm font-semibold text-[#0540FF] hover:bg-blue-50"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Prolonger ma réservation
+              </Button>
+            </motion.div>
+          )}
+        </div>
+      </FadeIn>
+
+      <AnimatePresence>
+        {showExtensionModal && (
+          <ExtensionModal
+            booking={{ id: booking.id, endTime: currentEndTime, originalEndTime: booking.originalEndTime }}
+            pricePerHour={pricePerHour}
+            onClose={() => setShowExtensionModal(false)}
+            onSuccess={handleExtensionSuccess}
+          />
+        )}
+      </AnimatePresence>
+    </>
+  )
+}
+
+/* ─── main component ─────────────────────────────────────────────── */
+
 export function BookingContent({
   booking,
   spot,
@@ -74,6 +487,9 @@ export function BookingContent({
 }: BookingContentProps) {
   const statusCfg = STATUS_CONFIG[booking.status] ?? { label: booking.status, className: 'bg-gray-100 text-gray-600 border-gray-200' }
   const hostBase = Number(booking.totalPrice) - Number(booking.platformFee)
+  const pricePerHour = Number(spot.pricePerHour)
+
+  const canReportDispute = ['active', 'confirmed', 'completed'].includes(booking.status)
 
   return (
     <PageTransition>
@@ -142,6 +558,19 @@ export function BookingContent({
               </FadeIn>
             )}
           </div>
+
+          {/* ── Timer / countdown ──────────────────────────── */}
+          {(booking.status === 'confirmed' || booking.status === 'active') && (
+            <FadeIn delay={0.42} direction="up">
+              <BookingTimer booking={booking} />
+            </FadeIn>
+          )}
+
+          {/* ── Dispute banner ──────────────────────────────── */}
+          <DisputeBanner bookingId={booking.id} />
+
+          {/* ── Driver actions (check-in/out/extend) ─────────── */}
+          <DriverActions booking={booking} pricePerHour={pricePerHour} />
 
           {/* ── Spot details card ───────────────────────────── */}
           <FadeIn delay={0.45} direction="up">
@@ -319,8 +748,21 @@ export function BookingContent({
                   </Link>
                 </Button>
               </motion.div>
+
+              {/* Report dispute link */}
+              {canReportDispute && (
+                <div className="pt-2 text-center">
+                  <Link
+                    href={`/booking/${booking.id}/dispute`}
+                    className="text-sm font-medium text-red-500 underline underline-offset-2 hover:text-red-700"
+                  >
+                    Signaler un problème
+                  </Link>
+                </div>
+              )}
             </div>
           </FadeIn>
+
         </div>
       </div>
     </PageTransition>

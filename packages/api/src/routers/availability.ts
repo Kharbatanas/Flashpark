@@ -57,12 +57,13 @@ export const availabilityRouter = createTRPCRouter({
 
       const [slot] = await ctx.db
         .insert(availability)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .values({
           spotId: input.spotId,
           startTime: input.startTime,
           endTime: input.endTime,
           isAvailable: input.isAvailable,
-        })
+        } as any)
         .returning()
 
       return slot
@@ -114,7 +115,8 @@ export const availabilityRouter = createTRPCRouter({
         isAvailable: s.isAvailable,
       }))
 
-      const inserted = await ctx.db.insert(availability).values(rows).returning()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const inserted = await ctx.db.insert(availability).values(rows as any).returning()
       return inserted
     }),
 })

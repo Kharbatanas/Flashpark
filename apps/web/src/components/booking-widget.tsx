@@ -76,8 +76,8 @@ export function BookingWidget({ spot }: BookingWidgetProps) {
   // Auto-select default vehicle when loaded
   useEffect(() => {
     if (myVehicles?.length && !selectedVehicleId) {
-      const def = myVehicles.find((v: Vehicle) => v.isDefault) ?? myVehicles[0]
-      setSelectedVehicleId(def.id)
+      const def = myVehicles.find((v) => v.isDefault) ?? myVehicles[0]
+      setSelectedVehicleId(def?.id ?? null)
     }
   }, [myVehicles, selectedVehicleId])
 
@@ -252,8 +252,8 @@ export function BookingWidget({ spot }: BookingWidgetProps) {
                 className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 focus:border-[#0540FF] focus:outline-none focus:ring-1 focus:ring-[#0540FF]"
               >
                 <option value="">Aucun vehicule selectionne</option>
-                {myVehicles.map((v: Vehicle) => (
-                  <option key={v.id} value={v.id}>
+                {myVehicles.map((v) => (
+                  <option key={v.id ?? ''} value={v.id ?? ''}>
                     {v.licensePlate}{v.brand ? ` — ${v.brand}${v.model ? ` ${v.model}` : ''}` : ''}
                     {v.isDefault ? ' (par defaut)' : ''}
                   </option>
@@ -281,7 +281,7 @@ export function BookingWidget({ spot }: BookingWidgetProps) {
                     disabled={!newPlate || newPlate.length < 2}
                     onClick={async () => {
                       const v = await addVehicle.mutateAsync({ licensePlate: newPlate, isDefault: !myVehicles.length })
-                      setSelectedVehicleId(v.id)
+                      setSelectedVehicleId(v.id ?? null)
                       setNewPlate('')
                       setShowAddVehicle(false)
                       refetchVehicles()

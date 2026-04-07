@@ -1,15 +1,13 @@
 import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { createSupabaseServerClient } from '../../../../lib/supabase/server'
-import { db, users } from '@flashpark/db'
-import { eq } from 'drizzle-orm'
 
 if (!process.env.STRIPE_SECRET_KEY) {
   throw new Error('STRIPE_SECRET_KEY environment variable is not set')
 }
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: '2024-12-18.acacia',
+  apiVersion: '2025-02-24.acacia',
 })
 
 export async function POST(request: Request) {
@@ -19,7 +17,11 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
 
-  const dbUser = await db.query.users.findFirst({ where: eq(users.supabaseId, user.id) })
+  const { data: dbUser } = await supabase
+    .from('users')
+    .select('id, email, role, stripe_account_id')
+    .eq('supabase_id', user.id)
+    .single()
   if (!dbUser) return NextResponse.json({ error: 'Utilisateur introuvable' }, { status: 404 })
 
   const isHost = dbUser.role === 'host' || dbUser.role === 'both' || dbUser.role === 'admin'
@@ -30,7 +32,7 @@ export async function POST(request: Request) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
   // Reuse existing account if already created
-  let accountId = dbUser.stripeAccountId
+  let accountId = dbUser.stripe_account_id
 
   if (!accountId) {
     const account = await stripe.accounts.create({
@@ -43,10 +45,10 @@ export async function POST(request: Request) {
     })
     accountId = account.id
 
-    await db
-      .update(users)
-      .set({ stripeAccountId: accountId, updatedAt: new Date() })
-      .where(eq(users.id, dbUser.id))
+    await supabase
+      .from('users')
+      .update({ stripe_account_id: accountId, updated_at: new Date().toISOString() })
+      .eq('id', dbUser.id)
   }
 
   const accountLink = await stripe.accountLinks.create({

@@ -74,11 +74,11 @@ export default async function IntelligencePage({ searchParams }: Props) {
   const ourSpots = flashparkSpots ?? []
 
   // Available filter options
-  const allCountries = [...new Set(all.map(c => c.country).filter(Boolean))].sort()
+  const allCountries = Array.from(new Set(all.map(c => c.country).filter(Boolean))).sort()
   const allCities = params.country
-    ? [...new Set(all.filter(c => c.country === params.country).map(c => c.city))].sort()
-    : [...new Set(all.map(c => c.city))].sort()
-  const allSources = [...new Set(all.map(c => c.source))].sort()
+    ? Array.from(new Set(all.filter(c => c.country === params.country).map(c => c.city))).sort()
+    : Array.from(new Set(all.map(c => c.city))).sort()
+  const allSources = Array.from(new Set(all.map(c => c.source))).sort()
 
   // Apply filters
   let filtered = all
@@ -89,7 +89,7 @@ export default async function IntelligencePage({ searchParams }: Props) {
   // ---- GLOBAL KPIs (across all data) ----
   const totalGlobal = all.length
   const countriesCount = allCountries.length
-  const citiesCount = [...new Set(all.map(c => c.city))].length
+  const citiesCount = Array.from(new Set(all.map(c => c.city))).length
 
   // ---- FILTERED KPIs ----
   const totalFiltered = filtered.length
@@ -114,7 +114,7 @@ export default async function IntelligencePage({ searchParams }: Props) {
     const rows = all.filter(c => c.country === country)
     const prices = rows.map(c => Number(c.price_hour)).filter(p => p > 0)
     const ratings = rows.map(c => Number(c.rating)).filter(r => r > 0)
-    const cities = [...new Set(rows.map(c => c.city))]
+    const cities = Array.from(new Set(rows.map(c => c.city)))
     return {
       country,
       flag: COUNTRY_FLAGS[country] || '🏳️',
@@ -140,7 +140,7 @@ export default async function IntelligencePage({ searchParams }: Props) {
   }).sort((a, b) => b.count - a.count)
 
   // ---- CITY PRICE RANKING ----
-  const filteredCities = [...new Set(filtered.map(c => c.city))]
+  const filteredCities = Array.from(new Set(filtered.map(c => c.city)))
   const cityRanking = filteredCities.map(city => {
     const rows = filtered.filter(c => c.city === city)
     const prices = rows.map(c => Number(c.price_hour)).filter(p => p > 0)
@@ -181,7 +181,7 @@ export default async function IntelligencePage({ searchParams }: Props) {
     .sort((a, b) => (a.position ?? 999) - (b.position ?? 999))
     .slice(0, 20)
   const seoTop10 = seo.filter(s => s.position != null && s.position <= 10).length
-  const seoTotal = [...new Set(seo.map(s => s.keyword))].length
+  const seoTotal = Array.from(new Set(seo.map(s => s.keyword))).length
 
   // ---- LAST SCRAPE ----
   const lastScrape = all.length > 0

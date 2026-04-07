@@ -5,6 +5,10 @@ export type AuditAction =
   | 'user.demote'
   | 'review.delete'
   | 'verification.update'
+  | 'spot.approve'
+  | 'spot.reject'
+  | 'dispute.resolve'
+  | 'dispute.status_update'
 
 interface AuditEntry {
   action: AuditAction

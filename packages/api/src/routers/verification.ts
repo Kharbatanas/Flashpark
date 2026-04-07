@@ -22,12 +22,13 @@ export const verificationRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const [doc] = await ctx.db
         .insert(verificationDocuments)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .values({
           userId: ctx.userId,
           type: input.type,
           fileUrl: input.fileUrl,
           status: 'pending',
-        })
+        } as any)
         .returning()
 
       return doc

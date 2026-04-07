@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { api } from '../../../lib/trpc/client'
 import { Card } from '@/components/ui/card'
@@ -23,7 +23,7 @@ function formatDT(d: string | Date) {
   }).format(new Date(d))
 }
 
-export default function VerifyPage() {
+function VerifyPageInner() {
   const searchParams = useSearchParams()
   const codeFromUrl = searchParams.get('code') ?? ''
 
@@ -160,5 +160,13 @@ export default function VerifyPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function VerifyPage() {
+  return (
+    <Suspense>
+      <VerifyPageInner />
+    </Suspense>
   )
 }

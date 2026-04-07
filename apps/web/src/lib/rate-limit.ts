@@ -23,12 +23,12 @@ const MAX_STORE_SIZE = 10_000
 if (typeof setInterval !== 'undefined') {
   setInterval(() => {
     const now = Date.now()
-    for (const [key, entry] of store) {
+    store.forEach((entry, key) => {
       // Remove entries with no timestamps in any reasonable window (5 min)
       if (entry.timestamps.length === 0 || entry.timestamps[entry.timestamps.length - 1] < now - 300_000) {
         store.delete(key)
       }
-    }
+    })
   }, 60_000).unref?.()
 }
 
